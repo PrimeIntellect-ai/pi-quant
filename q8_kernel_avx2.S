@@ -1,5 +1,3 @@
-.glob f32_q8_kernel_vec_avx2
-
 # Kernel Signature:
 
 # extern "C" void kern(
@@ -14,6 +12,7 @@
 # Machine encoding is x86-64, 64-bit mode, little-endian, VEX prefix (VEX.256.66.0F.WIG.29.C8) for YMM registers.
 # Callconv: cdecl System V AMD64 ABI
 
+.globl f32_q8_kernel_vec_avx2
 f32_q8_kernel_vec_avx2:
         vmovd   %ecx, %xmm10
         movq    %rsi, %r8

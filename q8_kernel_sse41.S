@@ -1,4 +1,19 @@
-f32_q8_kernel_vec:
+# Kernel Signature:
+
+# extern "C" void kern(
+#       const float* const x,
+#       uint8_t* const o,
+#       const size_t n,
+#       const float inv_scale,
+#       const int32_t zero_point
+# );
+
+# We use SSE4.1 so 128-bit XMM0-XMM15
+# Machine encoding is x86-64, 64-bit mode, little-endian, REX+Legacy SSE prefix.
+# Callconv: cdecl System V AMD64 ABI
+
+.globl f32_q8_kernel_vec_sse41
+f32_q8_kernel_vec_sse41:
         movd    %ecx, %xmm10
         movq    %rsi, %r8
         movaps  %xmm0, %xmm15
