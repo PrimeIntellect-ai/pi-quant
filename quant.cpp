@@ -43,28 +43,25 @@ namespace quant {
         const std::span<const float> in,
         const std::span<std::uint8_t> out,
         const double scale,
-        const std::int32_t zero_point
+        const std::int32_t zero_point,
+        std::size_t nt
     ) -> void {
         assert(in.size() == out.size());
         const std::size_t numel {in.size()};
         const auto* const p_in {in.data()};
         auto* const p_out {out.data()};
         const float inv_scale {static_cast<float>(1.0 / scale)};
-        const std::size_t n_threads {std::max(1u, std::thread::hardware_concurrency())};
-        const std::size_t chunk_size = numel / n_threads;
+        const std::size_t chunk_size = numel / nt;
         std::vector<std::jthread> threads {};
         const auto quantize_chunk = [=](std::size_t start, std::size_t end) noexcept -> void {
             assert(end >= start);
-            f32_q8_kernel_impl(p_in + start, p_out + start, std::abs(end - start), inv_scale, zero_point);
+            f32_q8_kernel_impl(p_in + start, p_out + start, static_cast<std::size_t>(std::abs(static_cast<std::int64_t>(end) - static_cast<std::int64_t>(start))), inv_scale, zero_point);
         };
-        for (std::size_t i {}; i < n_threads-1; ++i) {
+        for (std::size_t i {}; i < nt-1; ++i) {
             std::size_t start = i*chunk_size;
             std::size_t end = (i + 1)*chunk_size;
             threads.emplace_back(quantize_chunk, start, end);
         }
-        threads.emplace_back(quantize_chunk, (n_threads - 1)*chunk_size, numel);
-        for (auto& thread : threads) {
-            thread.join();
-        }
+        threads.emplace_back(quantize_chunk, (nt - 1)*chunk_size, numel);
     }
 }

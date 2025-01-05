@@ -8,6 +8,7 @@ namespace quant {
         std::span<const float> in,
         std::span<std::uint8_t> out,
         double scale,
-        std::int32_t zero_point
+        std::int32_t zero_point,
+        std::size_t nt
     ) -> void;
 }
