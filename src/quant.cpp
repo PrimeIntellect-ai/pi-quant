@@ -29,7 +29,7 @@ namespace quant {
         const auto* const p_in {in.data()};
         auto* const p_out {out.data()};
         const float inv_scale {static_cast<float>(1.0 / scale)};
-        const std::size_t rpt = numel/nt; // Ceildiv to work-balance the remaining elements
+        const std::size_t rpt = numel/nt;
         std::vector<std::thread> threads {};
         const auto Q = [=](std::size_t start, std::size_t end) noexcept -> void {
             assert(end >= start);

@@ -19,69 +19,19 @@ static auto __attribute__((hot)) Q8_KERNEL_IMPL(
   const std::int32_t zero_point
 ) noexcept -> void {
     std::size_t i {};
-    #if defined(__aarch64__) && defined(__ARM_NEON__) && 0
-        float32x4_t vinv_scale = vdupq_n_f32(inv_scale);
-        int32x4_t vzero_point  = vdupq_n_s32(zero_point);
-        int32x4_t vmin_val = vdupq_n_s32(0);
-        int32x4_t vmax_val = vdupq_n_s32(255);
-        // Process 8 floats per loop iteration
-    for (; i + 7 < n; i += 8) {
-        // -------------------------------------------------------------
-        //  Load 8 floats
-        // -------------------------------------------------------------
-        float32x4_t vf0 = vld1q_f32(x + i);
-        float32x4_t vf1 = vld1q_f32(x + i + 4);
-
-        // -------------------------------------------------------------
-        //  Multiply by inv_scale
-        // -------------------------------------------------------------
-        vf0 = vmulq_f32(vf0, vinv_scale);
-        vf1 = vmulq_f32(vf1, vinv_scale);
-
-        // -------------------------------------------------------------
-        //  Round half away from zero
-        //
-        //  Option A: If Armv8.2+:
-        //    int32x4_t vi0 = vcvtaq_s32_f32(vf0); // round half away from zero
-        //    int32x4_t vi1 = vcvtaq_s32_f32(vf1);
-        //
-        //  Option B: Manual std::round() emulation if vcvtaq_s32_f32 not available:
-        //    (Add 0.5 if positive, subtract 0.5 if negative, then truncate)
-        // -------------------------------------------------------------
-        int32x4_t vi0 = vcvtaq_s32_f32(vf0);
-        int32x4_t vi1 = vcvtaq_s32_f32(vf1);
-
-        // -------------------------------------------------------------
-        //  Add zero_point and clamp to [0..255]
-        // -------------------------------------------------------------
-        vi0 = vaddq_s32(vi0, vzero_point);
-        vi1 = vaddq_s32(vi1, vzero_point);
-
-        vi0 = vmaxq_s32(vi0, vmin_val);
-        vi1 = vmaxq_s32(vi1, vmin_val);
-        vi0 = vminq_s32(vi0, vmax_val);
-        vi1 = vminq_s32(vi1, vmax_val);
-
-        // -------------------------------------------------------------
-        //  Narrow from s32 -> s16 -> u8 (all 8 bytes at once)
-        // -------------------------------------------------------------
-        int16x4_t vi0_16s = vqmovn_s32(vi0); // saturate to 16 bits
-        int16x4_t vi1_16s = vqmovn_s32(vi1);
-        // reinterpret as unsigned 16
-        uint16x4_t vu0_16u = vreinterpret_u16_s16(vi0_16s);
-        uint16x4_t vu1_16u = vreinterpret_u16_s16(vi1_16s);
-
-        // combine into 8x 16-bit
-        uint16x8_t v16u = vcombine_u16(vu0_16u, vu1_16u);
-
-        // narrow 8x 16-bit -> 8x 8-bit
-        uint8x8_t vu8 = vqmovn_u16(v16u);
-
-        // -------------------------------------------------------------
-        //  Store 8 bytes in one shot
-        // -------------------------------------------------------------
-        vst1_u8(o + i, vu8);
-    }
+    #if 0
+        __m128 vinv_scale {_mm_set1_ps(inv_scale)};
+        __m128i vzero_point {_mm_set1_epi32(zero_point)};
+        __m128i vmax {_mm_set1_epi8(0xff)};
+        constexpr int k_round_mode = _MM_FROUND_TO_NEAREST_INT|_MM_FROUND_NO_EXC; // Round to nearest, and suppress exceptions
+        for (; i+3 < n; i += 4) {
+            __m128 xi = _mm_loadu_ps(x+i);
+            __m128i yi = _mm_cvtps_epi32(_mm_round_ps(_mm_mul_ps(xi, vinv_scale), k_round_mode));
+            __m128i zi = _mm_add_epi32(yi, vzero_point);
+            __m128i i8 = _mm_packus_epi32(zi, _mm_setzero_si128());
+            __m128i wi = _mm_max_epi8(_mm_min_epi8(zi, vmax), _mm_setzero_si128());
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i), wi);
+        }
     #endif
     for (; i < n; ++i) {
         o[i] = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[i] * inv_scale)) + zero_point, 0, 0xff));
