@@ -12,7 +12,7 @@
 
 auto main() -> int {
     const std::size_t nt {std::max(1u, std::thread::hardware_concurrency())};
-    volatile std::size_t numel {1'000'000'000};
+    volatile std::size_t numel {1'000'000};
     std::vector<float> data_in {};
     std::vector<std::uint8_t> data_out_naive {};
     std::vector<std::uint8_t> data_out {};

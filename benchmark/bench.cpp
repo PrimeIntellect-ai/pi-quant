@@ -13,8 +13,8 @@
 #include "nanobench.hpp"
 
 auto main() -> int {
-    const std::size_t nt {std::max(1u, std::thread::hardware_concurrency())};
-    volatile std::size_t numel {1'000'000'000}; // 4 GiB -> 1 GiB
+    const std::size_t nt {std::max(1u, std::thread::hardware_concurrency())>>1};
+    volatile std::size_t numel {500'000'000}; // 4 GiB -> 1 GiB
     std::vector<float> data_in {};
     std::vector<std::uint8_t> data_out {};
     data_in.resize(numel);
