@@ -13,8 +13,10 @@
 #endif
 
 #define Q8_KERNEL_IMPL f32_q8_generic
-#include "q8_kernel.inl"
+#define Q4_KERNEL_IMPL f32_q4_generic
+#include "kernels.inl"
 #undef Q8_KERNEL_IMPL
+#undef Q4_KERNEL_IMPL
 
 namespace quant {
     context::context(std::size_t num_threads) {
@@ -50,7 +52,7 @@ namespace quant {
             auto* const pr {br + ra};
             const float scale {worker.payload.scale};
             const std::int32_t zp {worker.payload.zero_point};
-            f32_q8_generic(px, pr, vmel, scale, zp);
+            f32_q8_generic<false>(px, pr, vmel, scale, zp);
             {
                 std::unique_lock<std::mutex> lock {m_mtx};
                 if (++m_num_completed == m_workers.size())
@@ -63,7 +65,8 @@ namespace quant {
         const std::span<const float> in,
         const std::span<std::uint8_t> out,
         const float scale,
-        const std::int32_t zero_point
+        const std::int32_t zero_point,
+        const round_mode mode
     ) -> void {
         {
             std::unique_lock<std::mutex> lock {m_mtx};
@@ -72,6 +75,7 @@ namespace quant {
                 worker.payload.out = out;
                 worker.payload.scale = scale;
                 worker.payload.zero_point = zero_point;
+                worker.payload.mode = mode;
             }
             ++m_phase;
             m_num_completed = 0;
@@ -97,8 +101,9 @@ namespace quant {
         const std::span<const float> in,
         const std::span<std::uint8_t> out,
         const float scale,
-        const std::int32_t zero_point
+        const std::int32_t zero_point,
+        const round_mode mode
     ) -> void {
-        kickoff_workers(in, out, scale, zero_point);
+        kickoff_workers(in, out, scale, zero_point, mode);
     }
 }

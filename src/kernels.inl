@@ -1,5 +1,8 @@
 #ifndef Q8_KERNEL_IMPL
-#error "impl is not defined"
+#error "Q8 impl is not defined"
+#endif
+#ifndef Q4_KERNEL_IMPL
+#error "Q4 impl is not defined"
 #endif
 
 #include <algorithm>
@@ -11,6 +14,7 @@
 #include <arm_neon.h>
 #endif
 
+template <const bool stochastic_rounding>
 static auto __attribute__((hot)) Q8_KERNEL_IMPL(
   const float* const __restrict__ x,
   std::uint8_t* const __restrict__ o,
@@ -18,6 +22,7 @@ static auto __attribute__((hot)) Q8_KERNEL_IMPL(
   const float inv_scale,
   const std::int32_t zero_point
 ) noexcept -> void {
+    constexpr std::int32_t clamp_max {(1<<8)-1};
     std::size_t i {};
     #ifdef __SSE4_1__
         const __m128 vinv_scale = _mm_set1_ps(inv_scale);
@@ -72,6 +77,24 @@ static auto __attribute__((hot)) Q8_KERNEL_IMPL(
         }
     #endif
     for (; i < n; ++i) {
-        o[i] = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[i] * inv_scale)) + zero_point, 0, 0xff));
+        o[i] = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[i] * inv_scale)) + zero_point, 0, clamp_max));
+    }
+}
+
+template <const bool stochastic_rounding>
+static auto __attribute__((hot)) Q4_KERNEL_IMPL(
+  const float* const __restrict__ x,
+  std::uint8_t* const __restrict__ o,
+  const std::size_t n,
+  const float inv_scale,
+  const std::int32_t zero_point
+) noexcept -> void {
+    constexpr std::int32_t clamp_max {(1<<4)-1};
+    std::size_t i {};
+    std::memset(o, 0, n>>1);
+    for (; i < n; ++i) {
+        std::int32_t q8 {std::clamp(static_cast<std::int32_t>(std::round(x[i] * inv_scale)) + zero_point, 0, clamp_max)};
+        if ((i & 1) == 0) o[i>>1] |= q8<<4;
+        else o[i>>1] |= q8;
     }
 }

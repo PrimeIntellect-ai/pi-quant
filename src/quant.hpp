@@ -8,6 +8,11 @@
 #include <mutex>
 
 namespace quant {
+    enum class round_mode : bool {
+        nearest = true,
+        stochastic = false
+    };
+
     class context final {
     public:
         explicit context(std::size_t num_threads);
@@ -21,7 +26,8 @@ namespace quant {
             std::span<const float> in,
             std::span<std::uint8_t> out,
             float scale,
-            std::int32_t zero_point
+            std::int32_t zero_point,
+            round_mode mode
         ) -> void;
 
     private:
@@ -39,6 +45,7 @@ namespace quant {
                 alignas(cache_line) std::uint64_t phase {};
                 float scale {};
                 std::int32_t zero_point {};
+                round_mode mode {};
                 std::span<const float> in {};
                 std::span<std::uint8_t> out {};
             } payload {};
@@ -57,7 +64,8 @@ namespace quant {
             std::span<const float> in,
             std::span<std::uint8_t> out,
             float scale,
-            std::int32_t zero_point
+            std::int32_t zero_point,
+            round_mode mode
         ) -> void;
     };
 }
