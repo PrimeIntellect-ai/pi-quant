@@ -38,6 +38,38 @@ static auto __attribute__((hot)) Q8_KERNEL_IMPL(
             __m128i result = _mm_packus_epi16(pack16_0, pack16_1);
             _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i), result);
         }
+    #elif defined(__aarch64__) && defined(__ARM_NEON__)
+        const float32x4_t vinv_scale = vdupq_n_f32(inv_scale);
+        const int32x4_t vzero_point = vdupq_n_s32(zero_point);
+        constexpr std::size_t step = 16;
+        for (; i+step <= n; i += step) {
+            float32x4_t xf0 = vld1q_f32(x+i+(0<<2));
+            float32x4_t xf1 = vld1q_f32(x+i+(1<<2));
+            float32x4_t xf2 = vld1q_f32(x+i+(2<<2));
+            float32x4_t xf3 = vld1q_f32(x+i+(3<<2));
+            xf0 = vmulq_f32(xf0, vinv_scale);
+            xf1 = vmulq_f32(xf1, vinv_scale);
+            xf2 = vmulq_f32(xf2, vinv_scale);
+            xf3 = vmulq_f32(xf3, vinv_scale);
+            int32x4_t xi0 = vcvtnq_s32_f32(xf0);
+            int32x4_t xi1 = vcvtnq_s32_f32(xf1);
+            int32x4_t xi2 = vcvtnq_s32_f32(xf2);
+            int32x4_t xi3 = vcvtnq_s32_f32(xf3);
+            xi0 = vaddq_s32(xi0, vzero_point);
+            xi1 = vaddq_s32(xi1, vzero_point);
+            xi2 = vaddq_s32(xi2, vzero_point);
+            xi3 = vaddq_s32(xi3, vzero_point);
+            int16x4_t p16_0_low = vqmovn_s32(xi0);
+            int16x4_t p16_0_high = vqmovn_s32(xi1);
+            int16x8_t pack16_0 = vcombine_s16(p16_0_low, p16_0_high);
+            int16x4_t p16_1_low = vqmovn_s32(xi2);
+            int16x4_t p16_1_high = vqmovn_s32(xi3);
+            int16x8_t pack16_1 = vcombine_s16(p16_1_low, p16_1_high);
+            uint8x8_t result_low = vqmovun_s16(pack16_0);
+            uint8x8_t result_high = vqmovun_s16(pack16_1);
+            uint8x16_t result = vcombine_u8(result_low, result_high);
+            vst1q_u8(o+i, result);
+        }
     #endif
     for (; i < n; ++i) {
         o[i] = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[i] * inv_scale)) + zero_point, 0, 0xff));

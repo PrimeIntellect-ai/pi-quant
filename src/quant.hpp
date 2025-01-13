@@ -25,11 +25,18 @@ namespace quant {
         ) -> void;
 
     private:
+        static constexpr std::size_t cache_line {
+            #ifdef __cpp_lib_hardware_interference_size
+                std::hardware_destructive_interference_size
+            #else
+                        64
+            #endif
+        };
         struct worker final {
             struct {
-                alignas(std::hardware_destructive_interference_size) std::int64_t ti {}; // thread index
-                alignas(std::hardware_destructive_interference_size) std::int64_t tc {}; // thread count
-                alignas(std::hardware_destructive_interference_size) std::uint64_t phase {};
+                alignas(cache_line) std::int64_t ti {}; // thread index
+                alignas(cache_line) std::int64_t tc {}; // thread count
+                alignas(cache_line) std::uint64_t phase {};
                 float scale {};
                 std::int32_t zero_point {};
                 std::span<const float> in {};
@@ -38,9 +45,9 @@ namespace quant {
             std::thread thread {};
         };
 
-        alignas(std::hardware_destructive_interference_size) volatile bool m_interrupt {};
-        alignas(std::hardware_destructive_interference_size) std::uint64_t m_phase {};
-        alignas(std::hardware_destructive_interference_size) std::uint64_t m_num_completed {};
+        alignas(cache_line) volatile bool m_interrupt {};
+        alignas(cache_line) std::uint64_t m_phase {};
+        alignas(cache_line) std::uint64_t m_num_completed {};
         std::vector<worker> m_workers {};
         std::condition_variable m_cv {};
         std::mutex m_mtx {};

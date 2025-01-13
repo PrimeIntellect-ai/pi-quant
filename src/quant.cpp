@@ -79,7 +79,7 @@ namespace quant {
         m_cv.notify_all();
         {
             std::unique_lock<std::mutex> lock {m_mtx};
-            m_cv.wait(lock, [&] noexcept -> bool { return m_num_completed == m_workers.size(); });
+            m_cv.wait(lock, [&]() noexcept -> bool { return m_num_completed == m_workers.size(); });
         }
     }
 
