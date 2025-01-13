@@ -21,11 +21,10 @@ auto main() -> int {
     data_out.resize(numel);
     std::random_device rd {};
     std::mt19937 gen {rd()};
-    std::uniform_real_distribution<float> dist {-1.0f, 1.0f};
+    std::uniform_real_distribution dist {-1.0f, 1.0f};
     std::ranges::generate(data_in, [&] { return dist(gen); });
 
     ankerl::nanobench::Bench bench {};
-
     bench.title("int8 Quantization Benchmark")
         .unit("quant")
         .minEpochIterations(10)
@@ -41,7 +40,7 @@ auto main() -> int {
     quant::context ctx {nt};
 
     bench.run("OPTIMIZED", [&] {
-        ctx.quantize_int8(data_in, data_out, 1.0, 0);
+        ctx.quantize_int8(data_in, data_out, 1.0, 0, quant::round_mode::nearest);
     });
 
     ankerl::nanobench::doNotOptimizeAway(data_in.data());

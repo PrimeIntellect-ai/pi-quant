@@ -38,6 +38,7 @@ namespace quant {
                         64
             #endif
         };
+
         struct worker final {
             struct {
                 alignas(cache_line) std::int64_t ti {}; // thread index
@@ -49,7 +50,11 @@ namespace quant {
                 std::span<const float> in {};
                 std::span<std::uint8_t> out {};
             } payload {};
-            std::thread thread {};
+            std::optional<std::thread> thread {};
+
+            [[nodiscard]] auto await_work(context& ctx) -> bool;
+            auto entry(context& ctx) -> void;
+            auto exec_and_broadcast(context& ctx) -> void;
         };
 
         alignas(cache_line) volatile bool m_interrupt {};
@@ -58,8 +63,8 @@ namespace quant {
         std::vector<worker> m_workers {};
         std::condition_variable m_cv {};
         std::mutex m_mtx {};
+        std::atomic_unsigned_lock_free m_workers_online {};
 
-        auto worker_fn(worker& worker) -> void;
         auto kickoff_workers(
             std::span<const float> in,
             std::span<std::uint8_t> out,
@@ -67,5 +72,6 @@ namespace quant {
             std::int32_t zero_point,
             round_mode mode
         ) -> void;
+        auto barrier() -> void;
     };
 }
