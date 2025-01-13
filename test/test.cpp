@@ -25,7 +25,8 @@ auto main() -> int {
     std::ranges::generate(data_in, [&] { return dist(gen); });
 
     q8_naive(data_in, data_out_naive, 1.0, 0, nt);
-    quant::f32_q8(data_in, data_out, 1.0, 0, nt);
+    quant::context ctx {nt};
+    ctx.quantize_int8(data_in, data_out, 1.0, 0);
 
     for (std::size_t i {}; i < numel; ++i) {
         auto a = data_out_naive[i];

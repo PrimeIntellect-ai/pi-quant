@@ -38,8 +38,10 @@ auto main() -> int {
     ankerl::nanobench::doNotOptimizeAway(data_in.data());
     ankerl::nanobench::doNotOptimizeAway(data_out.data());
 
+    quant::context ctx {nt};
+
     bench.run("OPTIMIZED", [&] {
-        quant::f32_q8(data_in, data_out, 1.0, 0, nt);
+        ctx.quantize_int8(data_in, data_out, 1.0, 0);
     });
 
     ankerl::nanobench::doNotOptimizeAway(data_in.data());
