@@ -23,7 +23,7 @@ namespace quant {
         for (std::int64_t ti {}; auto& worker : m_workers) {
             worker.payload.ti = ti++;
             worker.payload.tc = static_cast<std::int64_t>(num_threads);
-            worker.phase = 0;
+            worker.payload.phase = 0;
             worker.thread = std::thread(&context::worker_fn, this, std::ref(worker));
         }
     }
@@ -32,24 +32,24 @@ namespace quant {
         for (;;) {
             {
                 std::unique_lock<std::mutex> lock {m_mtx};
-                m_cv.wait(lock, [&]() noexcept -> bool { return m_interrupt || m_phase > worker.phase; });
+                m_cv.wait(lock, [&]() noexcept -> bool { return m_interrupt || m_phase > worker.payload.phase; });
                 if (m_interrupt) [[unlikely]] break;
-                worker.phase = m_phase;
+                worker.payload.phase = m_phase;
             }
-            const auto* bx {worker.payload.in.data()};
-            auto* br {worker.payload.out.data()};
-            std::int64_t tc {worker.payload.tc};
-            std::int64_t ti {worker.payload.ti};
-            std::int64_t numel {static_cast<std::int64_t>(worker.payload.in.size())};
-            std::int64_t chunk {(numel + tc - 1)/tc};
-            std::int64_t ra {chunk*ti};
-            std::int64_t rb {std::min(ra + chunk, numel)};
+            const auto* const bx {worker.payload.in.data()};
+            auto* const br {worker.payload.out.data()};
+            const std::int64_t tc {worker.payload.tc};
+            const std::int64_t ti {worker.payload.ti};
+            const std::int64_t numel {static_cast<std::int64_t>(worker.payload.in.size())};
+            const std::int64_t chunk {(numel + tc - 1)/tc};
+            const std::int64_t ra {chunk*ti};
+            const std::int64_t rb {std::min(ra + chunk, numel)};
             if (rb <= ra) continue;
-            std::int64_t vmel {rb - ra};
-            const auto* px {bx + ra};
-            auto* pr {br + ra};
-            float scale {worker.payload.scale};
-            std::int32_t zp {worker.payload.zero_point};
+            const std::int64_t vmel {rb - ra};
+            const auto* const px {bx + ra};
+            auto* const pr {br + ra};
+            const float scale {worker.payload.scale};
+            const std::int32_t zp {worker.payload.zero_point};
             f32_q8_generic(px, pr, vmel, scale, zp);
             {
                 std::unique_lock<std::mutex> lock {m_mtx};

@@ -27,14 +27,14 @@ namespace quant {
     private:
         struct worker final {
             struct {
-                std::int64_t ti {}; // thread index
-                std::int64_t tc {}; // thread count
+                alignas(std::hardware_destructive_interference_size) std::int64_t ti {}; // thread index
+                alignas(std::hardware_destructive_interference_size) std::int64_t tc {}; // thread count
+                alignas(std::hardware_destructive_interference_size) std::uint64_t phase {};
                 float scale {};
                 std::int32_t zero_point {};
                 std::span<const float> in {};
                 std::span<std::uint8_t> out {};
             } payload {};
-            std::uint64_t phase {};
             std::thread thread {};
         };
 

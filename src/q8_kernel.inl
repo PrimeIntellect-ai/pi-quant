@@ -24,7 +24,7 @@ static auto __attribute__((hot)) Q8_KERNEL_IMPL(
         const __m128i vzero_point = _mm_set1_epi32(zero_point);
         constexpr int k_round_mode = _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC;
         constexpr std::size_t step = 16;
-        for (; i + step <= n; i += step) {
+        for (; i+step <= n; i += step) {
             __m128 xf0 = _mm_loadu_ps(x+i+(0<<2));
             __m128 xf1 = _mm_loadu_ps(x+i+(1<<2));
             __m128 xf2 = _mm_loadu_ps(x+i+(2<<2));
