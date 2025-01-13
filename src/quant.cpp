@@ -32,7 +32,7 @@ namespace quant {
         for (;;) {
             {
                 std::unique_lock<std::mutex> lock {m_mtx};
-                m_cv.wait(lock, [&] noexcept -> bool { return m_interrupt || m_phase > worker.phase; });
+                m_cv.wait(lock, [&]() noexcept -> bool { return m_interrupt || m_phase > worker.phase; });
                 if (m_interrupt) [[unlikely]] break;
                 worker.phase = m_phase;
             }
