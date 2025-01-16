@@ -8,15 +8,16 @@
 #include <thread>
 
 #ifdef __x86_64__
-#include <immintrin.h>
-#include <cpuid.h>
+
 #endif
 
-#define Q8_KERNEL_IMPL f32_q8_generic
-#define Q4_KERNEL_IMPL f32_q4_generic
-#include "kernels.inl"
-#undef Q8_KERNEL_IMPL
-#undef Q4_KERNEL_IMPL
+extern auto __attribute__((hot)) f32_q8_generic(
+    const float* __restrict__ x,
+    std::uint8_t* __restrict__ o,
+    std::size_t n,
+    float inv_scale,
+    std::int32_t zero_point
+) noexcept -> void;
 
 namespace quant {
     context::context(std::size_t num_threads) {
@@ -63,7 +64,7 @@ namespace quant {
             auto* const pr {br + ra};
             const float scale {payload.scale};
             const std::int32_t zp {payload.zero_point};
-            f32_q8_generic<false>(px, pr, vmel, scale, zp);
+            f32_q8_generic(px, pr, vmel, scale, zp);
         }
         std::unique_lock lock {ctx.m_mtx};
         if (++ctx.m_num_completed == ctx.m_workers.size())

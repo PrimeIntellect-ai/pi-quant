@@ -5,8 +5,9 @@ project(quant_kernels LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(quant_kernels STATIC src/quant.hpp src/quant.cpp src/q8_kernel.inl)
+add_library(quant_kernels STATIC src/quant.hpp src/quant.cpp src/kernels.inl src/kernel_generic.cpp)
 target_compile_options(quant_kernels PRIVATE -msse2 -msse3 -mssse3 -msse4.1 -fno-rtti -fno-exceptions)
+
 
 # release mode opt
 if (CMAKE_BUILD_TYPE STREQUAL "Release")

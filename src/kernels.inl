@@ -14,8 +14,7 @@
 #include <arm_neon.h>
 #endif
 
-template <const bool stochastic_rounding>
-static auto __attribute__((hot)) Q8_KERNEL_IMPL(
+auto __attribute__((hot)) Q8_KERNEL_IMPL(
   const float* const __restrict__ x,
   std::uint8_t* const __restrict__ o,
   const std::size_t n,
@@ -81,8 +80,7 @@ static auto __attribute__((hot)) Q8_KERNEL_IMPL(
     }
 }
 
-template <const bool stochastic_rounding>
-static auto __attribute__((hot)) Q4_KERNEL_IMPL(
+auto __attribute__((hot)) Q4_KERNEL_IMPL(
   const float* const __restrict__ x,
   std::uint8_t* const __restrict__ o,
   const std::size_t n,
