@@ -47,8 +47,9 @@ namespace quant {
                 float scale {};
                 std::int32_t zero_point {};
                 round_mode mode {};
-                std::span<const float> in {};
-                std::span<std::uint8_t> out {};
+                const float* in {};
+                std::uint8_t* out {};
+                std::int64_t numel {};
             } payload {};
             std::optional<std::thread> thread {};
 
@@ -59,7 +60,7 @@ namespace quant {
 
         alignas(cache_line) volatile bool m_interrupt {};
         alignas(cache_line) std::uint64_t m_phase {};
-        alignas(cache_line) std::uint64_t m_num_completed {};
+        alignas(cache_line) std::atomic_int m_num_completed {};
         std::vector<worker> m_workers {};
         std::condition_variable m_cv {};
         std::mutex m_mtx {};

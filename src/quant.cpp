@@ -50,11 +50,11 @@ namespace quant {
     }
 
     auto context::worker::exec_and_broadcast(context& ctx) -> void {
-        const auto* const bx {payload.in.data()};
-        auto* const br {payload.out.data()};
+        const auto* const bx {payload.in};
+        auto* const br {payload.out};
         const std::int64_t tc {payload.tc};
         const std::int64_t ti {payload.ti};
-        const std::int64_t numel {static_cast<std::int64_t>(payload.in.size())};
+        const std::int64_t numel {payload.numel};
         const std::int64_t chunk {(numel + tc - 1)/tc};
         const std::int64_t ra {chunk*ti};
         const std::int64_t rb {std::min(ra + chunk, numel)};
@@ -66,9 +66,10 @@ namespace quant {
             const std::int32_t zp {payload.zero_point};
             f32_q8_generic(px, pr, vmel, scale, zp);
         }
-        std::unique_lock lock {ctx.m_mtx};
-        if (++ctx.m_num_completed == ctx.m_workers.size())
+        if (1 + ctx.m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx.m_workers.size()) {
+            std::unique_lock lock {ctx.m_mtx};
             ctx.m_cv.notify_all();
+        }
     }
 
     auto context::kickoff_workers(
@@ -80,19 +81,21 @@ namespace quant {
     ) -> void {
         std::unique_lock lock {m_mtx};
         for (auto& worker : m_workers) {
-            worker.payload.in = in;
-            worker.payload.out = out;
+            worker.payload.in = in.data();
+            worker.payload.out = out.data();
+            worker.payload.numel = static_cast<std::int64_t>(in.size());
             worker.payload.scale = scale;
             worker.payload.zero_point = zero_point;
             worker.payload.mode = mode;
         }
         ++m_phase;
-        m_num_completed = 0;
+        m_num_completed.store(0, std::memory_order::relaxed);
+        m_cv.notify_all();
     }
 
     auto context::barrier() -> void {
         std::unique_lock lock {m_mtx};
-        m_cv.wait(lock, [&]() noexcept -> bool { return m_num_completed == m_workers.size(); });
+        m_cv.wait(lock, [&]() noexcept -> bool { return m_num_completed.load(std::memory_order_relaxed) == m_workers.size(); });
     }
 
     context::~context() {
@@ -115,7 +118,6 @@ namespace quant {
         const round_mode mode
     ) -> void {
         kickoff_workers(in, out, scale, zero_point, mode);
-        m_cv.notify_all();
         worker& w0 {m_workers[0]}; // Main thread does work too
         w0.exec_and_broadcast(*this);
         barrier();
