@@ -5,9 +5,43 @@ project(quant_kernels LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(quant_kernels STATIC src/quant.hpp src/quant.cpp src/kernels.inl src/kernel_generic.cpp)
-target_compile_options(quant_kernels PRIVATE -msse2 -msse3 -mssse3 -msse4.1 -fno-rtti -fno-exceptions)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
+    set(IS_AMD64 TRUE)
+else()
+    set(IS_AMD64 FALSE)
+endif()
 
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch64)|(arm64)")
+    set(IS_ARM64 TRUE)
+else()
+    set(IS_ARM64 FALSE)
+endif()
+
+set(QUANT_SOURCES src/quant.hpp src/quant.cpp src/kernels.inl src/kernel_generic.cpp)
+if (${IS_AMD64})
+    function(set_file_opts filename posix_arch msvc_arch)
+        message(STATUS "BLAS CPU permutation ${filename} ${posix_arch} / ${msvc_arch}")
+        if (WIN32)
+            set_property(SOURCE "${CMAKE_SOURCE_DIR}/src/${filename}" APPEND PROPERTY COMPILE_FLAGS "${msvc_arch}")
+        else()
+            set_property(SOURCE "${CMAKE_SOURCE_DIR}/src/${filename}" APPEND PROPERTY COMPILE_FLAGS "${posix_arch}")
+        endif()
+    endfunction()
+
+    set(QUANT_SOURCES_AMD64
+        src/kernel_amd64_sse42.cpp
+        src/kernel_amd64_avx2.cpp
+        src/kernel_amd64_avx512f.cpp
+    )
+    set(QUANT_SOURCES ${QUANT_SOURCES} ${QUANT_SOURCES_AMD64})
+
+    set_file_opts("kernel_amd64_sse42.cpp" "-mtune=nehalem -msse4.2"  "/arch:SSE4.2")
+    set_file_opts("kernel_amd64_avx2.cpp" "-mtune=skylake -mavx -mavx2 -mfma -mf16c"  "/arch:AVX2")
+    set_file_opts("kernel_amd64_avx512f.cpp" "-mtune=cannonlake -mavx -mavx2 -mfma -mf16c -mavx512f" "/arch:AVX512")
+
+endif()
+add_library(quant_kernels STATIC ${QUANT_SOURCES})
+target_compile_options(quant_kernels PRIVATE -msse2 -msse3 -mssse3 -msse4.1 -fno-rtti -fno-exceptions)
 
 # release mode opt
 if (CMAKE_BUILD_TYPE STREQUAL "Release")

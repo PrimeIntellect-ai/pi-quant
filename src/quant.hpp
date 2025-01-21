@@ -5,6 +5,7 @@
 #include <vector>
 #include <thread>
 #include <condition_variable>
+#include <optional>
 #include <mutex>
 
 namespace quant {
@@ -64,7 +65,12 @@ namespace quant {
         std::vector<worker> m_workers {};
         std::condition_variable m_cv {};
         std::mutex m_mtx {};
-        std::atomic_unsigned_lock_free m_workers_online {};
+        std::atomic_size_t m_workers_online {};
+        #ifdef __x86_64__
+            bool m_sse42_supported : 1 {};
+            bool m_avx2_supported : 1 {};
+            bool m_avx512f_supported : 1 {};
+        #endif
 
         auto kickoff_workers(
             std::span<const float> in,

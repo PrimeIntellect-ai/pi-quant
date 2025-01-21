@@ -7,17 +7,96 @@
 #include <cmath>
 #include <thread>
 
-#ifdef __x86_64__
-
-#endif
-
-extern auto __attribute__((hot)) f32_q8_generic(
+extern auto f32_q8_generic(
     const float* __restrict__ x,
     std::uint8_t* __restrict__ o,
     std::size_t n,
     float inv_scale,
     std::int32_t zero_point
 ) noexcept -> void;
+
+#ifdef __x86_64__
+    #include <cpuid.h>
+
+    [[nodiscard]] auto check_sse42_support() noexcept -> bool {
+        int info[4] = {-1};
+        __cpuid(0, info[0], info[1], info[2], info[3]);
+        if (info[0] < 1) return false;
+        __cpuid(1, info[0], info[1], info[2], info[3]);
+        return (info[2] & (1<<20)) != 0;
+    }
+
+    [[nodiscard]] auto check_avx2_support() noexcept -> bool {
+        int info[4] = {-1};
+        __cpuid(0, info[0], info[1], info[2], info[3]);
+        if (info[0] < 7) return false;
+        __cpuid(1, info[0], info[1], info[2], info[3]);
+        if ((info[2] & 0x38081001) != 0x38081001) return false;
+        __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
+        if ((info[1] & 0x20) != 0x20) return false;
+        std::uint32_t lo, hi;
+        asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
+        return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 6) == 6;
+    }
+
+    [[nodiscard]] auto check_avx512f_support() noexcept -> bool {
+        int info[4] = {-1};
+       __cpuid(0, info[0], info[1], info[2], info[3]);
+        if (info[0] < 7) return false;
+        __cpuid(1, info[0], info[1], info[2], info[3]);
+        if ((info[2] & 0x8000000) == 0 || (info[2] & 0x10000000) == 0) return false;
+        __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
+        if ((info[1] & 0x10000) == 0) return false;
+        std::uint32_t lo, hi;
+        asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
+        return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 0xe0) == 0xe0;
+    }
+
+    extern auto f32_q8_amd64_sse42(
+        const float* __restrict__ x,
+        std::uint8_t* __restrict__ o,
+        std::size_t n,
+        float inv_scale,
+        std::int32_t zero_point
+    ) noexcept -> void;
+    extern auto f32_q4_amd64_sse42(
+        const float* __restrict__ x,
+        std::uint8_t* __restrict__ o,
+        std::size_t n,
+        float inv_scale,
+        std::int32_t zero_point
+    ) noexcept -> void;
+
+    extern auto f32_q8_amd64_avx2(
+        const float* __restrict__ x,
+        std::uint8_t* __restrict__ o,
+        std::size_t n,
+        float inv_scale,
+        std::int32_t zero_point
+    ) noexcept -> void;
+    extern auto f32_q4_amd64_avx2(
+        const float* __restrict__ x,
+        std::uint8_t* __restrict__ o,
+        std::size_t n,
+        float inv_scale,
+        std::int32_t zero_point
+    ) noexcept -> void;
+
+    extern auto f32_q8_amd64_avx512f(
+        const float* __restrict__ x,
+        std::uint8_t* __restrict__ o,
+        std::size_t n,
+        float inv_scale,
+        std::int32_t zero_point
+    ) noexcept -> void;
+    extern auto f32_q4_amd64_avx512f(
+        const float* __restrict__ x,
+        std::uint8_t* __restrict__ o,
+        std::size_t n,
+        float inv_scale,
+        std::int32_t zero_point
+    ) noexcept -> void;
+#endif
 
 namespace quant {
     context::context(std::size_t num_threads) {
@@ -31,6 +110,11 @@ namespace quant {
             if (ti != 0)
                 worker.thread = std::thread{&worker::entry, &worker, std::ref(*this)};
         }
+        #ifdef __x86_64__
+            m_sse42_supported = check_sse42_support();
+            m_avx2_supported = check_avx2_support();
+            m_avx512f_supported = check_avx512f_support();
+        #endif
         while (m_workers_online.load(std::memory_order_seq_cst) != num_threads-1)
             std::this_thread::yield();
     }
@@ -64,7 +148,14 @@ namespace quant {
             auto* const pr {br + ra};
             const float scale {payload.scale};
             const std::int32_t zp {payload.zero_point};
-            f32_q8_generic(px, pr, vmel, scale, zp);
+            #ifdef __x86_64__
+                if (ctx.m_avx512f_supported) f32_q8_amd64_avx512f(px, pr, vmel, scale, zp);
+                else if (ctx.m_avx2_supported) f32_q8_amd64_avx2(px, pr, vmel, scale, zp);
+                else if (ctx.m_sse42_supported) f32_q8_amd64_sse42(px, pr, vmel, scale, zp);
+                else f32_q8_generic(px, pr, vmel, scale, zp);
+            #else
+                f32_q8_generic(px, pr, vmel, scale, zp);
+            #endif
         }
         if (1 + ctx.m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx.m_workers.size()) {
             std::unique_lock lock {ctx.m_mtx};
