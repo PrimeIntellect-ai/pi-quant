@@ -1,4 +1,4 @@
-#ifndef __AVX512F__
+#if !defined(__AVX512F__) || !defined(__AVX512BW__)
 #error "Spec flag not enabled"
 #endif
 #ifdef __AVX10__

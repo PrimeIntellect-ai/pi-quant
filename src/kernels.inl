@@ -24,7 +24,45 @@ auto __attribute__((hot)) Q8_KERNEL_IMPL(
 ) noexcept -> void {
     constexpr std::int32_t clamp_max {(1<<8)-1};
     std::size_t i {};
-    #ifdef __SSE4_1__
+    #if defined(__AVX512F__) && defined(__AVX512BW__)
+        const __m512 vinv_scale = _mm512_set1_ps(inv_scale);
+        const __m512i vzero_point = _mm512_set1_epi32(zero_point);
+        constexpr int k_round_mode = _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC;
+        constexpr std::size_t step = 64;
+        for (; i+step <= n; i += step) {
+            __m512 xf0 = _mm512_loadu_ps(x+i+(0<<2));
+            __m512 xf1 = _mm512_loadu_ps(x+i+(1<<2));
+            __m512 xf2 = _mm512_loadu_ps(x+i+(2<<2));
+            __m512 xf3 = _mm512_loadu_ps(x+i+(3<<2));
+            __m512i xi0 = _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf0, vinv_scale), k_round_mode)), vzero_point);
+            __m512i xi1 = _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf1, vinv_scale), k_round_mode)), vzero_point);
+            __m512i xi2 = _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf2, vinv_scale), k_round_mode)), vzero_point);
+            __m512i xi3 = _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf3, vinv_scale), k_round_mode)),vzero_point);
+            __m512i pack16_0 = _mm512_packus_epi32(xi0, xi1);
+            __m512i pack16_1 = _mm512_packus_epi32(xi2, xi3);
+            __m512i result = _mm512_packus_epi16(pack16_0, pack16_1);
+            _mm512_storeu_si512(reinterpret_cast<__m512i*>(o+i), result);
+        }
+    #elif defined(__AVX2__)
+        const __m256 vinv_scale = _mm256_set1_ps(inv_scale);
+        const __m256i vzero_point = _mm256_set1_epi32(zero_point);
+        constexpr int k_round_mode = _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC;
+        constexpr std::size_t step = 32;
+        for (; i+step <= n; i += step) {
+            __m256 xf0 = _mm256_loadu_ps(x+i+(0<<2));
+            __m256 xf1 = _mm256_loadu_ps(x+i+(1<<2));
+            __m256 xf2 = _mm256_loadu_ps(x+i+(2<<2));
+            __m256 xf3 = _mm256_loadu_ps(x+i+(3<<2));
+            __m256i xi0 = _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf0, vinv_scale), k_round_mode)), vzero_point);
+            __m256i xi1 = _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf1, vinv_scale), k_round_mode)), vzero_point);
+            __m256i xi2 = _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf2, vinv_scale), k_round_mode)), vzero_point);
+            __m256i xi3 = _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf3, vinv_scale), k_round_mode)),vzero_point);
+            __m256i pack16_0 = _mm256_packus_epi32(xi0, xi1);
+            __m256i pack16_1 = _mm256_packus_epi32(xi2, xi3);
+            __m256i result = _mm256_packus_epi16(pack16_0, pack16_1);
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i), result);
+        }
+    #elif defined(__SSE4_2__)
         const __m128 vinv_scale = _mm_set1_ps(inv_scale);
         const __m128i vzero_point = _mm_set1_epi32(zero_point);
         constexpr int k_round_mode = _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC;
