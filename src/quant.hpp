@@ -51,12 +51,19 @@ namespace quant {
                 const float* in {};
                 std::uint8_t* out {};
                 std::int64_t numel {};
+                struct {
+                    std::uint32_t remaining {};
+                    std::uint32_t next {};
+                    std::array<std::uint32_t, 624> state {};
+                } prng {};
             } payload {};
             std::optional<std::thread> thread {};
 
             [[nodiscard]] auto await_work(context& ctx) -> bool;
             auto entry(context& ctx) -> void;
             auto exec_and_broadcast(context& ctx) -> void;
+            auto prng_init(std::uint32_t seed) noexcept -> void;
+            [[nodiscard]] auto prng_uniform(float min, float max) noexcept -> float;
         };
 
         alignas(cache_line) volatile bool m_interrupt {};

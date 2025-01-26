@@ -163,6 +163,43 @@ namespace quant {
         }
     }
 
+    auto context::worker::prng_init(std::uint32_t seed) noexcept -> void {
+        auto& state {payload.prng.state};
+        state[0] = seed;
+        for (size_t i=1; i < 624; ++i)
+            state[i] = ((state[i-1] ^ (state[i-1] >> 30))*1812433253 + i) & ~0u;
+        payload.prng.next = 0;
+        payload.prng.remaining = 1;
+    }
+
+    auto context::worker::prng_uniform(float min, float max) noexcept -> float {
+        auto& state {payload.prng.state};
+        std::uint32_t& rem {payload.prng.remaining};
+        std::uint32_t& next {payload.prng.next};
+        float rescale_uniform = max - min;
+        if (--rem <= 0) {
+            rem = 624;
+            next = 0;
+            uint32_t y, i;
+            for (i = 0; i < 624-397; ++i) {
+                y = (state[i] & 0x80000000u) | (state[i+1] & 0x7fffffffu);
+                state[i] = state[i+397] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
+            }
+            for (; i < 624-1; ++i) {
+                y = (state[i] & 0x80000000u) | (state[i+1] & 0x7fffffffu);
+                state[i] = state[i + (397-624)] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
+            }
+            y = (state[624-1] & 0x80000000u) | (state[0] & 0x7fffffffu);
+            state[624-1] = state[397-1] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
+        }
+        uint32_t y = state[next++];
+        y ^= y >> 11;
+        y ^= (y << 7) & 0x9d2c5680;
+        y ^= (y << 15) & 0xefc60000;
+        y ^= y >> 18;
+        return min + rescale_uniform * (1.f/static_cast<float>(1 << 23)*(static_cast<float>(y>>9) + 0.5f));
+    }
+
     auto context::kickoff_workers(
         const std::span<const float> in,
         const std::span<std::uint8_t> out,
