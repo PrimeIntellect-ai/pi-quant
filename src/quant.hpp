@@ -6,7 +6,8 @@
 #include <thread>
 #include <condition_variable>
 #include <optional>
-#include <mutex>
+
+#include "prng.hpp"
 
 namespace quant {
     enum class round_mode : bool {
@@ -47,22 +48,17 @@ namespace quant {
                 alignas(cache_line) std::uint64_t phase {};
                 float scale {};
                 std::int32_t zero_point {};
-                round_mode mode {};
+                round_mode rnd_mode {};
                 const float* in {};
                 std::uint8_t* out {};
                 std::int64_t numel {};
-                struct {
-                    std::uint32_t remaining {};
-                    std::uint32_t next {};
-                    std::array<std::uint32_t, 624> state {};
-                } prng {};
+                prng_state prng {0}; // TODO: thread local seed
             } payload {};
             std::optional<std::thread> thread {};
 
             [[nodiscard]] auto await_work(context& ctx) -> bool;
             auto entry(context& ctx) -> void;
             auto exec_and_broadcast(context& ctx) -> void;
-            auto prng_init(std::uint32_t seed) noexcept -> void;
             [[nodiscard]] auto prng_uniform(float min, float max) noexcept -> float;
         };
 

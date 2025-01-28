@@ -4,15 +4,15 @@
 #include <thread>
 #include <vector>
 #include <algorithm>
-#include <cmath>
-#include <thread>
 
 extern auto f32_q8_generic(
     const float* __restrict__ x,
     std::uint8_t* __restrict__ o,
     std::size_t n,
     float inv_scale,
-    std::int32_t zero_point
+    std::int32_t zero_point,
+    bool sto_rnd,
+    quant::prng_state& prng
 ) noexcept -> void;
 
 #ifdef __x86_64__
@@ -57,14 +57,18 @@ extern auto f32_q8_generic(
         std::uint8_t* __restrict__ o,
         std::size_t n,
         float inv_scale,
-        std::int32_t zero_point
+        std::int32_t zero_point,
+        const bool sto_rnd,
+        quant::prng_state& prng
     ) noexcept -> void;
     extern auto f32_q4_amd64_sse42(
         const float* __restrict__ x,
         std::uint8_t* __restrict__ o,
         std::size_t n,
         float inv_scale,
-        std::int32_t zero_point
+        std::int32_t zero_point,
+        const bool sto_rnd,
+        quant::prng_state& prng
     ) noexcept -> void;
 
     extern auto f32_q8_amd64_avx2(
@@ -72,14 +76,18 @@ extern auto f32_q8_generic(
         std::uint8_t* __restrict__ o,
         std::size_t n,
         float inv_scale,
-        std::int32_t zero_point
+        std::int32_t zero_point,
+        const bool sto_rnd,
+        quant::prng_state& prng
     ) noexcept -> void;
     extern auto f32_q4_amd64_avx2(
         const float* __restrict__ x,
         std::uint8_t* __restrict__ o,
         std::size_t n,
         float inv_scale,
-        std::int32_t zero_point
+        std::int32_t zero_point,
+        const bool sto_rnd,
+        quant::prng_state& prng
     ) noexcept -> void;
 
     extern auto f32_q8_amd64_avx512f(
@@ -87,14 +95,18 @@ extern auto f32_q8_generic(
         std::uint8_t* __restrict__ o,
         std::size_t n,
         float inv_scale,
-        std::int32_t zero_point
+        std::int32_t zero_point,
+        const bool sto_rnd,
+        quant::prng_state& prng
     ) noexcept -> void;
     extern auto f32_q4_amd64_avx512f(
         const float* __restrict__ x,
         std::uint8_t* __restrict__ o,
         std::size_t n,
         float inv_scale,
-        std::int32_t zero_point
+        std::int32_t zero_point,
+        const bool sto_rnd,
+        quant::prng_state& prng
     ) noexcept -> void;
 #endif
 
@@ -142,62 +154,26 @@ namespace quant {
         const std::int64_t chunk {(numel + tc - 1)/tc};
         const std::int64_t ra {chunk*ti};
         const std::int64_t rb {std::min(ra + chunk, numel)};
-        if (rb > ra) [[likely]] {
-            const std::int64_t vmel {rb - ra};
+        const std::int64_t vmel {rb - ra};
+        if (vmel > 0) [[likely]] {
             const auto* const px {bx + ra};
             auto* const pr {br + ra};
             const float scale {payload.scale};
             const std::int32_t zp {payload.zero_point};
+            const bool sto_rnd {payload.rnd_mode == round_mode::stochastic};
             #ifdef __x86_64__
-                if (ctx.m_avx512f_supported) f32_q8_amd64_avx512f(px, pr, vmel, scale, zp);
-                else if (ctx.m_avx2_supported) f32_q8_amd64_avx2(px, pr, vmel, scale, zp);
-                else if (ctx.m_sse42_supported) f32_q8_amd64_sse42(px, pr, vmel, scale, zp);
-                else f32_q8_generic(px, pr, vmel, scale, zp);
+                if (ctx.m_avx512f_supported) f32_q8_amd64_avx512f(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
+                else if (ctx.m_avx2_supported) f32_q8_amd64_avx2(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
+                else if (ctx.m_sse42_supported) f32_q8_amd64_sse42(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
+                else f32_q8_generic(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
             #else
-                f32_q8_generic(px, pr, vmel, scale, zp);
+                f32_q8_generic(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
             #endif
         }
         if (1 + ctx.m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx.m_workers.size()) {
             std::unique_lock lock {ctx.m_mtx};
             ctx.m_cv.notify_all();
         }
-    }
-
-    auto context::worker::prng_init(std::uint32_t seed) noexcept -> void {
-        auto& state {payload.prng.state};
-        state[0] = seed;
-        for (size_t i=1; i < 624; ++i)
-            state[i] = ((state[i-1] ^ (state[i-1] >> 30))*1812433253 + i) & ~0u;
-        payload.prng.next = 0;
-        payload.prng.remaining = 1;
-    }
-
-    auto context::worker::prng_uniform(float min, float max) noexcept -> float {
-        auto& state {payload.prng.state};
-        std::uint32_t& rem {payload.prng.remaining};
-        std::uint32_t& next {payload.prng.next};
-        float rescale_uniform = max - min;
-        if (--rem <= 0) {
-            rem = 624;
-            next = 0;
-            uint32_t y, i;
-            for (i = 0; i < 624-397; ++i) {
-                y = (state[i] & 0x80000000u) | (state[i+1] & 0x7fffffffu);
-                state[i] = state[i+397] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
-            }
-            for (; i < 624-1; ++i) {
-                y = (state[i] & 0x80000000u) | (state[i+1] & 0x7fffffffu);
-                state[i] = state[i + (397-624)] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
-            }
-            y = (state[624-1] & 0x80000000u) | (state[0] & 0x7fffffffu);
-            state[624-1] = state[397-1] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
-        }
-        uint32_t y = state[next++];
-        y ^= y >> 11;
-        y ^= (y << 7) & 0x9d2c5680;
-        y ^= (y << 15) & 0xefc60000;
-        y ^= y >> 18;
-        return min + rescale_uniform * (1.f/static_cast<float>(1 << 23)*(static_cast<float>(y>>9) + 0.5f));
     }
 
     auto context::kickoff_workers(
@@ -214,7 +190,7 @@ namespace quant {
             worker.payload.numel = static_cast<std::int64_t>(in.size());
             worker.payload.scale = scale;
             worker.payload.zero_point = zero_point;
-            worker.payload.mode = mode;
+            worker.payload.rnd_mode = mode;
         }
         ++m_phase;
         m_num_completed.store(0, std::memory_order::relaxed);

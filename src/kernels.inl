@@ -10,6 +10,8 @@
 #include <cmath>
 #include <cstdint>
 
+#include "prng.hpp"
+
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
 #elif defined(__aarch64__)
@@ -21,12 +23,27 @@ auto __attribute__((hot)) Q8_KERNEL_IMPL(
   std::uint8_t* const __restrict__ o,
   const std::size_t n,
   const float inv_scale,
-  const std::int32_t zero_point
+  const std::int32_t zp,
+  const bool sto_rnd,
+  quant::prng_state& prng
 ) noexcept -> void {
     std::size_t i {};
+    if (sto_rnd) {
+        for (; i < n; ++i) {
+            float rnd {x[i] * inv_scale};
+            const float dec {std::abs(rnd - std::trunc(rnd))};
+            const float xi {prng.gen_canonical()};
+            float adj {xi < dec ? 1.0f : 0.0f};
+            if (rnd < 0.0f) adj = -1.0f * adj;
+            rnd = std::trunc(rnd) + adj;
+            const std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
+            o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
+        }
+        return;
+    }
     #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
         const __m512 vinv_scale = _mm512_set1_ps(inv_scale);
-        const __m512i vzero_point = _mm512_set1_epi32(zero_point);
+        const __m512i vzero_point = _mm512_set1_epi32(zp);
         const __m512i vmin = _mm512_setzero_si512();
         const __m512i vmax = _mm512_set1_epi32(0xff);
         constexpr int k_round_mode = _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC;
@@ -47,7 +64,7 @@ auto __attribute__((hot)) Q8_KERNEL_IMPL(
         }
     #elif defined(__AVX2__) && 0
         const __m256 vinv_scale = _mm256_set1_ps(inv_scale);
-        const __m256i vzero_point = _mm256_set1_epi32(zero_point);
+        const __m256i vzero_point = _mm256_set1_epi32(zp);
         const __m256i vmin = _mm256_setzero_si256();
         const __m256i vmax = _mm256_set1_epi32(0xff);
         constexpr int k_round_mode = _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC;
@@ -68,7 +85,7 @@ auto __attribute__((hot)) Q8_KERNEL_IMPL(
         }
     #elif defined(__SSE4_2__)
         const __m128 vinv_scale = _mm_set1_ps(inv_scale);
-        const __m128i vzero_point = _mm_set1_epi32(zero_point);
+        const __m128i vzero_point = _mm_set1_epi32(zp);
         const __m128i vmin = _mm_setzero_si128();
         const __m128i vmax = _mm_set1_epi32(0xff);
         constexpr int k_round_mode = _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC;
@@ -89,7 +106,7 @@ auto __attribute__((hot)) Q8_KERNEL_IMPL(
         }
     #elif defined(__aarch64__) && defined(__ARM_NEON__)
         const float32x4_t vinv_scale = vdupq_n_f32(inv_scale);
-        const int32x4_t vzero_point = vdupq_n_s32(zero_point);
+        const int32x4_t vzero_point = vdupq_n_s32(zp);
         constexpr std::size_t step = 16;
         for (; i+step <= n; i += step) {
             float32x4_t xf0 = vld1q_f32(x+i+(0<<2));
@@ -120,8 +137,11 @@ auto __attribute__((hot)) Q8_KERNEL_IMPL(
             vst1q_u8(o+i, result);
         }
     #endif
-    for (; i < n; ++i)
-        o[i] = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[i] * inv_scale)) + zero_point, 0, 0xff));
+    for (; i < n; ++i) {
+        const float rnd {std::round(x[i] * inv_scale)};
+        const std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
+        o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
+    }
 }
 
 auto __attribute__((hot)) Q4_KERNEL_IMPL(
@@ -129,13 +149,15 @@ auto __attribute__((hot)) Q4_KERNEL_IMPL(
   std::uint8_t* const __restrict__ o,
   const std::size_t n,
   const float inv_scale,
-  const std::int32_t zero_point
+  const std::int32_t zp,
+  [[maybe_unused]] const bool sto_rnd,
+  [[maybe_unused]] quant::prng_state& prng
 ) noexcept -> void {
     constexpr std::int32_t clamp_max {(1<<4)-1};
     std::size_t i {};
     std::memset(o, 0, n>>1);
     for (; i < n; ++i) {
-        std::int32_t q8 {std::clamp(static_cast<std::int32_t>(std::round(x[i] * inv_scale)) + zero_point, 0, clamp_max)};
+        std::int32_t q8 {std::clamp(static_cast<std::int32_t>(std::round(x[i] * inv_scale)) + zp, 0, clamp_max)};
         if ((i & 1) == 0) o[i>>1] |= q8<<4;
         else o[i>>1] |= q8;
     }
