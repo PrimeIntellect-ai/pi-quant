@@ -5,15 +5,27 @@
 #include <vector>
 #include <algorithm>
 
-extern auto f32_q8_generic(
-    const float* __restrict__ x,
-    std::uint8_t* __restrict__ o,
-    std::size_t n,
-    float inv_scale,
-    std::int32_t zero_point,
-    bool sto_rnd,
-    quant::prng_state& prng
-) noexcept -> void;
+#define decl_kernel_pair(impl) \
+    extern auto f32_q8_##impl( \
+      const float* __restrict__ x, \
+        std::uint8_t* __restrict__ o, \
+        std::size_t n, \
+        float inv_scale, \
+        std::int32_t zero_point, \
+        const bool sto_rnd, \
+        quant::prng_state& prng \
+    ) noexcept -> void; \
+    extern auto f32_q4_##impl( \
+        const float* __restrict__ x, \
+        std::uint8_t* __restrict__ o, \
+        std::size_t n, \
+        float inv_scale, \
+        std::int32_t zero_point, \
+        const bool sto_rnd, \
+        quant::prng_state& prng \
+    ) noexcept -> void
+
+decl_kernel_pair(generic);
 
 #ifdef __x86_64__
     #include <cpuid.h>
@@ -52,75 +64,19 @@ extern auto f32_q8_generic(
         return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 0xe0) == 0xe0;
     }
 
-    extern auto f32_q8_amd64_sse42(
-        const float* __restrict__ x,
-        std::uint8_t* __restrict__ o,
-        std::size_t n,
-        float inv_scale,
-        std::int32_t zero_point,
-        const bool sto_rnd,
-        quant::prng_state& prng
-    ) noexcept -> void;
-    extern auto f32_q4_amd64_sse42(
-        const float* __restrict__ x,
-        std::uint8_t* __restrict__ o,
-        std::size_t n,
-        float inv_scale,
-        std::int32_t zero_point,
-        const bool sto_rnd,
-        quant::prng_state& prng
-    ) noexcept -> void;
-
-    extern auto f32_q8_amd64_avx2(
-        const float* __restrict__ x,
-        std::uint8_t* __restrict__ o,
-        std::size_t n,
-        float inv_scale,
-        std::int32_t zero_point,
-        const bool sto_rnd,
-        quant::prng_state& prng
-    ) noexcept -> void;
-    extern auto f32_q4_amd64_avx2(
-        const float* __restrict__ x,
-        std::uint8_t* __restrict__ o,
-        std::size_t n,
-        float inv_scale,
-        std::int32_t zero_point,
-        const bool sto_rnd,
-        quant::prng_state& prng
-    ) noexcept -> void;
-
-    extern auto f32_q8_amd64_avx512f(
-        const float* __restrict__ x,
-        std::uint8_t* __restrict__ o,
-        std::size_t n,
-        float inv_scale,
-        std::int32_t zero_point,
-        const bool sto_rnd,
-        quant::prng_state& prng
-    ) noexcept -> void;
-    extern auto f32_q4_amd64_avx512f(
-        const float* __restrict__ x,
-        std::uint8_t* __restrict__ o,
-        std::size_t n,
-        float inv_scale,
-        std::int32_t zero_point,
-        const bool sto_rnd,
-        quant::prng_state& prng
-    ) noexcept -> void;
+    decl_kernel_pair(amd64_sse42);
+    decl_kernel_pair(amd64_avx2);
+    decl_kernel_pair(amd64_avx512f);
 #endif
+
+#undef decl_kernel_pair
 
 namespace quant {
     context::context(std::size_t num_threads) {
         num_threads = std::max<std::size_t>(1, num_threads);
-        m_workers.resize(num_threads);
-        for (std::int64_t ti {0}; ti < m_workers.size(); ++ti) { // Initialize workers (main thread is worker 0)
-            auto& worker {m_workers[ti]};
-            worker.payload.ti = ti;
-            worker.payload.tc = static_cast<std::int64_t>(num_threads);
-            worker.payload.phase = 0;
-            if (ti != 0)
-                worker.thread = std::thread{&worker::entry, &worker, std::ref(*this)};
+        m_workers.reserve(num_threads);
+        for (std::int64_t ti {0}; ti < num_threads; ++ti) { // Initialize workers (main thread is worker 0)
+            m_workers.emplace_back(*this, ti, static_cast<std::int64_t>(num_threads));
         }
         #ifdef __x86_64__
             m_sse42_supported = check_sse42_support();
@@ -131,36 +87,45 @@ namespace quant {
             std::this_thread::yield();
     }
 
-    auto context::worker::await_work(context& ctx) -> bool {
-        std::unique_lock lock {ctx.m_mtx};
-        ctx.m_cv.wait(lock, [&]() noexcept -> bool { return ctx.m_interrupt || ctx.m_phase > payload.phase; });
-        if (ctx.m_interrupt) [[unlikely]] return false;
-        payload.phase = ctx.m_phase;
+    context::worker::worker(context& ctx, const std::int64_t ti, const std::int64_t tc)
+        : ctx{&ctx}, payload{static_cast<std::uint32_t>(ti ^ tc)} {
+        payload.ti = ti;
+        payload.tc = tc;
+        payload.phase = 0;
+        if (ti != 0) { // ti != 0 are extra worker thread, ti == 0 is main thread
+            thread.emplace(&worker::entry, this);
+        }
+    }
+
+    auto context::worker::await_work() -> bool {
+        std::unique_lock lock {ctx->m_mtx};
+        ctx->m_cv.wait(lock, [this]() noexcept -> bool { return ctx->m_interrupt || ctx->m_phase > payload.phase; });
+        if (ctx->m_interrupt) [[unlikely]] return false;
+        payload.phase = ctx->m_phase;
         return true;
     }
 
-    auto context::worker::entry(context& ctx) -> void {
-        ctx.m_workers_online.fetch_add(1, std::memory_order_seq_cst);
-        while (await_work(ctx)) [[likely]]
-            exec_and_broadcast(ctx);
+    auto context::worker::entry() -> void {
+        ctx->m_workers_online.fetch_add(1, std::memory_order_seq_cst);
+        while (await_work()) [[likely]]
+            exec_and_broadcast();
     }
 
-    auto context::worker::exec_and_broadcast(context& ctx) -> void {
-        const auto* const bx {payload.in};
-        auto* const br {payload.out};
+    auto context::worker::exec_and_broadcast() -> void {
+        const auto* const bx {op.in};
+        auto* const br {op.out};
         const std::int64_t tc {payload.tc};
         const std::int64_t ti {payload.ti};
-        const std::int64_t numel {payload.numel};
+        const std::int64_t numel {op.numel};
         const std::int64_t chunk {(numel + tc - 1)/tc};
         const std::int64_t ra {chunk*ti};
         const std::int64_t rb {std::min(ra + chunk, numel)};
-        const std::int64_t vmel {rb - ra};
-        if (vmel > 0) [[likely]] {
+        if (const std::int64_t vmel {rb - ra}; vmel > 0) [[likely]] {
             const auto* const px {bx + ra};
             auto* const pr {br + ra};
-            const float scale {payload.scale};
-            const std::int32_t zp {payload.zero_point};
-            const bool sto_rnd {payload.rnd_mode == round_mode::stochastic};
+            const float scale {op.scale};
+            const std::int32_t zp {op.zero_point};
+            const bool sto_rnd {op.rnd_mode == round_mode::stochastic};
             #ifdef __x86_64__
                 if (ctx.m_avx512f_supported) f32_q8_amd64_avx512f(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
                 else if (ctx.m_avx2_supported) f32_q8_amd64_avx2(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
@@ -170,9 +135,9 @@ namespace quant {
                 f32_q8_generic(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
             #endif
         }
-        if (1 + ctx.m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx.m_workers.size()) {
-            std::unique_lock lock {ctx.m_mtx};
-            ctx.m_cv.notify_all();
+        if (1 + ctx->m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx->m_workers.size()) {
+            std::unique_lock lock {ctx->m_mtx};
+            ctx->m_cv.notify_all();
         }
     }
 
@@ -185,12 +150,14 @@ namespace quant {
     ) -> void {
         std::unique_lock lock {m_mtx};
         for (auto& worker : m_workers) {
-            worker.payload.in = in.data();
-            worker.payload.out = out.data();
-            worker.payload.numel = static_cast<std::int64_t>(in.size());
-            worker.payload.scale = scale;
-            worker.payload.zero_point = zero_point;
-            worker.payload.rnd_mode = mode;
+            worker.op = op_info {
+                .in = in.data(),
+                .out = out.data(),
+                .numel = static_cast<std::int64_t>(in.size()),
+                .scale = scale,
+                .zero_point = zero_point,
+                .rnd_mode = mode
+            };
         }
         ++m_phase;
         m_num_completed.store(0, std::memory_order::relaxed);
@@ -223,7 +190,7 @@ namespace quant {
     ) -> void {
         kickoff_workers(in, out, scale, zero_point, mode);
         worker& w0 {m_workers[0]}; // Main thread does work too
-        w0.exec_and_broadcast(*this);
+        w0.exec_and_broadcast();
         barrier();
     }
 }
