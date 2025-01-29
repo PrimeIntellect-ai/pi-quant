@@ -29,7 +29,7 @@ static auto test_q8(std::size_t nt) -> void {
     std::uniform_real_distribution<float> dist {-1.0f, 1.0f};
     std::ranges::generate(data_in, [&] { return dist(gen); });
 
-    q8_naive(data_in, data_out_naive, 0.5, 0, nt);
+    q8_naive(data_in, data_out_naive, 0.5, 0);
     quant::context ctx {nt};
     ctx.quantize_uint8(data_in, data_out, 0.5, 0, quant::round_mode::nearest);
 
@@ -58,7 +58,7 @@ static auto test_q4(std::size_t nt) -> void {
     std::uniform_real_distribution<float> dist {-1.0f, 1.0f};
     std::ranges::generate(data_in, [&] { return dist(gen); });
 
-    q4_naive(data_in, data_out_naive, 1.0, 0, nt);
+    q4_naive(data_in, data_out_naive, 1.0, 0);
     quant::context ctx {nt};
     ctx.quantize_uint4(data_in, data_out, 1.0, 0, quant::round_mode::nearest);
 

@@ -13,8 +13,7 @@ inline auto q8_naive(
     const std::span<const float> in,
     const std::span<std::uint8_t> out,
     const double scale,
-    const std::int32_t zero_point,
-    const std::size_t nt
+    const std::int32_t zero_point
 ) noexcept -> void { /* Original implementation */
     const std::size_t numel {in.size()};
     const auto* const p_in {in.data()};
@@ -23,74 +22,40 @@ inline auto q8_naive(
         std::cerr << "uint8 output span must have the same length as input span, but has " << out.size() << ", required: " << in.size() << std::endl;
         std::abort();
     }
-    const float inv_scale {static_cast<float>(1.0 / scale)};
-    const std::size_t n_threads {std::max(1u, std::thread::hardware_concurrency())};
-    const std::size_t chunk_size = numel / n_threads;
-    std::vector<std::thread> threads {};
-    auto quantize_chunk = [&](int64_t start, int64_t end) {
-        for (int64_t i = start; i < end; ++i) {
-            int32_t quant_val = static_cast<int32_t>(std::round(p_in[i] * inv_scale)) + zero_point;
-            p_out[i] = static_cast<uint8_t>(std::clamp(quant_val, 0, 255));
-        }
-    };
-    for (int i = 0; i < nt - 1; ++i) {
-        int64_t start = i*chunk_size;
-        int64_t end = (i + 1)*chunk_size;
-        threads.emplace_back(quantize_chunk, start, end);
+    for (std::size_t i {}; i < numel; ++i) {
+        int32_t quant_val = static_cast<int32_t>(std::round(p_in[i] * scale)) + zero_point;
+        p_out[i] = static_cast<uint8_t>(std::clamp(quant_val, 0, 255));
     }
-    threads.emplace_back(quantize_chunk, (n_threads - 1)*chunk_size, numel);
-    for (auto& t : threads)t.join();
 }
 
 inline auto q4_naive(
     const std::span<const float> in,
     const std::span<std::uint8_t> out,
     const double scale,
-    const std::int32_t zero_point,
-    const std::size_t nt
+    const std::int32_t zero_point
 ) noexcept -> void {
     const std::size_t numel {in.size()};
     const auto* const p_in {in.data()};
     auto* const p_out {out.data()};
     const std::size_t out_numel {(numel + 1) / 2};
+    const double inv_scale {1.0 / scale};
     if (out.size() != out_numel) {
         std::cerr << "int4 output span must have (input.size() + 1) / 2 length, but has " << out.size() << ", required: " << out_numel << std::endl;
         std::abort();
     }
-    const float inv_scale {static_cast<float>(1.0 / scale)};
-    const std::size_t n_threads {std::max(1u, std::thread::hardware_concurrency())};
-    const std::size_t chunk_size = (numel + n_threads - 1) / n_threads; // Ensures proper division
-    std::vector<std::thread> threads {};
-    auto quantize_chunk = [&](int64_t start, int64_t end) {
-        if (start >= end) return;
-        std::int64_t vmel = end - start;
-        const std::size_t pairs = static_cast<std::size_t>(vmel / 2);
-        const std::size_t out_start = start / 2;
-        auto* output = p_out + out_start;
-        auto* input  = p_in + start;
-        for (std::size_t i = 0; i < pairs; ++i) {
-            const auto q1 = static_cast<std::uint8_t>(
-                std::clamp<int>(std::round(input[i*2] * inv_scale) + zero_point, 0, 0xf)
-            );
-            const auto q2 = static_cast<std::uint8_t>(
-                std::clamp<int>(std::round(input[i*2+1] * inv_scale) + zero_point, 0, 0xf)
-            );
-            output[i] = static_cast<std::uint8_t>((q1 << 4) | q2);
-        }
-        if (vmel % 2 != 0) {
-            const std::size_t leftover_out = out_start + pairs;
-            const auto q = static_cast<std::uint8_t>(
-                std::clamp<int>(std::round(input[pairs * 2] * inv_scale) + zero_point, 0, 0xf)
-            );
-            p_out[leftover_out] = static_cast<std::uint8_t>(q << 4);
-        }
-    };
-    for (int i = 0; i < nt - 1; ++i) {
-        int64_t start = i * chunk_size;
-        int64_t end = std::min((i + 1) * chunk_size, numel);
-        threads.emplace_back(quantize_chunk, start, end);
+    for (std::size_t i = 0; i < out_numel; ++i) {
+        const auto q1 = static_cast<std::uint8_t>(
+            std::clamp<int>(std::round(p_in[i*2] * inv_scale) + zero_point, 0, 0xf)
+        );
+        const auto q2 = static_cast<std::uint8_t>(
+            std::clamp<int>(std::round(p_in[i*2+1] * inv_scale) + zero_point, 0, 0xf)
+        );
+        p_out[i] = static_cast<std::uint8_t>((q1 << 4) | q2);
     }
-    threads.emplace_back(quantize_chunk, (n_threads - 1) * chunk_size, numel);
-
-    for (auto& t : threads) t.join();
+    if (out_numel % 2 != 0) {
+        const auto q = static_cast<std::uint8_t>(
+            std::clamp<int>(std::round(p_in[out_numel * 2] * inv_scale) + zero_point, 0, 0xf)
+        );
+        p_out[out_numel] = static_cast<std::uint8_t>(q << 4);
+    }
 }
