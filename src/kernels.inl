@@ -218,11 +218,11 @@ struct q4_kernel<false> {
         const std::int64_t packed_numel {numel >> 1};
         std::int64_t i {};
         for (; i < packed_numel; ++i) {
-            auto q1 = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[i * 2] * inv_scale)) + zp, 0, 0xf));
-            auto q2 = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[i * 2 + 1] * inv_scale)) + zp, 0, 0xf));
+            auto q1 = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[(i<<1)] * inv_scale)) + zp, 0, 0xf));
+            auto q2 = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[(i<<1) + 1] * inv_scale)) + zp, 0, 0xf));
             o[i] = (q1 << 4) | q2;
         }
-        if (numel % 2 != 0) {
+        if (numel & 1) {
             auto q1 = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[numel - 1] * inv_scale)) + zp, 0, 0xf));
             o[packed_numel] = q1 << 4;
         }

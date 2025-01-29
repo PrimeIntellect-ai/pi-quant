@@ -31,7 +31,7 @@ decl_kernel_pair(generic);
 using kernel_fn = auto (
     const float* __restrict__ x,
     std::uint8_t* __restrict__ o,
-    std::size_t n,
+    std::int64_t n,
     float inv_scale,
     std::int32_t zero_point,
     bool sto_rnd,
@@ -100,10 +100,10 @@ namespace quant {
     }
 
     context::worker::worker(context& ctx, const std::int64_t ti, const std::int64_t tc)
-        : ctx{&ctx}, payload{static_cast<std::uint32_t>(ti ^ tc)} {
-        payload.ti = ti;
-        payload.tc = tc;
-        payload.phase = 0;
+        : ctx{&ctx}, pl{static_cast<std::uint32_t>(ti ^ tc)} {
+        pl.ti = ti;
+        pl.tc = tc;
+        pl.phase = 0;
         if (ti != 0) { // ti != 0 are extra worker thread, ti == 0 is main thread
             thread.emplace(&worker::entry, this);
         }
@@ -111,9 +111,9 @@ namespace quant {
 
     auto context::worker::await_work() -> bool {
         std::unique_lock lock {ctx->m_mtx};
-        ctx->m_cv.wait(lock, [this]() noexcept -> bool { return ctx->m_interrupt || ctx->m_phase > payload.phase; });
+        ctx->m_cv.wait(lock, [this]() noexcept -> bool { return ctx->m_interrupt || ctx->m_phase > pl.phase; });
         if (ctx->m_interrupt) [[unlikely]] return false;
-        payload.phase = ctx->m_phase;
+        pl.phase = ctx->m_phase;
         return true;
     }
 
@@ -126,8 +126,8 @@ namespace quant {
     auto context::worker::exec_and_broadcast() -> void {
         const auto* const bx {op.in};
         auto* const br {op.out};
-        const std::int64_t tc {payload.tc};
-        const std::int64_t ti {payload.ti};
+        const std::int64_t tc {pl.tc};
+        const std::int64_t ti {pl.ti};
         const std::int64_t numel {op.numel};
         const std::int64_t chunk {(numel + tc - 1)/tc};
         const std::int64_t ra {chunk*ti};
@@ -150,7 +150,7 @@ namespace quant {
                 };
                 const auto cap_idx {static_cast<std::size_t>(ctx->cpu_caps)};
                 auto* const kernel {op.format == op_info::q_i8 ? k_dispatch_i8[cap_idx] : k_dispatch_i4[cap_idx]};
-                (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, payload.prng);
+                (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, pl.prng);
             #else
                 auto* const kernel {op.format == op_info::q_i8 ? &f32_q8_generic : &f32_q4_generic};
                 (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, payload.prng);
@@ -230,7 +230,7 @@ namespace quant {
             .in = in.data(),
             .out = out.data(),
             .numel = static_cast<std::int64_t>(in.size()),
-            .scale = scale,
+            .scale = static_cast<float>(1.0 / scale),
             .zero_point = zero_point,
             .rnd_mode = mode,
             .format = op_info::q_i4

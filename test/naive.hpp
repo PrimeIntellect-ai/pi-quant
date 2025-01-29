@@ -64,19 +64,25 @@ inline auto q4_naive(
     auto quantize_chunk = [&](int64_t start, int64_t end) {
         if (start >= end) return;
         std::int64_t vmel = end - start;
-        std::size_t packed_length = vmel / 2;
-        std::size_t out_start = start / 2;
+        const std::size_t pairs = static_cast<std::size_t>(vmel / 2);
+        const std::size_t out_start = start / 2;
         auto* output = p_out + out_start;
-        auto* input = p_in + start;
-        for (std::size_t i = 0; i < packed_length; ++i) {
-            auto q1 = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(input[i*2] * inv_scale)) + zero_point, 0, 0xf));
-            auto q2 = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(input[i*2 + 1] * inv_scale)) + zero_point, 0, 0xf));
-            output[i] = (q1 << 4) | q2;
-        }
-        if (end == numel && (numel % 2 != 0)) {
-            p_out[out_numel - 1] = static_cast<std::uint8_t>(
-                (std::clamp(static_cast<std::int32_t>(std::round(input[vmel - 1] * inv_scale)) + zero_point, 0, 0xf) & 0xf) << 4
+        auto* input  = p_in + start;
+        for (std::size_t i = 0; i < pairs; ++i) {
+            const auto q1 = static_cast<std::uint8_t>(
+                std::clamp<int>(std::round(input[i*2] * inv_scale) + zero_point, 0, 0xf)
             );
+            const auto q2 = static_cast<std::uint8_t>(
+                std::clamp<int>(std::round(input[i*2+1] * inv_scale) + zero_point, 0, 0xf)
+            );
+            output[i] = static_cast<std::uint8_t>((q1 << 4) | q2);
+        }
+        if (vmel % 2 != 0) {
+            const std::size_t leftover_out = out_start + pairs;
+            const auto q = static_cast<std::uint8_t>(
+                std::clamp<int>(std::round(input[pairs * 2] * inv_scale) + zero_point, 0, 0xf)
+            );
+            p_out[leftover_out] = static_cast<std::uint8_t>(q << 4);
         }
     };
     for (int i = 0; i < nt - 1; ++i) {

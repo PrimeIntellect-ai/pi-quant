@@ -73,7 +73,7 @@ namespace quant {
 
         struct worker final {
             context* ctx;
-            alignas(cache_line) payload payload;
+            alignas(cache_line) payload pl;
             alignas(cache_line) op_info op {};
             std::optional<std::thread> thread {};
 
