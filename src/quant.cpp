@@ -9,7 +9,7 @@
     extern auto f32_q8_##impl( \
       const float* __restrict__ x, \
         std::uint8_t* __restrict__ o, \
-        std::size_t n, \
+        std::int64_t numel, \
         float inv_scale, \
         std::int32_t zero_point, \
         const bool sto_rnd, \
@@ -18,7 +18,7 @@
     extern auto f32_q4_##impl( \
         const float* __restrict__ x, \
         std::uint8_t* __restrict__ o, \
-        std::size_t n, \
+        std::int64_t numel, \
         float inv_scale, \
         std::int32_t zero_point, \
         const bool sto_rnd, \
