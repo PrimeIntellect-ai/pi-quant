@@ -24,7 +24,15 @@ namespace quant {
         auto operator=(context&&) -> context& = delete;
         ~context();
 
-        auto quantize_int8(
+        auto quantize_uint8(
+            std::span<const float> in,
+            std::span<std::uint8_t> out,
+            float scale,
+            std::int32_t zero_point,
+            round_mode mode
+        ) -> void;
+
+        auto quantize_uint4(
             std::span<const float> in,
             std::span<std::uint8_t> out,
             float scale,
@@ -48,6 +56,10 @@ namespace quant {
             float scale {};
             std::int32_t zero_point {};
             round_mode rnd_mode {};
+            enum {
+                q_i8,
+                q_i4
+            } format {q_i8};
         };
 
         struct payload {
@@ -86,18 +98,17 @@ namespace quant {
         std::atomic_size_t m_workers_online {};
 
         #ifdef __x86_64__
-            bool m_sse42_supported : 1 {};
-            bool m_avx2_supported : 1 {};
-            bool m_avx512f_supported : 1 {};
+            enum class amd64_cpu_caps {
+                none=0,
+                sse_4_2,
+                avx2,
+                avx512,
+
+                num_
+            } cpu_caps {};
         #endif
 
-        auto kickoff_workers(
-            std::span<const float> in,
-            std::span<std::uint8_t> out,
-            float scale,
-            std::int32_t zero_point,
-            round_mode mode
-        ) -> void;
+        auto kickoff_workers(const op_info& info) -> void;
         auto barrier() -> void;
     };
 }

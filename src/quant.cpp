@@ -4,6 +4,7 @@
 #include <thread>
 #include <vector>
 #include <algorithm>
+#include <iostream>
 
 #define decl_kernel_pair(impl) \
     extern auto f32_q8_##impl( \
@@ -26,6 +27,16 @@
     ) noexcept -> void
 
 decl_kernel_pair(generic);
+
+using kernel_fn = auto (
+    const float* __restrict__ x,
+    std::uint8_t* __restrict__ o,
+    std::size_t n,
+    float inv_scale,
+    std::int32_t zero_point,
+    bool sto_rnd,
+    quant::prng_state& prng
+) -> void;
 
 #ifdef __x86_64__
     #include <cpuid.h>
@@ -79,9 +90,10 @@ namespace quant {
             m_workers.emplace_back(*this, ti, static_cast<std::int64_t>(num_threads));
         }
         #ifdef __x86_64__
-            m_sse42_supported = check_sse42_support();
-            m_avx2_supported = check_avx2_support();
-            m_avx512f_supported = check_avx512f_support();
+            if (check_avx512f_support()) cpu_caps = amd64_cpu_caps::avx512;
+            else if (check_avx2_support()) cpu_caps = amd64_cpu_caps::avx2;
+            else if (check_sse42_support()) cpu_caps = amd64_cpu_caps::sse_4_2;
+            else cpu_caps = amd64_cpu_caps::none;
         #endif
         while (m_workers_online.load(std::memory_order_seq_cst) != num_threads-1)
             std::this_thread::yield();
@@ -123,42 +135,36 @@ namespace quant {
         if (const std::int64_t vmel {rb - ra}; vmel > 0) [[likely]] {
             const auto* const px {bx + ra};
             auto* const pr {br + ra};
-            const float scale {op.scale};
-            const std::int32_t zp {op.zero_point};
-            const bool sto_rnd {op.rnd_mode == round_mode::stochastic};
             #ifdef __x86_64__
-                if (ctx.m_avx512f_supported) f32_q8_amd64_avx512f(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
-                else if (ctx.m_avx2_supported) f32_q8_amd64_avx2(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
-                else if (ctx.m_sse42_supported) f32_q8_amd64_sse42(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
-                else f32_q8_generic(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
+            static constexpr std::array<kernel_fn*, static_cast<std::size_t>(amd64_cpu_caps::num_)> k_dispatch_i8 = {
+                    &f32_q8_generic,
+                    &f32_q8_amd64_sse42,
+                    &f32_q8_amd64_avx2,
+                    &f32_q8_amd64_avx512f
+                };
+                static constexpr std::array<kernel_fn*, static_cast<std::size_t>(amd64_cpu_caps::num_)> k_dispatch_i4 = {
+                    &f32_q4_generic,
+                    &f32_q4_amd64_sse42,
+                    &f32_q4_amd64_avx2,
+                    &f32_q4_amd64_avx512f
+                };
+                const auto cap_idx {static_cast<std::size_t>(ctx->cpu_caps)};
+                auto* const kernel {op.format == op_info::q_i8 ? k_dispatch_i8[cap_idx] : k_dispatch_i4[cap_idx]};
+                (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, payload.prng);
             #else
                 f32_q8_generic(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
             #endif
         }
-        if (1 + ctx->m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx->m_workers.size()) {
+        if (1+ctx->m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx->m_workers.size()) {
             std::unique_lock lock {ctx->m_mtx};
             ctx->m_cv.notify_all();
         }
     }
 
-    auto context::kickoff_workers(
-        const std::span<const float> in,
-        const std::span<std::uint8_t> out,
-        const float scale,
-        const std::int32_t zero_point,
-        const round_mode mode
-    ) -> void {
+    auto context::kickoff_workers(const op_info& info) -> void {
         std::unique_lock lock {m_mtx};
-        for (auto& worker : m_workers) {
-            worker.op = op_info {
-                .in = in.data(),
-                .out = out.data(),
-                .numel = static_cast<std::int64_t>(in.size()),
-                .scale = scale,
-                .zero_point = zero_point,
-                .rnd_mode = mode
-            };
-        }
+        for (auto& worker : m_workers)
+            worker.op = info;
         ++m_phase;
         m_num_completed.store(0, std::memory_order::relaxed);
         m_cv.notify_all();
@@ -181,14 +187,54 @@ namespace quant {
         m_workers.clear();
     }
 
-    auto context::quantize_int8(
+    auto context::quantize_uint8(
         const std::span<const float> in,
         const std::span<std::uint8_t> out,
         const float scale,
         const std::int32_t zero_point,
         const round_mode mode
     ) -> void {
-        kickoff_workers(in, out, scale, zero_point, mode);
+        if (in.size() != out.size()) [[unlikely]] {
+            std::cerr << __FILE_NAME__ << ":" << __LINE__ << " input and output spans must have the same length, but " << in.size() << " != " << out.size() << std::endl;
+            std::abort();
+        }
+        const op_info info {
+            .in = in.data(),
+            .out = out.data(),
+            .numel = static_cast<std::int64_t>(in.size()),
+            .scale = scale,
+            .zero_point = zero_point,
+            .rnd_mode = mode,
+            .format = op_info::q_i8
+        };
+        kickoff_workers(info);
+        worker& w0 {m_workers[0]}; // Main thread does work too
+        w0.exec_and_broadcast();
+        barrier();
+    }
+
+    auto context::quantize_uint4(
+        const std::span<const float> in,
+        const std::span<std::uint8_t> out,
+        const float scale,
+        const std::int32_t zero_point,
+        const round_mode mode
+    ) -> void {
+        std::size_t output_len {(in.size() + 1)>>1};
+        if (out.size() != output_len) [[unlikely]] {
+            std::cerr << __FILE_NAME__ << ":" << __LINE__ << " int4 output span must have (input.size() + 1) / 2 length, but has " << out.size() << ", required: " << (output_len) << std::endl;
+            std::abort();
+        }
+        const op_info info {
+            .in = in.data(),
+            .out = out.data(),
+            .numel = static_cast<std::int64_t>(in.size()),
+            .scale = scale,
+            .zero_point = zero_point,
+            .rnd_mode = mode,
+            .format = op_info::q_i4
+        };
+        kickoff_workers(info);
         worker& w0 {m_workers[0]}; // Main thread does work too
         w0.exec_and_broadcast();
         barrier();

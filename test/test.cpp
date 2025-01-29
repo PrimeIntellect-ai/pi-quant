@@ -39,7 +39,7 @@ auto main() -> int {
 
     q8_naive(data_in, data_out_naive, 1.0, 0, nt);
     quant::context ctx {nt};
-    ctx.quantize_int8(data_in, data_out, 1.0, 0, quant::round_mode::nearest);
+    ctx.quantize_uint8(data_in, data_out, 1.0, 0, quant::round_mode::nearest);
 
     for (std::size_t i {}; i < numel; ++i) {
         auto a = data_out_naive[i];
