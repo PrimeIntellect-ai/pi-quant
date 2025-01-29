@@ -29,16 +29,16 @@ static auto test_q8(std::size_t nt) -> void {
     std::uniform_real_distribution<float> dist {-1.0f, 1.0f};
     std::ranges::generate(data_in, [&] { return dist(gen); });
 
-    q8_naive(data_in, data_out_naive, 1.0, 0, nt);
+    q8_naive(data_in, data_out_naive, 0.5, 0, nt);
     quant::context ctx {nt};
-    ctx.quantize_uint8(data_in, data_out, 1.0, 0, quant::round_mode::nearest);
+    ctx.quantize_uint8(data_in, data_out, 0.5, 0, quant::round_mode::nearest);
 
     for (std::size_t i {}; i < numel; ++i) {
         auto a = data_out_naive[i];
         auto b = data_out[i];
         if (a != b) {
             std::cerr << "Mismatch at index " << i << ": " << static_cast<int>(a) << " != " << static_cast<int>(b) << std::endl;
-            return;
+            std::abort();
         }
     }
 
@@ -51,8 +51,8 @@ static auto test_q4(std::size_t nt) -> void {
     std::vector<std::uint8_t> data_out_naive {};
     std::vector<std::uint8_t> data_out {};
     data_in.resize(numel);
-    data_out.resize(numel);
-    data_out_naive.resize(numel);
+    data_out.resize((numel + 1)/2); // 2 uint4 per uint8
+    data_out_naive.resize((numel + 1)/2); // 2 uint4 per uint8
     std::random_device rd {};
     std::mt19937 gen {rd()};
     std::uniform_real_distribution<float> dist {-1.0f, 1.0f};
@@ -60,14 +60,14 @@ static auto test_q4(std::size_t nt) -> void {
 
     q4_naive(data_in, data_out_naive, 1.0, 0, nt);
     quant::context ctx {nt};
-    ctx.quantize_int4(data_in, data_out, 1.0, 0, quant::round_mode::nearest);
+    ctx.quantize_uint4(data_in, data_out, 1.0, 0, quant::round_mode::nearest);
 
     for (std::size_t i {}; i < numel; ++i) {
         auto a = data_out_naive[i];
         auto b = data_out[i];
         if (a != b) {
             std::cerr << "Mismatch at index " << i << ": " << static_cast<int>(a) << " != " << static_cast<int>(b) << std::endl;
-            return;
+            std::abort();
         }
     }
 
@@ -83,6 +83,7 @@ auto main() -> int {
         std::cout << "AVX-512 F? " << (check_avx512f_support() ? "YES" : "NO") << std::endl;
     #endif
     test_q8(nt);
+    test_q4(nt);
     return 0;
 }
 

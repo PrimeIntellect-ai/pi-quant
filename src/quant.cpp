@@ -152,7 +152,8 @@ namespace quant {
                 auto* const kernel {op.format == op_info::q_i8 ? k_dispatch_i8[cap_idx] : k_dispatch_i4[cap_idx]};
                 (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, payload.prng);
             #else
-                f32_q8_generic(px, pr, vmel, scale, zp, sto_rnd, payload.prng);
+                auto* const kernel {op.format == op_info::q_i8 ? &f32_q8_generic : &f32_q4_generic};
+                (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, payload.prng);
             #endif
         }
         if (1+ctx->m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx->m_workers.size()) {
@@ -202,7 +203,7 @@ namespace quant {
             .in = in.data(),
             .out = out.data(),
             .numel = static_cast<std::int64_t>(in.size()),
-            .scale = scale,
+            .scale = static_cast<float>(1.0 / scale),
             .zero_point = zero_point,
             .rnd_mode = mode,
             .format = op_info::q_i8
