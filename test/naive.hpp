@@ -18,12 +18,13 @@ inline auto q8_naive(
     const std::size_t numel {in.size()};
     const auto* const p_in {in.data()};
     auto* const p_out {out.data()};
+    const double inv_scale {1.0 / scale};
     if (out.size() != in.size()) {
         std::cerr << "uint8 output span must have the same length as input span, but has " << out.size() << ", required: " << in.size() << std::endl;
         std::abort();
     }
     for (std::size_t i {}; i < numel; ++i) {
-        int32_t quant_val = static_cast<int32_t>(std::round(p_in[i] * scale)) + zero_point;
+        int32_t quant_val = static_cast<int32_t>(std::round(p_in[i] * inv_scale)) + zero_point;
         p_out[i] = static_cast<uint8_t>(std::clamp(quant_val, 0, 255));
     }
 }

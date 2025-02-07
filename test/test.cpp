@@ -17,6 +17,7 @@
 #endif
 
 static auto test_q8(std::size_t nt) -> void {
+    std::cout << "uint8 quant Test..." << std::endl;
     volatile std::size_t numel {1'000'000};
     std::vector<float> data_in {};
     std::vector<std::uint8_t> data_out_naive {};
@@ -46,6 +47,7 @@ static auto test_q8(std::size_t nt) -> void {
 }
 
 static auto test_q4(std::size_t nt) -> void {
+    std::cout << "uint4 quant Test" << std::endl;
     volatile std::size_t numel {1'000'000};
     std::vector<float> data_in {};
     std::vector<std::uint8_t> data_out_naive {};
