@@ -136,7 +136,7 @@ namespace quant {
             const auto* const px {bx + ra};
             auto* const pr {br + ra};
             #ifdef __x86_64__
-            static constexpr std::array<kernel_fn*, static_cast<std::size_t>(amd64_cpu_caps::num_)> k_dispatch_i8 = {
+                static constexpr std::array<kernel_fn*, static_cast<std::size_t>(amd64_cpu_caps::num_)> k_dispatch_i8 = {
                     &f32_q8_generic,
                     &f32_q8_amd64_sse42,
                     &f32_q8_amd64_avx2,

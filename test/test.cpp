@@ -77,7 +77,7 @@ static auto test_q4(std::size_t nt) -> void {
 }
 
 auto main() -> int {
-    const std::size_t nt {std::max(1u, std::thread::hardware_concurrency())};
+    const std::size_t nt {1};
     std::cout << "Num threads: " << nt << std::endl;
     #ifdef __x86_64__
         std::cout << "SSE 4.2? " << (check_sse42_support() ? "YES" : "NO") << std::endl;

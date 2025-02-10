@@ -17,6 +17,8 @@ else()
     set(IS_ARM64 FALSE)
 endif()
 
+message(STATUS "Building for ${CMAKE_SYSTEM_PROCESSOR}")
+
 set(QUANT_SOURCES src/quant.hpp src/quant.cpp src/kernels.inl src/kernel_generic.cpp)
 if (${IS_AMD64})
     function(set_file_opts filename posix_arch msvc_arch)

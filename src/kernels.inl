@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cmath>
 #include <cstdint>
+#include <iostream>
 
 #include "prng.hpp"
 
@@ -18,27 +19,16 @@
 #include <arm_neon.h>
 #endif
 
-template <const bool sto_rnd>
-struct q8_kernel final {
-    static auto exec(
-      const float* __restrict__ x,
-      std::uint8_t* __restrict__ o,
-      std::int64_t numel,
-      float inv_scale,
-      std::int32_t zp,
-      quant::prng_state& prng
-    ) noexcept -> void;
-};
+#define concat(a, b) a ## b
+#define impl_namespace(a, b) concat(a, _impl)
 
-template<>
-struct q8_kernel<false> {
-    static auto __attribute__((hot)) exec(
+namespace impl_namespace(Q8_KERNEL_IMPL, _) {
+    static auto __attribute__((hot)) nearest(
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         const std::int64_t numel,
         const float inv_scale,
-        const std::int32_t zp,
-        [[maybe_unused]] quant::prng_state& prng
+        const std::int32_t zp
    ) noexcept -> void {
         std::int64_t i {};
         #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
@@ -62,7 +52,7 @@ struct q8_kernel<false> {
                 __m512i result = _mm512_packus_epi16(pack16_0, pack16_1);
                 _mm512_storeu_si512(reinterpret_cast<__m512i*>(o+i), result);
             }
-        #elif defined(__AVX2__) && 0
+        #elif defined(__AVX2__)
             const __m256 vinv_scale = _mm256_set1_ps(inv_scale);
             const __m256i vzero_point = _mm256_set1_epi32(zp);
             const __m256i vmin = _mm256_setzero_si256();
@@ -77,11 +67,17 @@ struct q8_kernel<false> {
                 __m256i xi0 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf0, vinv_scale), k_round_mode)), vzero_point)));
                 __m256i xi1 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf1, vinv_scale), k_round_mode)), vzero_point)));
                 __m256i xi2 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf2, vinv_scale), k_round_mode)), vzero_point)));
-                __m256i xi3 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf3, vinv_scale), k_round_mode)),vzero_point)));
+                __m256i xi3 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf3, vinv_scale), k_round_mode)), vzero_point)));
                 __m256i pack16_0 = _mm256_packus_epi32(xi0, xi1);
                 __m256i pack16_1 = _mm256_packus_epi32(xi2, xi3);
                 __m256i result = _mm256_packus_epi16(pack16_0, pack16_1);
-                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i), result);
+                result = _mm256_permute4x64_epi64(result, 0xD8);
+                static const __m256i shuffle_mask = _mm256_setr_epi8(
+                    0,  1,  2,  3,   8,  9, 10, 11,   4,  5,  6,  7,  12, 13, 14, 15,
+                    0,  1,  2,  3,   8,  9, 10, 11,   4,  5,  6,  7,  12, 13, 14, 15
+                );
+                __m256i final = _mm256_shuffle_epi8(result, shuffle_mask);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i), final);
             }
         #elif defined(__SSE4_2__)
             const __m128 vinv_scale = _mm_set1_ps(inv_scale);
@@ -143,11 +139,8 @@ struct q8_kernel<false> {
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
     }
-};
 
-template<>
-struct q8_kernel<true> {
-    static auto __attribute__((hot)) exec(
+    static auto __attribute__((hot)) stochastic(
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         const std::int64_t numel,
@@ -169,51 +162,13 @@ struct q8_kernel<true> {
     }
 };
 
-template <const bool sto_rnd>
-struct q4_kernel final {
-    static auto exec(
-      const float* __restrict__ x,
-      std::uint8_t* __restrict__ o,
-      std::int64_t numel,
-      float inv_scale,
-      std::int32_t zp,
-      quant::prng_state& prng
-    ) noexcept -> void;
-};
-
-template<>
-struct q4_kernel<true> {
-    static auto __attribute__((hot)) exec(
+namespace impl_namespace(Q4_KERNEL_IMPL, _) {
+    static auto __attribute__((hot)) nearest(
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         const std::int64_t numel,
         const float inv_scale,
-        const std::int32_t zp,
-        [[maybe_unused]] quant::prng_state& prng
-    ) noexcept -> void {
-        std::int64_t i {};
-        for (; i < numel; ++i) {
-            float rnd {x[i] * inv_scale};
-            const float dec {std::abs(rnd - std::trunc(rnd))};
-            const float xi {prng.gen_canonical()};
-            float adj {xi < dec ? 1.0f : 0.0f};
-            if (rnd < 0.0f) adj = -1.0f * adj;
-            rnd = std::trunc(rnd) + adj;
-            const std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
-            o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
-        }
-    }
-};
-
-template<>
-struct q4_kernel<false> {
-    static auto __attribute__((hot)) exec(
-        const float* const __restrict__ x,
-        std::uint8_t* const __restrict__ o,
-        const std::int64_t numel,
-        const float inv_scale,
-        const std::int32_t zp,
-        [[maybe_unused]] quant::prng_state& prng
+        const std::int32_t zp
     ) noexcept -> void {
         const std::int64_t packed_numel {numel >> 1};
         std::int64_t i {};
@@ -227,6 +182,27 @@ struct q4_kernel<false> {
             o[packed_numel] = q1 << 4;
         }
     }
+
+    static auto __attribute__((hot)) stochastic(
+        const float* const __restrict__ x,
+        std::uint8_t* const __restrict__ o,
+        const std::int64_t numel,
+        const float inv_scale,
+        const std::int32_t zp,
+        [[maybe_unused]] quant::prng_state& prng
+    ) noexcept -> void {
+        std::int64_t i {};
+        for (; i < numel; ++i) {
+            float rnd {x[i] * inv_scale};
+            const float dec {std::abs(rnd - std::trunc(rnd))};
+            const float xi {prng.gen_canonical()};
+            float adj {xi < dec ? 1.0f : 0.0f};
+            if (rnd < 0.0f) adj = -1.0f * adj;
+            rnd = std::trunc(rnd) + adj;
+            const std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
+            o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
+        }
+    };
 };
 
 auto __attribute__((hot)) Q8_KERNEL_IMPL(
@@ -238,8 +214,8 @@ auto __attribute__((hot)) Q8_KERNEL_IMPL(
   const bool sto_rnd,
   quant::prng_state& prng
 ) noexcept -> void {
-    if (sto_rnd) q8_kernel<true>::exec(x, o, numel, inv_scale, zp, prng);
-    else q8_kernel<false>::exec(x, o, numel, inv_scale, zp, prng);
+    if (sto_rnd) impl_namespace(Q8_KERNEL_IMPL, _)::stochastic(x, o, numel, inv_scale, zp, prng);
+    else impl_namespace(Q8_KERNEL_IMPL, _)::nearest(x, o, numel, inv_scale, zp);
 }
 
 auto __attribute__((hot)) Q4_KERNEL_IMPL(
@@ -251,6 +227,6 @@ auto __attribute__((hot)) Q4_KERNEL_IMPL(
   const bool sto_rnd,
   quant::prng_state& prng
 ) noexcept -> void {
-    if (sto_rnd) q4_kernel<true>::exec(x, o, numel, inv_scale, zp, prng);
-    else q4_kernel<false>::exec(x, o, numel, inv_scale, zp, prng);
+    if (sto_rnd) impl_namespace(Q4_KERNEL_IMPL, _)::stochastic(x, o, numel, inv_scale, zp, prng);
+    else impl_namespace(Q4_KERNEL_IMPL, _)::nearest(x, o, numel, inv_scale, zp);
 }
