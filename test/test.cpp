@@ -57,7 +57,7 @@ static auto test_q4(std::size_t nt) -> void {
     data_out_naive.resize((numel + 1)/2); // 2 uint4 per uint8
     std::random_device rd {};
     std::mt19937 gen {rd()};
-    std::uniform_real_distribution<float> dist {-1.0f, 1.0f};
+    std::uniform_real_distribution<float> dist {-10.0f, 10.0f};
     std::ranges::generate(data_in, [&] { return dist(gen); });
 
     q4_naive(data_in, data_out_naive, 1.0, 0);
@@ -77,7 +77,7 @@ static auto test_q4(std::size_t nt) -> void {
 }
 
 auto main() -> int {
-    const std::size_t nt {1};
+    const std::size_t nt {std::thread::hardware_concurrency()};
     std::cout << "Num threads: " << nt << std::endl;
     #ifdef __x86_64__
         std::cout << "SSE 4.2? " << (check_sse42_support() ? "YES" : "NO") << std::endl;
