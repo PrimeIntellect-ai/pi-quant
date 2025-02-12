@@ -153,7 +153,7 @@ namespace quant {
                 (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, pl.prng);
             #else
                 auto* const kernel {op.format == op_info::q_i8 ? &f32_q8_generic : &f32_q4_generic};
-                (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, payload.prng);
+                (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, pl.prng);
             #endif
         }
         if (1+ctx->m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx->m_workers.size()) {
