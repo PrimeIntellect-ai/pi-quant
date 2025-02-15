@@ -7,7 +7,8 @@
 #include <random>
 #include <span>
 
-#include "../src/quant.hpp"
+#include <quant.hpp>
+
 #include "naive.hpp"
 
 #ifdef __x86_64__

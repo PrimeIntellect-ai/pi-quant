@@ -5,13 +5,14 @@
 #error "Q4 impl is not defined"
 #endif
 
+#include <quant.hpp>
+
+
 #include <algorithm>
 #include <cstring>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
-
-#include "prng.hpp"
 
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>

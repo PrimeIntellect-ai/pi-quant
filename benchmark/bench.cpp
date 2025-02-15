@@ -6,7 +6,7 @@
 #include <random>
 #include <span>
 
-#include "../src/quant.hpp"
+#include <quant.hpp>
 #include "../test/naive.hpp"
 
 #define ANKERL_NANOBENCH_IMPLEMENT
@@ -31,7 +31,7 @@ auto main() -> int {
         .relative(true);
     bench.performanceCounters(true);
     bench.run("NAIVE", [&] {
-        q8_naive(data_in, data_out, 1.0, 0, nt);
+        q8_naive(data_in, data_out, 1.0, 0);
     });
 
     ankerl::nanobench::doNotOptimizeAway(data_in.data());
