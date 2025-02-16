@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(quant_kernels LANGUAGES CXX)
+project(quant LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,13 +45,13 @@ if (${IS_AMD64})
     set_file_opts("kernel_amd64_avx512f.cpp" "-mtune=cannonlake -mavx -mavx2 -mfma -mf16c -mavx512f -mavx512bw" "/arch:AVX512")
 
 endif()
-add_library(quant_kernels STATIC ${QUANT_SOURCES})
-target_compile_options(quant_kernels PRIVATE -fomit-frame-pointer -fno-rtti -fno-exceptions)
-target_include_directories(quant_kernels PRIVATE include)
+add_library(quant SHARED ${QUANT_SOURCES})
+target_compile_options(quant PRIVATE -fomit-frame-pointer -fno-rtti -fno-exceptions)
+target_include_directories(quant PRIVATE include)
 
 # release mode opt
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(quant_kernels PRIVATE -O3)
+    target_compile_options(quant PRIVATE -O3)
 endif()
 
 if (${QUANT_BUILD_TESTS})

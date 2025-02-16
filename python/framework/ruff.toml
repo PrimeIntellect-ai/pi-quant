@@ -1,0 +1,9 @@
+[lint]
+ignore = ["F403"]
+select = ["ANN"]
+
+[format]
+quote-style = "single"
+
+[lint.per-file-ignores]
+"setup.py" = ["ANN"]

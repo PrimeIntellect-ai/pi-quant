@@ -1,45 +1,9 @@
 import multiprocessing
 from enum import Enum, unique
 
-import cffi
+from quant._loader import load_native_module
 
-ffi = cffi.FFI()
-ffi.cdef("""
-
-typedef struct quant_context_t quant_context_t; /* Opaque context ptr */
-
-typedef enum quant_round_mode_t {
-    QUANT_NEAREST = 1,
-    QUANT_STOCHASTIC = 0
-} quant_round_mode_t;
-
-extern quant_context_t* quant_context_create(size_t num_threads);
-extern void quant_context_destroy(quant_context_t* ctx);
-
-extern void quant_uint8(
-    quant_context_t* ctx,
-    const float* in,
-    uint8_t* out,
-    size_t numel,
-    float scale,
-    int32_t zero_point,
-    quant_round_mode_t mode
-);
-
-extern void quant_uint4(
-    quant_context_t* ctx,
-    const float* in,
-    uint8_t* out,
-    size_t numel,
-    float scale,
-    int32_t zero_point,
-    quant_round_mode_t mode
-);
-
-""")
-
-C = ffi.dlopen("./libquant.so")
-
+ffi, C = load_native_module()
 
 @unique
 class RoundMode(Enum):
@@ -59,6 +23,7 @@ class Context:
         self,
         ptr_in: int,
         ptr_out: int,
+        *,
         numel: int,
         scale: float,
         zero_point: int,
@@ -81,6 +46,7 @@ class Context:
         self,
         ptr_in: int,
         ptr_out: int,
+        *,
         numel: int,
         scale: float,
         zero_point: int,
