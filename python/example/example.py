@@ -1,7 +1,7 @@
 import torch
 import quant
 
-tensor = torch.rand(64)
+tensor = torch.rand(8192*8192*32)
 print(tensor)
 
 ctx = quant.Context()

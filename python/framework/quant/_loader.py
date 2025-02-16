@@ -50,8 +50,6 @@ def load_native_module() -> tuple[FFI, object]:
     # Locate the library in the package directory
     pkg_path = Path(__file__).parent
     lib_path = pkg_path / lib_name
-    # print all files
-    print([f for f in pkg_path.iterdir()])
     assert lib_path.exists(), f'quant shared library not found: {lib_path}'
 
     ffi = FFI()
