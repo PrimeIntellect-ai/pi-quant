@@ -40,6 +40,7 @@ static auto test_q8(std::size_t nt) -> void {
         auto b = data_out[i];
         if (a != b) {
             std::cerr << "Mismatch at index " << i << ": " << static_cast<int>(a) << " != " << static_cast<int>(b) << std::endl;
+            std::cerr << "Original: " << data_in[i] << std::endl;
             std::abort();
         }
     }
