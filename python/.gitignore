@@ -1,3 +1,4 @@
+uv.lock
 .vscode/*
 logs/*
 wandb/*
