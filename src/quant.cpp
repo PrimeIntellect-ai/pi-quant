@@ -223,7 +223,7 @@ namespace quant {
     ) -> void {
         std::size_t output_len {(in.size() + 1)>>1};
         if (out.size() != output_len) [[unlikely]] {
-            std::cerr << __FILE_NAME__ << ":" << __LINE__ << " int4 output span must have (input.size() + 1) / 2 length, but has " << out.size() << ", required: " << (output_len) << std::endl;
+            std::cerr << __FILE__ << ":" << __LINE__ << " int4 output span must have (input.size() + 1) / 2 length, but has " << out.size() << ", required: " << (output_len) << std::endl;
             std::abort();
         }
         const op_info info {
