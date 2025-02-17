@@ -1,7 +1,7 @@
 import torch
 import quant
 
-def test_quant_int8():
+def test_ptr_quant_int8():
     tensor = torch.rand(32)
     print(tensor)
 
@@ -9,6 +9,6 @@ def test_quant_int8():
     quantized_tensor = torch.empty(tensor.numel(), dtype=torch.uint8)
     scale = 0.00784
     zero_point = 128
-    ctx.quant_uint8(tensor.data_ptr(), quantized_tensor.data_ptr(), numel=tensor.numel(), scale=scale,
+    ctx.ptr_quant_uint8(tensor.data_ptr(), quantized_tensor.data_ptr(), numel=tensor.numel(), scale=scale,
                     zero_point=zero_point, mode=quant.RoundMode.NEAREST)
     print(quantized_tensor)
