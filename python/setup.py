@@ -8,8 +8,8 @@ from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 
 CMAKE_ROOT: str = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', '..')
-)  # Root directory of the CMake project
+    os.path.join(os.path.dirname(__file__), "..")  # Go up one directory to find CMakeLists.txt
+)
 NUM_JOBS: int = max(multiprocessing.cpu_count() - 1, 1)  # Use all but one core
 
 
@@ -41,10 +41,13 @@ class CMakeBuildExecutor(build_ext):
             self.build_extension(ext)
 
     def build_extension(self, ext):
-        if not os.path.exists(self.build_temp):
-            os.makedirs(self.build_temp)
+        if os.path.exists(self.build_temp):
+            import shutil
+            shutil.rmtree(self.build_temp)
+        os.makedirs(self.build_temp)
+        
         cmake_args = [
-            f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={os.path.abspath(os.path.join(self.build_lib, "quant"))}',
+            f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={os.path.abspath(os.path.join(self.build_lib, "src", "quant"))}',
             '-DCMAKE_BUILD_TYPE=Release',
         ]
         build_args = [
@@ -64,9 +67,9 @@ class CMakeBuildExecutor(build_ext):
         )
         
 setup(
-    packages=['quant'],
+    packages=['src.quant'],
     package_data={
-        'quant': ['*.dylib', '*.so', '*.dll'],
+        'src.quant': ['*.dylib', '*.so', '*.dll'],
     },
     include_package_data=True,
     ext_modules=[CMakeBuildExtension('quant', root_dir=CMAKE_ROOT)],
