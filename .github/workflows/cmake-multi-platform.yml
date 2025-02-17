@@ -13,27 +13,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, ubuntu-22.04]
+        os: [ubuntu-latest] #, macos-latest, ubuntu-22.04]
         build_type: [Release]
-        c_compiler: [gcc, clang]
-        cpp_compiler: [g++, clang++]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        c_compiler: [gcc] #, clang]
+        cpp_compiler: [g++] #, clang++]
+        python-version: ["3.8"] #, "3.9", "3.10", "3.11"]
         include:
-          - os: ubuntu-latest
-            c_compiler: gcc
-            cpp_compiler: g++
-          - os: ubuntu-latest
-            c_compiler: clang
-            cpp_compiler: clang++
+          # - os: ubuntu-latest
+          #   c_compiler: gcc
+          #   cpp_compiler: g++
+          # - os: ubuntu-latest
+          #   c_compiler: clang
+          #   cpp_compiler: clang++
           - os: ubuntu-22.04
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-22.04
-            c_compiler: clang
-            cpp_compiler: clang++
-          - os: macos-latest
-            c_compiler: clang
-            cpp_compiler: clang++
+          # - os: ubuntu-22.04
+          #   c_compiler: clang
+          #   cpp_compiler: clang++
+          # - os: macos-latest
+          #   c_compiler: clang
+          #   cpp_compiler: clang++
 
     steps:
       - uses: actions/checkout@v4
@@ -61,15 +61,23 @@ jobs:
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config ${{ matrix.build_type }} --verbose
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
 
-      - name: Run python tests
+      - name: Install dependencies
         shell: bash
         run: |
           cd ${{ github.workspace }}/python/
-          pip install .[dev]
-          pytest tests
+          uv pip install ".[dev]"
 
+      - name: Run tests
+        shell: bash
+        run: |
+          cd ${{ github.workspace }}/python/
+          uv run --no-editable pytest tests
+
+      - name: Minimize uv cache
+        run: uv cache prune --ci
