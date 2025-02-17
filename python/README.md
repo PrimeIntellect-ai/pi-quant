@@ -6,14 +6,26 @@ Fast Quant is a Python package that provides a fast and efficient way to quantiz
 
 ```bash
 git clone <>
+cd python
 pip install .
 ```
 
-## running tests
+## Development
+
+clone the repository
+```bash
+git clone <>
+cd python
+```
 
 install the package with the tests dependency
 ```bash
-pip install -e .[tests]
+pip install -e .[dev]
+```
+
+install pre-commit hooks
+```bash
+pre-commit install
 ```
 
 run the tests
