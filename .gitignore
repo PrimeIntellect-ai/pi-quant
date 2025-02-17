@@ -12,3 +12,4 @@ _deps
 CMakeUserPresets.json
 .idea/
 bin/
+build/*
