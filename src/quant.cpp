@@ -5,6 +5,7 @@
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#define __FILE_NAME__ __FILE__
 
 #define decl_kernel_pair(impl) \
     extern auto f32_q8_##impl( \
