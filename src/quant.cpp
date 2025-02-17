@@ -129,12 +129,8 @@ namespace quant {
         const std::int64_t tc {pl.tc};
         const std::int64_t ti {pl.ti};
         const std::int64_t numel {op.numel};
-        const std::int64_t chunk {(numel + tc - 1)/tc};
-        const std::int64_t ra {chunk*ti};
-        const std::int64_t rb {std::min(ra + chunk, numel)};
-        if (const std::int64_t vmel {rb - ra}; vmel > 0) [[likely]] {
-            const auto* const px {bx + ra};
-            auto* const pr {br + ra};
+        const bool is_i8 {op.format == op_info::q_i8};
+        const auto dispatch {[=](const float* px, std::uint8_t* pr, std::int64_t vmel) noexcept -> void {
             #ifdef __x86_64__
                 static constexpr std::array<kernel_fn*, static_cast<std::size_t>(amd64_cpu_caps::num_)> k_dispatch_i8 = {
                     &f32_q8_generic,
@@ -149,12 +145,30 @@ namespace quant {
                     &f32_q4_amd64_avx512f
                 };
                 const auto cap_idx {static_cast<std::size_t>(ctx->cpu_caps)};
-                auto* const kernel {op.format == op_info::q_i8 ? k_dispatch_i8[cap_idx] : k_dispatch_i4[cap_idx]};
+                auto* const kernel {is_i8 ? k_dispatch_i8[cap_idx] : k_dispatch_i4[cap_idx]};
                 (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, pl.prng);
             #else
                 auto* const kernel {op.format == op_info::q_i8 ? &f32_q8_generic : &f32_q4_generic};
                 (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, pl.prng);
             #endif
+        }};
+        if (is_i8) {
+            const std::int64_t chunk = (numel + tc - 1)/tc;
+            const std::int64_t ra = chunk*ti;
+            const std::int64_t rb = std::min(ra + chunk, numel);
+            if (rb > ra) [[likely]] {
+                dispatch(bx + ra, br + ra, rb - ra);
+            }
+        } else {
+            const std::int64_t pairs = (numel + 1)>>1;
+            const std::int64_t pair_chunk = (pairs + tc - 1) / tc;
+            const std::int64_t pra = pair_chunk * ti;
+            const std::int64_t prb = std::min(pra + pair_chunk, pairs);
+            if (prb > pra) [[likely]] {
+                const std::int64_t ra = pra<<1;
+                const std::int64_t rb = (prb<<1 > numel) ? numel : prb<<1; /* When numel is odd, the last pair is incomplete */
+                dispatch(bx + ra, br + pra, rb - ra);
+            }
         }
         if (1+ctx->m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx->m_workers.size()) {
             std::unique_lock lock {ctx->m_mtx};

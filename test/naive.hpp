@@ -44,19 +44,12 @@ inline auto q4_naive(
         std::cerr << "int4 output span must have (input.size() + 1) / 2 length, but has " << out.size() << ", required: " << out_numel << std::endl;
         std::abort();
     }
-    for (std::size_t i = 0; i < out_numel; ++i) {
-        const auto q1 = static_cast<std::uint8_t>(
-            std::clamp<int>(std::round(p_in[i*2] * inv_scale) + zero_point, 0, 0xf)
-        );
-        const auto q2 = static_cast<std::uint8_t>(
-            std::clamp<int>(std::round(p_in[i*2+1] * inv_scale) + zero_point, 0, 0xf)
-        );
-        p_out[i] = static_cast<std::uint8_t>((q1 << 4) | q2);
-    }
-    if (out_numel % 2 != 0) {
-        const auto q = static_cast<std::uint8_t>(
-            std::clamp<int>(std::round(p_in[out_numel * 2] * inv_scale) + zero_point, 0, 0xf)
-        );
-        p_out[out_numel] = static_cast<std::uint8_t>(q << 4);
+    const auto f = [=](float x) noexcept -> std::uint8_t {
+        return std::clamp<int>(std::round(x * inv_scale) + zero_point, 0, 0xf);
+    };
+    for (std::size_t i {}; i < out_numel; ++i) {
+        std::uint8_t hi = f(in[2 * i])     & 15;
+        std::uint8_t lo = f(in[2 * i + 1]) & 15;
+        out[i] = (hi << 4) | lo;
     }
 }

@@ -167,20 +167,18 @@ namespace impl_namespace(Q4_KERNEL_IMPL, _) {
     static auto __attribute__((hot)) nearest(
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
-        const std::int64_t numel,
+        std::int64_t numel,
         const float inv_scale,
         const std::int32_t zp
     ) noexcept -> void {
-        const std::int64_t packed_numel {numel >> 1};
-        std::int64_t i {};
-        for (; i < packed_numel; ++i) {
-            auto q1 = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[(i<<1)] * inv_scale)) + zp, 0, 0xf));
-            auto q2 = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[(i<<1) + 1] * inv_scale)) + zp, 0, 0xf));
-            o[i] = (q1 << 4) | q2;
-        }
-        if (numel & 1) {
-            auto q1 = static_cast<std::uint8_t>(std::clamp(static_cast<std::int32_t>(std::round(x[numel - 1] * inv_scale)) + zp, 0, 0xf));
-            o[packed_numel] = q1 << 4;
+        numel = (numel + 1) / 2;
+        const auto f = [=](float x) noexcept -> std::uint8_t {
+            return std::clamp<int>(std::round(x * inv_scale) + zp, 0, 0xf);
+        };
+        for (std::size_t i{0}; i < numel; ++i) {
+            std::uint8_t hi = f(x[2 * i])     & 15;
+            std::uint8_t lo = f(x[2 * i + 1]) & 15;
+            o[i] = (hi << 4) | lo;
         }
     }
 
