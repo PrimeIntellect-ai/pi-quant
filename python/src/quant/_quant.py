@@ -1,8 +1,26 @@
+from dataclasses import dataclass
 import multiprocessing
 from enum import Enum, unique
-from typing import Union
+from typing import Union, TYPE_CHECKING
 
 from quant._loader import load_native_module
+import importlib.util
+
+
+if TYPE_CHECKING:
+    # the code won't fail if torch and numpy are not installed
+    import torch
+    import numpy as np
+else:
+    torch = None
+    np = None
+
+    if importlib.util.find_spec("torch") is not None:
+        import torch
+        
+    if importlib.util.find_spec("numpy") is not None:
+        import numpy as np
+
 
 ffi, C = load_native_module()
 
@@ -10,6 +28,11 @@ ffi, C = load_native_module()
 class RoundMode(Enum):
     NEAREST = C.QUANT_NEAREST
     STOCHASTIC = C.QUANT_STOCHASTIC
+    
+class QuantDtype(Enum):
+    INT8 = "int8"
+    INT4 = "int4"
+
 
 
 class Context:
@@ -20,7 +43,7 @@ class Context:
         self.__num_threads = num_threads
         self.__ctx = C.quant_context_create(self.__num_threads)
 
-    def quant_uint8(
+    def ptr_quant_uint8(
         self,
         ptr_in: int,
         ptr_out: int,
@@ -43,7 +66,7 @@ class Context:
         ptr_out: ffi.CData = ffi.cast("uint8_t*", ptr_out)
         C.quant_uint8(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, mode.value)
 
-    def quant_uint4(
+    def ptr_quant_uint4(
         self,
         ptr_in: int,
         ptr_out: int,
@@ -69,3 +92,45 @@ class Context:
     def __del__(self) -> None:
         """Destroy the quantization context."""
         C.quant_context_destroy(self.__ctx)
+
+
+@dataclass
+class QuantConfig:
+    scale: float = 1.0
+    zero_point: int = 0
+    mode: RoundMode = RoundMode.NEAREST
+    output_dtype: QuantDtype = QuantDtype.INT8
+    
+
+def quant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = None, *,  config: QuantConfig = QuantConfig(), ctx: Union[Context, None] = None) -> "torch.Tensor":
+    if ctx is None:
+        ctx = Context()
+        
+    if config.output_dtype == QuantDtype.INT8:
+        if out is None:
+            out = torch.empty_like(tensor, dtype=torch.int8)
+        elif out.dtype != torch.int8:
+            raise ValueError("Output tensor must be of type int8")
+        
+    elif config.output_dtype == QuantDtype.INT4:
+        raise NotImplementedError("Quantization to int4 is not implemented yet for torch Tensor")
+        
+    ctx.ptr_quant_uint8(tensor.data_ptr(), out.data_ptr(), numel=tensor.numel(), scale=config.scale, zero_point=config.zero_point, mode=config.mode)
+    return out
+
+def quant_numpy(tensor: np.ndarray, out: Union[np.ndarray, None] = None, *,  config: QuantConfig = QuantConfig(), ctx: Union[Context, None] = None) -> np.ndarray:
+    if ctx is None:
+        ctx = Context()
+        
+    if config.output_dtype == QuantDtype.INT8:
+        if out is None:
+            out = np.empty_like(tensor, dtype=np.int8)
+        elif out.dtype != np.int8:
+            raise ValueError("Output tensor must be of type int8")
+        
+    elif config.output_dtype == QuantDtype.INT4:
+        raise NotImplementedError("Quantization to int4 is not implemented yet for torch Tensor")
+        
+      
+    ctx.ptr_quant_uint8(tensor.ctypes.data, out.ctypes.data, numel=tensor.size, scale=config.scale, zero_point=config.zero_point, mode=config.mode)
+    return out
