@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, ubuntu-22.04]
         build_type: [Release]
         c_compiler: [gcc, clang]
         cpp_compiler: [g++, clang++]
@@ -22,6 +22,12 @@ jobs:
             c_compiler: gcc
             cpp_compiler: g++
           - os: ubuntu-latest
+            c_compiler: clang
+            cpp_compiler: clang++
+          - os: ubuntu-22.04
+            c_compiler: gcc
+            cpp_compiler: g++
+          - os: ubuntu-22.04
             c_compiler: clang
             cpp_compiler: clang++
           - os: macos-latest
