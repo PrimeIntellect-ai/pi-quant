@@ -3,4 +3,6 @@ __author__ = 'Mario Sieg'
 __email__ = 'mario.sieg.64@gmail.com'
 __author_email__ = 'mario.sieg.64@gmail.com'
 
-from ._quant import *
+from ._quant import Context, RoundMode
+
+__all__ = ['Context', 'RoundMode']
