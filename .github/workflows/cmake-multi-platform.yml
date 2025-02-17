@@ -1,0 +1,97 @@
+name: Multi-Platform CMake Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, ubuntu-24.04-arm]
+        build_type: [Release]
+        c_compiler: [gcc, clang]
+        include:
+          - os: ubuntu-latest
+            c_compiler: gcc
+            cpp_compiler: g++
+          - os: ubuntu-latest
+            c_compiler: clang
+            cpp_compiler: clang++
+          - os: ubuntu-24.04-arm
+            c_compiler: gcc
+            cpp_compiler: g++
+          - os: ubuntu-24.04-arm
+            c_compiler: clang
+            cpp_compiler: clang++
+          - os: macos-latest
+            c_compiler: clang
+            cpp_compiler: clang++
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set reusable strings
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+      - name: Configure CMake
+        run: >
+          cmake -B ${{ steps.strings.outputs.build-output-dir }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -S ${{ github.workspace }}
+
+      - name: Build C++ Runtime
+        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }} -j4
+
+      - name: Run C++ Runtime Tests
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        run: ctest --build-config ${{ matrix.build_type }} --verbose
+
+      - name: Setup Python Virtual Environment
+        if: runner.os != 'windows'
+        shell: bash
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip
+
+      - name: Build Python wheel
+        if: runner.os != 'windows'
+        shell: bash
+        run: |
+          . .venv/bin/activate
+          cd ${{ github.workspace }}/python/src
+          pip wheel --verbose -w dist .
+
+      - name: Install Python wheel
+        if: runner.os != 'windows'
+        shell: bash
+        run: |
+          . .venv/bin/activate
+          pip install ${{ github.workspace }}/python/src/dist/*.whl
+
+      - name: Install Pytest
+        if: runner.os != 'windows'
+        shell: bash
+        run: |
+          . .venv/bin/activate
+          pip install -r ${{ github.workspace }}/python/test/requirements.txt && pip install pytest
+
+      - name: Run Python Tests
+        if: runner.os != 'windows'
+        shell: bash
+        run: |
+          . .venv/bin/activate
+          python -m pytest ${{ github.workspace }}/python/test/*
