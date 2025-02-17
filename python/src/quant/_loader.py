@@ -1,8 +1,9 @@
 from pathlib import Path
+from typing import List, Tuple
 from cffi import FFI
 import sys
 
-MAG_LIBS: list[tuple[str, str]] = [
+MAG_LIBS: List[Tuple[str, str]] = [
     ('win32', 'quant.dll'),
     ('linux', 'libquant.so'),
     ('darwin', 'libquant.dylib'),
@@ -42,7 +43,7 @@ extern void quant_uint4(
 
 """
 
-def load_native_module() -> tuple[FFI, object]:
+def load_native_module() -> Tuple[FFI, object]:
     platform = sys.platform
     lib_name = next((lib for os, lib in MAG_LIBS if platform.startswith(os)), None)
     assert lib_name, f'Unsupported platform: {platform}'
