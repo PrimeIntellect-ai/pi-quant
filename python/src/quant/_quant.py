@@ -1,5 +1,6 @@
 import multiprocessing
 from enum import Enum, unique
+from typing import Union
 
 from quant._loader import load_native_module
 
@@ -12,7 +13,7 @@ class RoundMode(Enum):
 
 
 class Context:
-    def __init__(self, num_threads: int | None = None) -> None:
+    def __init__(self, num_threads: Union[int, None] = None) -> None:
         """Initialize a quantization context with a given number of threads. If num_threads is None, the number of threads is set to the number of available CPUs minus 1."""
         if num_threads is None:
             num_threads = max(multiprocessing.cpu_count() - 1, 1)
