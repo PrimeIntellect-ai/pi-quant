@@ -11,6 +11,9 @@ authors = [
 description = "Multithreaded SIMD int8 and int4 quantization kernels."
 dependencies = ["cffi"]
 
+[project.optional-dependencies]
+tests = ["pytest","torch","numpy"]
+
 [tool.ruff]
 line-length = 88
 target-version = "py38"
