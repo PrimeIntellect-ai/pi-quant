@@ -47,7 +47,7 @@ class CMakeBuildExecutor(build_ext):
         os.makedirs(self.build_temp)
         
         cmake_args = [
-            f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={os.path.abspath(os.path.join(self.build_lib, "src", "quant"))}',
+            f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={os.path.abspath(os.path.join(self.build_lib, "quant"))}',
             '-DCMAKE_BUILD_TYPE=Release',
         ]
         build_args = [
@@ -67,9 +67,11 @@ class CMakeBuildExecutor(build_ext):
         )
         
 setup(
-    packages=['src.quant'],
+    name='quant',
+    packages=['quant'],
+    package_dir={'': 'src'},  # tell setuptools packages are under src/
     package_data={
-        'src.quant': ['*.dylib', '*.so', '*.dll'],
+        'quant': ['libquant.so', 'libquant.dylib', 'libquant.dll'],
     },
     include_package_data=True,
     ext_modules=[CMakeBuildExtension('quant', root_dir=CMAKE_ROOT)],
