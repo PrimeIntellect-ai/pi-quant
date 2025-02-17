@@ -72,17 +72,24 @@ jobs:
           cd ${{ github.workspace }}/python/
           pip wheel --verbose -w dist .
 
-      - name: Install Pytest
+      - name: Install dev dependencies
         if: runner.os != 'windows'
         shell: bash
-        run: pip install .[dev]
+
+        run: |
+          cd ${{ github.workspace }}/python/
+          pip install .[dev]
 
       - name: Install Python wheel
         if: runner.os != 'windows'
         shell: bash
-        run: pip install ${{ github.workspace }}/python/dist/*.whl
+        run: |
+          cd ${{ github.workspace }}/python/
+          pip install ${{ github.workspace }}/python/dist/*.whl
 
       - name: Run Python Tests
         if: runner.os != 'windows'
         shell: bash
-        run: python -m pytest ${{ github.workspace }}/python/test/*
+        run: |
+          cd ${{ github.workspace }}/python/
+          python -m pytest tests/*
