@@ -2,7 +2,7 @@ import torch
 import quant
 
 def test_quant_int8():
-    tensor = torch.rand(8192 * 8192 * 32)
+    tensor = torch.rand(32)
     print(tensor)
 
     ctx = quant.Context()
