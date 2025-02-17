@@ -196,7 +196,7 @@ namespace quant {
         const round_mode mode
     ) -> void {
         if (in.size() != out.size()) [[unlikely]] {
-            std::cerr << __FILE_NAME__ << ":" << __LINE__ << " input and output spans must have the same length, but " << in.size() << " != " << out.size() << std::endl;
+            std::cerr << __FILE__ << ":" << __LINE__ << " input and output spans must have the same length, but " << in.size() << " != " << out.size() << std::endl;
             std::abort();
         }
         const op_info info {
