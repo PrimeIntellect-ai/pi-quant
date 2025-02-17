@@ -60,39 +60,29 @@ jobs:
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config ${{ matrix.build_type }} --verbose
 
-      - name: Setup Python Virtual Environment
-        if: runner.os != 'windows'
-        shell: bash
-        run: |
-          python3 -m venv .venv
-          . .venv/bin/activate
-          pip install --upgrade pip
-
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'
+          
       - name: Build Python wheel
         if: runner.os != 'windows'
         shell: bash
         run: |
-          . .venv/bin/activate
           cd ${{ github.workspace }}/python/
           pip wheel --verbose -w dist .
-
-      - name: Install Python wheel
-        if: runner.os != 'windows'
-        shell: bash
-        run: |
-          . .venv/bin/activate
-          pip install ${{ github.workspace }}/python/dist/*.whl
 
       - name: Install Pytest
         if: runner.os != 'windows'
         shell: bash
-        run: |
-          . .venv/bin/activate
-          pip install -r ${{ github.workspace }}/python/test/requirements.txt && pip install pytest
+        run: pip install .[dev]
+
+      - name: Install Python wheel
+        if: runner.os != 'windows'
+        shell: bash
+        run: pip install ${{ github.workspace }}/python/dist/*.whl
 
       - name: Run Python Tests
         if: runner.os != 'windows'
         shell: bash
-        run: |
-          . .venv/bin/activate
-          python -m pytest ${{ github.workspace }}/python/test/*
+        run: python -m pytest ${{ github.workspace }}/python/test/*
