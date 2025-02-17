@@ -73,7 +73,7 @@ jobs:
         shell: bash
         run: |
           . .venv/bin/activate
-          cd ${{ github.workspace }}/python/src
+          cd ${{ github.workspace }}/python/
           pip wheel --verbose -w dist .
 
       - name: Install Python wheel
@@ -81,7 +81,7 @@ jobs:
         shell: bash
         run: |
           . .venv/bin/activate
-          pip install ${{ github.workspace }}/python/src/dist/*.whl
+          pip install ${{ github.workspace }}/python/dist/*.whl
 
       - name: Install Pytest
         if: runner.os != 'windows'

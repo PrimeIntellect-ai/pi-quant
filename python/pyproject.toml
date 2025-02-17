@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fast-quant"
+version = "0.1.0"
+authors = [
+    {name = "Mario Sieg", email = "mario.sieg.64@gmail.com"},
+]
+description = "Multithreaded SIMD int8 and int4 quantization kernels."
+dependencies = ["cffi"]
+
+[project.optional-dependencies]
+dev = ["pytest","torch","numpy","pre-commit","ruff"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+
+[tool.ruff.lint]
+ignore = ["F403"]
+select = ["ANN"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint.per-file-ignores]
+"setup.py" = ["ANN"]
