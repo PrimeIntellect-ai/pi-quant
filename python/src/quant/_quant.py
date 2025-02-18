@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import multiprocessing
 from enum import Enum, unique
 from typing import Union, TYPE_CHECKING
+from functools import lru_cache
 
 from quant._loader import load_native_module
 import importlib.util
@@ -100,11 +101,28 @@ class QuantConfig:
     zero_point: int = 0
     mode: RoundMode = RoundMode.NEAREST
     output_dtype: QuantDtype = QuantDtype.INT8
-    
 
-def quant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = None, *,  config: QuantConfig = QuantConfig(), ctx: Union[Context, None] = None) -> "torch.Tensor":
+
+@lru_cache(maxsize=1)
+def get_default_context():
+    """Default context for quantization.
+    This is a singleton that is used to avoid creating multiple contexts.
+    """
+    return Context()
+
+def quant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = None, *, config: QuantConfig = QuantConfig(), ctx: Union[Context, None] = None) -> "torch.Tensor":
+    """
+    Quantize a torch tensor.
+        :param tensor: input tensor
+        :param out: output tensor
+        :param config: quantization configuration, allow to change the output dtype as well as the rounding mode
+        :param ctx: quantization context, if None a singleton context is used. If you are using multiprocessing, you should create a new context for each process.
+    """
+    if torch is None:
+        raise ImportError("torch is not installed")
+    
     if ctx is None:
-        ctx = Context()
+        ctx = get_default_context()
 
     assert tensor.is_contiguous(), "Input tensor must be contiguous"
         
@@ -121,10 +139,22 @@ def quant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = None,
     ctx.ptr_quant_uint8(tensor.data_ptr(), out.data_ptr(), numel=tensor.numel(), scale=config.scale, zero_point=config.zero_point, mode=config.mode)
     return out
 
-def quant_numpy(tensor: np.ndarray, out: Union[np.ndarray, None] = None, *,  config: QuantConfig = QuantConfig(), ctx: Union[Context, None] = None) -> np.ndarray:
+def quant_numpy(tensor: np.ndarray, out: Union[np.ndarray, None] = None, *, config: QuantConfig = QuantConfig(), ctx: Union[Context, None] = None) -> np.ndarray:
+    """
+    Quantize a numpy array.
+        :param tensor: input tensor
+        :param out: output tensor
+        :param config: quantization configuration, allow to change the output dtype as well as the rounding mode
+        :param ctx: quantization context, if None a singleton context is used. If you are using multiprocessing, you should create a new context for each process.
+    """
+    if np is None:
+        raise ImportError("numpy is not installed")
+    
     if ctx is None:
-        ctx = Context()
-
+        ctx = get_default_context()
+        
+    assert tensor.is_contiguous(), "Input tensor must be contiguous"
+    
     if config.output_dtype == QuantDtype.INT8:
         if out is None:
             out = np.empty_like(tensor, dtype=np.int8)
