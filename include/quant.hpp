@@ -9,7 +9,16 @@
 #include <condition_variable>
 #include <optional>
 
+#ifdef _MSC_VER
+#define QUANT_EXPORT __declspec(dllexport)
+#else
+#define QUANT_EXPORT __attribute__((visibility("default")))
+#endif
+
 namespace quant {
+    // computes and returns {scale, zero_point} derived from the data's mean and stddev.
+    [[nodiscard]] extern auto compute_quant_config_from_data(std::span<const float> x) -> std::pair<float, std::int32_t>;
+
     struct prng_state final { // Mersenne-Twister 64
         std::uint32_t remaining {};
         std::uint32_t next {};
@@ -53,7 +62,7 @@ namespace quant {
         stochastic = false
     };
 
-    class context final {
+    class QUANT_EXPORT context final {
     public:
         explicit context(std::size_t num_threads);
         context(const context&) = delete;

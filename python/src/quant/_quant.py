@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import multiprocessing
 from enum import Enum, unique
-from typing import Union, TYPE_CHECKING
+from typing import Union, TYPE_CHECKING, Tuple
 from functools import lru_cache
 
 from quant._loader import load_native_module
@@ -34,8 +34,6 @@ class QuantDtype(Enum):
     INT8 = "int8"
     INT4 = "int4"
 
-
-
 class Context:
     def __init__(self, num_threads: Union[int, None] = None) -> None:
         """Initialize a quantization context with a given number of threads. If num_threads is None, the number of threads is set to the number of available CPUs minus 1."""
@@ -56,8 +54,8 @@ class Context:
     ) -> None:
         """
             Quantize a float tensor to uint8 tensor.
-            :param ptr_in: input tensor (must point to a valid, contiguous memory region of type float (in C float*))
-            :param ptr_out: output tensor (must point to a valid, contiguous memory region of type uint8_t (in C uint8_t*))
+            :param ptr_in: input tensor data pointer (must point to a valid, contiguous memory region of type float (in C float*))
+            :param ptr_out: output tensor data pointer (must point to a valid, contiguous memory region of type uint8_t (in C uint8_t*))
             :param numel: number of elements in the tensor
             :param scale: quantization scale
             :param zero_point: quantization zero point
@@ -79,8 +77,8 @@ class Context:
     ) -> None:
         """
            Quantize a float tensor to uint8 tensor.
-           :param ptr_in: input tensor (must point to a valid, contiguous memory region of type float (in C float*))
-           :param ptr_out: output tensor (must point to a valid, contiguous memory region of type uint8_t (in C uint8_t*))
+           :param ptr_in: input tensor data pointer (must point to a valid, contiguous memory region of type float (in C float*))
+           :param ptr_out: output tensor data pointer (must point to a valid, contiguous memory region of type uint8_t (in C uint8_t*))
            :param numel: number of elements in the tensor
            :param scale: quantization scale
            :param zero_point: quantization zero point
@@ -102,6 +100,32 @@ class QuantConfig:
     mode: RoundMode = RoundMode.NEAREST
     output_dtype: QuantDtype = QuantDtype.INT8
 
+def compute_config_properties_from_data(ptr: int, numel: int) -> Tuple[float, int]:
+    """
+    Compute the scale and zero point of a tensor.
+        :param ptr: p input tensor data pointer (must point to a valid, contiguous memory region of type float (in C float*))
+        :param numel: number of elements in the tensor
+    """
+    ptr: ffi.CData = ffi.cast("float*", ptr)
+    scale = ffi.new("float*")
+    zero_point = ffi.new("int32_t*")
+    C.compute_quant_config_from_data(ptr, numel, scale, zero_point)
+    return scale[0], zero_point[0]
+
+def compute_config_properties_from_data_torch(tensor: "torch.Tensor") -> Tuple[float, int]:
+    """
+    Compute the scale and zero point of a tensor.
+        :param tensor: input tensor
+    """
+    assert tensor.is_contiguous(), "Input tensor must be contiguous"
+    return compute_config_properties_from_data(tensor.data_ptr(), tensor.numel())
+
+def compute_config_properties_from_data_numpy(tensor: np.ndarray) -> Tuple[float, int]:
+    """
+    Compute the scale and zero point of a tensor.
+        :param tensor: input tensor
+    """
+    return compute_config_properties_from_data(tensor.ctypes.data, tensor.size)
 
 @lru_cache(maxsize=1)
 def get_default_context():

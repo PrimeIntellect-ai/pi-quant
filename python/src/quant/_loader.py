@@ -11,17 +11,20 @@ MAG_LIBS: List[Tuple[str, str]] = [
 
 DECLS: str = """
 
-typedef struct quant_context_t quant_context_t;
+/* computes and returns {scale, zero_point} derived from the data's mean and stddev. */
+extern  void compute_quant_config_from_data(const float* x, size_t n, float* out_scale, int32_t* out_zero_point);
+
+typedef struct quant_context_t quant_context_t; /* Opaque context ptr */
 
 typedef enum quant_round_mode_t {
     QUANT_NEAREST = 1,
     QUANT_STOCHASTIC = 0
 } quant_round_mode_t;
 
-extern quant_context_t* quant_context_create(size_t num_threads);
-extern void quant_context_destroy(quant_context_t* ctx);
+extern  quant_context_t* quant_context_create(size_t num_threads);
+extern  void quant_context_destroy(quant_context_t* ctx);
 
-extern void quant_uint8(
+extern  void quant_uint8(
     quant_context_t* ctx,
     const float* in,
     uint8_t* out,
@@ -31,7 +34,7 @@ extern void quant_uint8(
     quant_round_mode_t mode
 );
 
-extern void quant_uint4(
+extern  void quant_uint4(
     quant_context_t* ctx,
     const float* in,
     uint8_t* out,

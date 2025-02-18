@@ -201,7 +201,7 @@ namespace impl_namespace(Q4_KERNEL_IMPL, _) {
             const std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
-    };
+    }
 };
 
 auto __attribute__((hot)) Q8_KERNEL_IMPL(
