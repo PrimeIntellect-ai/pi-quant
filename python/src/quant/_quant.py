@@ -118,6 +118,9 @@ def quant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = None,
         :param config: quantization configuration, allow to change the output dtype as well as the rounding mode
         :param ctx: quantization context, if None a singleton context is used. If you are using multiprocessing, you should create a new context for each process.
     """
+    if torch is None:
+        raise ImportError("torch is not installed")
+    
     if ctx is None:
         ctx = get_default_context()
 
@@ -144,6 +147,9 @@ def quant_numpy(tensor: np.ndarray, out: Union[np.ndarray, None] = None, *, conf
         :param config: quantization configuration, allow to change the output dtype as well as the rounding mode
         :param ctx: quantization context, if None a singleton context is used. If you are using multiprocessing, you should create a new context for each process.
     """
+    if np is None:
+        raise ImportError("numpy is not installed")
+    
     if ctx is None:
         ctx = get_default_context()
         
