@@ -152,8 +152,6 @@ def quant_numpy(tensor: np.ndarray, out: Union[np.ndarray, None] = None, *, conf
     
     if ctx is None:
         ctx = get_default_context()
-        
-    assert tensor.is_contiguous(), "Input tensor must be contiguous"
     
     if config.output_dtype == QuantDtype.INT8:
         if out is None:
