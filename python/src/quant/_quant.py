@@ -149,7 +149,15 @@ def quant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = None,
         ctx = get_default_context()
 
     assert tensor.is_contiguous(), "Input tensor must be contiguous"
-        
+    
+    if tensor.dtype in [torch.float16, torch.bfloat16]:
+        # we don't have a native implementation for these dtypes
+        tensor = tensor.float()
+    elif tensor.dtype in [torch.float32]:
+        pass
+    else:
+        raise ValueError(f"Unsupported dtype: {tensor.dtype}")
+    
     if config.output_dtype == QuantDtype.INT8:
         if out is None:
             out = torch.empty_like(tensor, dtype=torch.int8)
@@ -177,6 +185,15 @@ def quant_numpy(tensor: np.ndarray, out: Union[np.ndarray, None] = None, *, conf
     if ctx is None:
         ctx = get_default_context()
     
+        
+    if tensor.dtype in [np.float16]:
+        # we don't have a native implementation for these dtypes
+        tensor = tensor.astype(np.float32)
+    elif tensor.dtype in [np.float32]:
+        pass
+    else:
+        raise ValueError(f"Unsupported dtype: {tensor.dtype}")
+
     if config.output_dtype == QuantDtype.INT8:
         if out is None:
             out = np.empty_like(tensor, dtype=np.int8)
