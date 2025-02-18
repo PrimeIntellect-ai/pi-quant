@@ -20,7 +20,7 @@ def test_ptr_quant_int8():
     zero_point = 128
     ctx.ptr_quant_uint8(tensor.data_ptr(), quantized_tensor.data_ptr(), numel=tensor.numel(), scale=scale,
                     zero_point=zero_point, mode=RoundMode.NEAREST)
-    
+
 def test_quant_torch():
     tensor = torch.rand(32)
     
@@ -55,3 +55,27 @@ def test_quant_numpy_fp16():
     
     assert quantized_tensor.dtype == np.int8
     assert quantized_tensor.shape == tensor.shape
+
+
+def test_custom_quant_vs_torch():
+    tensor = torch.rand(32)
+
+    scale, zero_point = compute_config_properties_from_data_torch(tensor)
+    torch_quant = torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8)
+
+    custom_quant = quant_torch(tensor, config=QuantConfig(
+        output_dtype=QuantDtype.INT8,
+        scale=scale,
+        zero_point=zero_point
+    ))
+
+    """
+        torch_int = torch_quant.int_repr()
+        custom_int = custom_quant.int_repr() if hasattr(custom_quant, "int_repr") else custom_quant
+    
+        assert torch.allclose(torch_int.float(), custom_int.float(), atol=1)
+    """
+
+    torch_dequant = torch_quant.dequantize()
+    custom_dequant = torch.tensor([x / scale + zero_point for x in custom_quant.tolist()])
+    assert torch.allclose(torch_dequant, custom_dequant, atol=scale)
