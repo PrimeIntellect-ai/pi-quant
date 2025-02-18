@@ -1,5 +1,3 @@
-# (c) 2025 Mario "Neo" Sieg. <mario.sieg.64@gmail.com>
-
 import os
 import subprocess
 import multiprocessing

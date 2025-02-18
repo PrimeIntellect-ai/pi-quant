@@ -166,7 +166,7 @@ namespace quant {
             const std::int64_t prb = std::min(pra + pair_chunk, pairs);
             if (prb > pra) [[likely]] {
                 const std::int64_t ra = pra<<1;
-                const std::int64_t rb = (prb<<1 > numel) ? numel : prb<<1; /* When numel is odd, the last pair is incomplete */
+                const std::int64_t rb = prb<<1 > numel ? numel : prb<<1; /* When numel is odd, the last pair is incomplete */
                 dispatch(bx + ra, br + pra, rb - ra);
             }
         }

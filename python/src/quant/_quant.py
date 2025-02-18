@@ -105,23 +105,26 @@ class QuantConfig:
 def quant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = None, *,  config: QuantConfig = QuantConfig(), ctx: Union[Context, None] = None) -> "torch.Tensor":
     if ctx is None:
         ctx = Context()
+
+    assert tensor.is_contiguous(), "Input tensor must be contiguous"
         
     if config.output_dtype == QuantDtype.INT8:
         if out is None:
             out = torch.empty_like(tensor, dtype=torch.int8)
         elif out.dtype != torch.int8:
             raise ValueError("Output tensor must be of type int8")
-        
     elif config.output_dtype == QuantDtype.INT4:
         raise NotImplementedError("Quantization to int4 is not implemented yet for torch Tensor")
-        
+
+    assert out.is_contiguous(), "Output tensor must be contiguous"
+
     ctx.ptr_quant_uint8(tensor.data_ptr(), out.data_ptr(), numel=tensor.numel(), scale=config.scale, zero_point=config.zero_point, mode=config.mode)
     return out
 
 def quant_numpy(tensor: np.ndarray, out: Union[np.ndarray, None] = None, *,  config: QuantConfig = QuantConfig(), ctx: Union[Context, None] = None) -> np.ndarray:
     if ctx is None:
         ctx = Context()
-        
+
     if config.output_dtype == QuantDtype.INT8:
         if out is None:
             out = np.empty_like(tensor, dtype=np.int8)
@@ -130,7 +133,6 @@ def quant_numpy(tensor: np.ndarray, out: Union[np.ndarray, None] = None, *,  con
         
     elif config.output_dtype == QuantDtype.INT4:
         raise NotImplementedError("Quantization to int4 is not implemented yet for torch Tensor")
-        
-      
+
     ctx.ptr_quant_uint8(tensor.ctypes.data, out.ctypes.data, numel=tensor.size, scale=config.scale, zero_point=config.zero_point, mode=config.mode)
     return out
