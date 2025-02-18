@@ -16,6 +16,10 @@ extern "C" {
 #define QUANT_EXPORT __attribute__((visibility("default")))
 #endif
 
+
+/* computes and returns {scale, zero_point} derived from the data's mean and stddev. */
+extern QUANT_EXPORT void compute_quant_config_from_data(const float* x, size_t n, float* out_scale, int32_t* out_zero_point);
+
 typedef struct quant_context_t quant_context_t; /* Opaque context ptr */
 
 typedef enum quant_round_mode_t {

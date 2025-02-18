@@ -1,9 +1,15 @@
 import numpy as np
 import pytest
 import torch
-from quant import quant_torch, quant_numpy, Context, RoundMode
+from quant import *
 
-from quant import QuantConfig, QuantDtype
+def test_ptr_factors_compute():
+    tensor = torch.rand(32)
+
+    ctx = Context()
+    scale, zero_point = compute_config_properties_from_data(tensor.data_ptr(), tensor.numel())
+    assert scale > 0
+    assert zero_point >= 0
 
 def test_ptr_quant_int8():
     tensor = torch.rand(32)

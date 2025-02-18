@@ -2,9 +2,11 @@
 
 #include <cassert>
 #include <thread>
+#include <cmath>
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#include <numeric>
 
 #define decl_kernel_pair(impl) \
     extern auto f32_q8_##impl( \
@@ -83,10 +85,28 @@ using kernel_fn = auto (
 #undef decl_kernel_pair
 
 namespace quant {
+    auto compute_quant_config_from_data(const std::span<const float> x) -> std::pair<float, std::int32_t> {
+        if (x.empty()) [[unlikely]] return {0.0f, 0.0f};
+        float mean {std::accumulate(x.begin(), x.end(), 0.0f) / static_cast<float>(x.size())};
+        float sq_delta {std::transform_reduce(
+            x.begin(), x.end(),
+            0.0f,
+            std::plus{},
+            [mean](const float value) noexcept -> float {
+                const float delta {value - mean};
+                return delta * delta;
+            }
+        )};
+        const float std {std::sqrt(sq_delta / static_cast<float>((x.size()-1)))};
+        const float scale {12.0f*std/255.0f};
+        const std::int32_t zp {127 - static_cast<std::int32_t>(std::round(mean/scale))};
+        return {scale, zp};
+    }
+
     context::context(std::size_t num_threads) {
         num_threads = std::max<std::size_t>(1, num_threads);
         m_workers.reserve(num_threads);
-        for (std::int64_t ti {0}; ti < num_threads; ++ti) { // Initialize workers (main thread is worker 0)
+        for (std::int64_t ti {}; ti < num_threads; ++ti) { // Initialize workers (main thread is worker 0)
             m_workers.emplace_back(*this, ti, static_cast<std::int64_t>(num_threads));
         }
         #ifdef __x86_64__
