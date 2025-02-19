@@ -19,6 +19,19 @@ namespace quant {
     // computes and returns {scale, zero_point} derived from the data's mean and stddev.
     [[nodiscard]] extern auto compute_quant_config_from_data(std::span<const float> x) -> std::pair<float, std::int32_t>;
 
+    /* Aborts with a formatted message. Because not all tested C++ compilers support std::format, C-style formatting is used for now. Should be replaced later. Pulling in fmt::format just for abort seems a bit too much... */
+    [[noreturn]] extern auto panic(const char* msg, ...) -> void;
+
+    #define QUANT_STRINGIZE2(x) #x
+    #define QUANT_STRINGIZE(x) QUANT_STRINGIZE2(x)
+    #define QUANT_SRC_NAME __FILE__ ":" QUANT_STRINGIZE(__LINE__)
+
+    #define quant_assert(expr, msg, ...) \
+        if ((!(expr))) [[unlikely]] { \
+            ::quant::panic("%s:%d Assertion failed: " #expr " <- " msg, __FILE__, __LINE__, ## __VA_ARGS__);\
+        }
+    #define quant_assert2(expr) quant_assert(expr, "")
+
     struct prng_state final { // Mersenne-Twister 64
         std::uint32_t remaining {};
         std::uint32_t next {};
@@ -62,6 +75,17 @@ namespace quant {
         stochastic = false
     };
 
+    #ifdef __x86_64__
+        enum class amd64_cpu_caps {
+            none=0,
+            sse_4_2,
+            avx2,
+            avx512,
+
+            num_
+        };
+    #endif
+
     class QUANT_EXPORT context final {
     public:
         explicit context(std::size_t num_threads);
@@ -77,6 +101,13 @@ namespace quant {
             float scale,
             std::int32_t zero_point,
             round_mode mode
+        ) -> void;
+
+        auto dequantize_uint8(
+            std::span<std::uint8_t> in,
+            std::span<float> out,
+            float scale,
+            std::int32_t zero_point
         ) -> void;
 
         auto quantize_uint4(
@@ -143,19 +174,12 @@ namespace quant {
         std::condition_variable m_cv {};
         std::mutex m_mtx {};
         std::atomic_size_t m_workers_online {};
-
         #ifdef __x86_64__
-            enum class amd64_cpu_caps {
-                none=0,
-                sse_4_2,
-                avx2,
-                avx512,
-
-                num_
-            } cpu_caps {};
+            amd64_cpu_caps cpu_caps {};
         #endif
 
         auto kickoff_workers(const op_info& info) -> void;
         auto barrier() -> void;
+        auto operator()(const op_info& info) -> void;
     };
 }

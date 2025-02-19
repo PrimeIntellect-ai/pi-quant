@@ -77,5 +77,5 @@ def test_custom_quant_vs_torch():
     """
 
     torch_dequant = torch_quant.dequantize()
-    custom_dequant = torch.tensor([x / scale + zero_point for x in custom_quant.tolist()])
+    custom_dequant = torch.tensor([x - zero_point * scale for x in custom_quant.tolist()])
     assert torch.allclose(torch_dequant, custom_dequant, atol=scale)

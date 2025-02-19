@@ -28,17 +28,18 @@ namespace impl_namespace(Q8_KERNEL_IMPL, _) {
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         const std::int64_t numel,
-        const float inv_scale,
+        float inv_scale,
         const std::int32_t zp
    ) noexcept -> void {
+        inv_scale = 1.0f / inv_scale; /* We multiply by reciprocal */
         std::int64_t i {};
         #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
             const __m512 vinv_scale = _mm512_set1_ps(inv_scale);
             const __m512i vzero_point = _mm512_set1_epi32(zp);
             const __m512i vmin = _mm512_setzero_si512();
             const __m512i vmax = _mm512_set1_epi32(0xff);
-            constexpr int k_round_mode = _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC;
-            constexpr std::size_t step = 64;
+            constexpr int k_round_mode {_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC};
+            constexpr std::size_t step {64};
             for (; i+step <= numel; i += step) {
                 __m512 xf0 = _mm512_loadu_ps(x+i+(0<<4));
                 __m512 xf1 = _mm512_loadu_ps(x+i+(1<<4));
@@ -54,30 +55,30 @@ namespace impl_namespace(Q8_KERNEL_IMPL, _) {
                 _mm512_storeu_si512(reinterpret_cast<__m512i*>(o+i), result);
             }
         #elif defined(__AVX2__)
-            const __m256 vinv_scale = _mm256_set1_ps(inv_scale);
-            const __m256i vzero_point = _mm256_set1_epi32(zp);
-            const __m256i vmin = _mm256_setzero_si256();
-            const __m256i vmax = _mm256_set1_epi32(0xff);
-            constexpr int k_round_mode = _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC;
-            constexpr std::size_t step = 32;
+            const __m256 vinv_scale {_mm256_set1_ps(inv_scale)};
+            const __m256i vzero_point {_mm256_set1_epi32(zp)};
+            const __m256i vmin {_mm256_setzero_si256()};
+            const __m256i vmax {_mm256_set1_epi32(0xff)};
+            constexpr int k_round_mode {_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC};
+            constexpr std::size_t step {32};
+            static const __m256i shuffle_matrix = _mm256_setr_epi8(
+                0,1,2,3, 8,9,10,11, 4,5,6,7, 12,13,14,15,
+                0,1,2,3, 8,9,10,11, 4,5,6,7, 12,13,14,15
+            );
             for (; i+step <= numel; i += step) {
-                __m256 xf0 = _mm256_loadu_ps(x+i+(0<<3));
-                __m256 xf1 = _mm256_loadu_ps(x+i+(1<<3));
-                __m256 xf2 = _mm256_loadu_ps(x+i+(2<<3));
-                __m256 xf3 = _mm256_loadu_ps(x+i+(3<<3));
-                __m256i xi0 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf0, vinv_scale), k_round_mode)), vzero_point)));
-                __m256i xi1 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf1, vinv_scale), k_round_mode)), vzero_point)));
-                __m256i xi2 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf2, vinv_scale), k_round_mode)), vzero_point)));
-                __m256i xi3 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf3, vinv_scale), k_round_mode)), vzero_point)));
-                __m256i pack16_0 = _mm256_packus_epi32(xi0, xi1);
-                __m256i pack16_1 = _mm256_packus_epi32(xi2, xi3);
-                __m256i result = _mm256_packus_epi16(pack16_0, pack16_1);
+                __m256 xf0 {_mm256_loadu_ps(x+i+(0<<3))};
+                __m256 xf1 {_mm256_loadu_ps(x+i+(1<<3))};
+                __m256 xf2 {_mm256_loadu_ps(x+i+(2<<3))};
+                __m256 xf3 {_mm256_loadu_ps(x+i+(3<<3))};
+                __m256i xi0 {_mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf0, vinv_scale), k_round_mode)), vzero_point)))};
+                __m256i xi1 {_mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf1, vinv_scale), k_round_mode)), vzero_point)))};
+                __m256i xi2 {_mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf2, vinv_scale), k_round_mode)), vzero_point)))};
+                __m256i xi3 {_mm256_max_epi32(vmin, _mm256_min_epi32(vmax, _mm256_add_epi32(_mm256_cvtps_epi32(_mm256_round_ps(_mm256_mul_ps(xf3, vinv_scale), k_round_mode)), vzero_point)))};
+                __m256i pack16_0 {_mm256_packus_epi32(xi0, xi1)};
+                __m256i pack16_1 {_mm256_packus_epi32(xi2, xi3)};
+                __m256i result {_mm256_packus_epi16(pack16_0, pack16_1)};
                 result = _mm256_permute4x64_epi64(result, 0xD8);
-                static const __m256i shuffle_mask = _mm256_setr_epi8(
-                    0,  1,  2,  3,   8,  9, 10, 11,   4,  5,  6,  7,  12, 13, 14, 15,
-                    0,  1,  2,  3,   8,  9, 10, 11,   4,  5,  6,  7,  12, 13, 14, 15
-                );
-                __m256i final = _mm256_shuffle_epi8(result, shuffle_mask);
+                __m256i final = _mm256_shuffle_epi8(result, shuffle_matrix);
                 _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i), final);
             }
         #elif defined(__SSE4_2__)
@@ -85,8 +86,8 @@ namespace impl_namespace(Q8_KERNEL_IMPL, _) {
             const __m128i vzero_point = _mm_set1_epi32(zp);
             const __m128i vmin = _mm_setzero_si128();
             const __m128i vmax = _mm_set1_epi32(0xff);
-            constexpr int k_round_mode = _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC;
-            constexpr std::size_t step = 16;
+            constexpr int k_round_mode {_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC};
+            constexpr std::size_t step {16};
             for (; i+step <= numel; i += step) {
                 __m128 xf0 = _mm_loadu_ps(x+i+(0<<2));
                 __m128 xf1 = _mm_loadu_ps(x+i+(1<<2));
@@ -145,10 +146,11 @@ namespace impl_namespace(Q8_KERNEL_IMPL, _) {
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         const std::int64_t numel,
-        const float inv_scale,
+        float inv_scale,
         const std::int32_t zp,
-        [[maybe_unused]] quant::prng_state& prng
+        quant::prng_state& prng
     ) noexcept -> void {
+        inv_scale = 1.0f / inv_scale; /* We multiply by reciprocal */
         std::int64_t i {};
         for (; i < numel; ++i) {
             float rnd {x[i] * inv_scale};
@@ -161,6 +163,55 @@ namespace impl_namespace(Q8_KERNEL_IMPL, _) {
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
     }
+
+    static auto __attribute__((hot)) dequant(
+       const std::uint8_t* const __restrict__ x,
+       float* const __restrict__ o,
+       const std::int64_t numel,
+       const float scale,
+       const std::int32_t zp
+    ) noexcept -> void {
+        std::int64_t i {};
+        #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
+
+        #elif defined(__AVX2__)
+            const __m256 vscale = _mm256_set1_ps(scale);
+            const __m256i vzp16 = _mm256_set1_epi16(static_cast<short>(zp));
+            constexpr std::size_t step = 32;
+            for (; i+step <= numel; i += step) {
+                __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i));
+                __m128i v_low = _mm256_castsi256_si128(v);
+                __m128i v_high = _mm256_extracti128_si256(v, 1);
+                __m256i v_low_16 = _mm256_cvtepu8_epi16(v_low);
+                __m256i v_high_16 = _mm256_cvtepu8_epi16(v_high);
+                v_low_16 = _mm256_sub_epi16(v_low_16, vzp16);
+                v_high_16 = _mm256_sub_epi16(v_high_16, vzp16);
+                __m256i v_low_32_0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(v_low_16));
+                __m256i v_low_32_1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(v_low_16, 1));
+                __m256i v_high_32_0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(v_high_16));
+                __m256i v_high_32_1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(v_high_16, 1));
+                __m256 f_low_0 = _mm256_cvtepi32_ps(v_low_32_0);
+                __m256 f_low_1 = _mm256_cvtepi32_ps(v_low_32_1);
+                __m256 f_high_0 = _mm256_cvtepi32_ps(v_high_32_0);
+                __m256 f_high_1 = _mm256_cvtepi32_ps(v_high_32_1);
+                f_low_0 = _mm256_mul_ps(f_low_0, vscale);
+                f_low_1 = _mm256_mul_ps(f_low_1, vscale);
+                f_high_0 = _mm256_mul_ps(f_high_0, vscale);
+                f_high_1 = _mm256_mul_ps(f_high_1, vscale);
+                _mm256_storeu_ps(o+i, f_low_0);
+                _mm256_storeu_ps(o+i+8, f_low_1);
+                _mm256_storeu_ps(o+i+16, f_high_0);
+                _mm256_storeu_ps(o+i+24, f_high_1);
+            }
+        #elif defined(__SSE4_2__)
+
+        #elif defined(__aarch64__) && defined(__ARM_NEON__)
+
+        #endif
+        for (; i < numel; ++i) {
+            o[i] = static_cast<float>(x[i] - zp) * scale;
+        }
+    }
 };
 
 namespace impl_namespace(Q4_KERNEL_IMPL, _) {
@@ -168,9 +219,10 @@ namespace impl_namespace(Q4_KERNEL_IMPL, _) {
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         std::int64_t numel,
-        const float inv_scale,
+        float inv_scale,
         const std::int32_t zp
     ) noexcept -> void {
+        inv_scale = 1.0f / inv_scale; /* We multiply by reciprocal */
         numel = (numel + 1) / 2;
         const auto f = [=](float x) noexcept -> std::uint8_t {
             return std::clamp<int>(std::round(x * inv_scale) + zp, 0, 0xf);
@@ -186,10 +238,11 @@ namespace impl_namespace(Q4_KERNEL_IMPL, _) {
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         const std::int64_t numel,
-        const float inv_scale,
+        float inv_scale,
         const std::int32_t zp,
-        [[maybe_unused]] quant::prng_state& prng
+        quant::prng_state& prng
     ) noexcept -> void {
+        inv_scale = 1.0f / inv_scale; /* We multiply by reciprocal */
         std::int64_t i {};
         for (; i < numel; ++i) {
             float rnd {x[i] * inv_scale};
@@ -204,28 +257,30 @@ namespace impl_namespace(Q4_KERNEL_IMPL, _) {
     }
 };
 
-auto __attribute__((hot)) Q8_KERNEL_IMPL(
-  const float* const __restrict__ x,
-  std::uint8_t* const __restrict__ o,
-  const std::int64_t numel,
-  const float inv_scale,
-  const std::int32_t zp,
-  const bool sto_rnd,
-  quant::prng_state& prng
-) noexcept -> void {
-    if (sto_rnd) impl_namespace(Q8_KERNEL_IMPL, _)::stochastic(x, o, numel, inv_scale, zp, prng);
-    else impl_namespace(Q8_KERNEL_IMPL, _)::nearest(x, o, numel, inv_scale, zp);
-}
+namespace quant {
+    auto __attribute__((hot)) Q8_KERNEL_IMPL(
+      const float* const __restrict__ x,
+      std::uint8_t* const __restrict__ o,
+      const std::int64_t numel,
+      const float scale,
+      const std::int32_t zp,
+      const bool sto_rnd,
+      prng_state& prng
+    ) noexcept -> void {
+        if (sto_rnd) impl_namespace(Q8_KERNEL_IMPL, _)::stochastic(x, o, numel, scale, zp, prng);
+        else impl_namespace(Q8_KERNEL_IMPL, _)::nearest(x, o, numel, scale, zp);
+    }
 
-auto __attribute__((hot)) Q4_KERNEL_IMPL(
-  const float* const __restrict__ x,
-  std::uint8_t* const __restrict__ o,
-  const std::int64_t numel,
-  const float inv_scale,
-  const std::int32_t zp,
-  const bool sto_rnd,
-  quant::prng_state& prng
-) noexcept -> void {
-    if (sto_rnd) impl_namespace(Q4_KERNEL_IMPL, _)::stochastic(x, o, numel, inv_scale, zp, prng);
-    else impl_namespace(Q4_KERNEL_IMPL, _)::nearest(x, o, numel, inv_scale, zp);
+    auto __attribute__((hot)) Q4_KERNEL_IMPL(
+      const float* const __restrict__ x,
+      std::uint8_t* const __restrict__ o,
+      const std::int64_t numel,
+      const float scale,
+      const std::int32_t zp,
+      const bool sto_rnd,
+      prng_state& prng
+    ) noexcept -> void {
+        if (sto_rnd) impl_namespace(Q4_KERNEL_IMPL, _)::stochastic(x, o, numel, scale, zp, prng);
+        else impl_namespace(Q4_KERNEL_IMPL, _)::nearest(x, o, numel, scale, zp);
+    }
 }
