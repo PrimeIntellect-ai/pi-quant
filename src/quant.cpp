@@ -219,19 +219,19 @@ namespace quant {
 
         const auto partition_row {[=] (const bool is_uint8) noexcept -> std::optional<std::array<std::int64_t, 3>> {
             if (is_uint8) {
-                const std::int64_t chunk = (numel + tc - 1)/tc;
-                const std::int64_t ra = chunk*ti;
-                const std::int64_t rb = std::min(ra + chunk, numel);
+                const std::int64_t chunk {(numel + tc - 1)/tc};
+                const std::int64_t ra {chunk*ti};
+                const std::int64_t rb {std::min(ra + chunk, numel)};
                 if (ra >= rb) [[unlikely]] return {};
                 return {{ra, ra, rb-ra}};
             }
-            const std::int64_t pairs = (numel + 1)>>1;
-            const std::int64_t pair_chunk = (pairs + tc - 1)/tc;
-            const std::int64_t pra = pair_chunk*ti;
-            const std::int64_t prb = std::min(pra + pair_chunk, pairs);
+            const std::int64_t pairs {(numel + 1)>>1};
+            const std::int64_t pair_chunk {(pairs + tc - 1)/tc};
+            const std::int64_t pra {pair_chunk*ti};
+            const std::int64_t prb {std::min(pra + pair_chunk, pairs)};
             if (pra >= prb) [[unlikely]] return {};
-            const std::int64_t ra = pra<<1;
-            const std::int64_t rb = prb<<1 > numel ? numel : prb<<1; /* When numel is odd, the last pair is incomplete */
+            const std::int64_t ra {pra<<1};
+            const std::int64_t rb {prb<<1 > numel ? numel : prb<<1}; /* When numel is odd, the last pair is incomplete */
             return {{ra, pra, rb-ra}};
         }};
 

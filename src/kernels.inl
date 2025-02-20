@@ -34,24 +34,24 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
         inv_scale = 1.0f / inv_scale; /* We multiply by reciprocal */
         std::int64_t i {};
         #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
-            const __m512 vinv_scale = _mm512_set1_ps(inv_scale);
-            const __m512i vzero_point = _mm512_set1_epi32(zp);
-            const __m512i vmin = _mm512_setzero_si512();
-            const __m512i vmax = _mm512_set1_epi32(0xff);
+            const __m512 vinv_scale {_mm512_set1_ps(inv_scale)};
+            const __m512i vzero_point {_mm512_set1_epi32(zp)};
+            const __m512i vmin {_mm512_setzero_si512()};
+            const __m512i vmax {_mm512_set1_epi32(0xff)};
             constexpr int k_round_mode {_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC};
             constexpr std::size_t step {64};
             for (; i+step <= numel; i += step) {
-                __m512 xf0 = _mm512_loadu_ps(x+i+(0<<4));
-                __m512 xf1 = _mm512_loadu_ps(x+i+(1<<4));
-                __m512 xf2 = _mm512_loadu_ps(x+i+(2<<4));
-                __m512 xf3 = _mm512_loadu_ps(x+i+(3<<4));
-                __m512i xi0 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf0, vinv_scale), k_round_mode)), vzero_point)));
-                __m512i xi1 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf1, vinv_scale), k_round_mode)), vzero_point)));
-                __m512i xi2 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf2, vinv_scale), k_round_mode)), vzero_point)));
-                __m512i xi3 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf3, vinv_scale), k_round_mode)),vzero_point)));
-                __m512i pack16_0 = _mm512_packus_epi32(xi0, xi1);
-                __m512i pack16_1 = _mm512_packus_epi32(xi2, xi3);
-                __m512i result = _mm512_packus_epi16(pack16_0, pack16_1);
+                __m512 xf0 {_mm512_loadu_ps(x+i+(0<<4))};
+                __m512 xf1 {_mm512_loadu_ps(x+i+(1<<4))};
+                __m512 xf2 {_mm512_loadu_ps(x+i+(2<<4))};
+                __m512 xf3 {_mm512_loadu_ps(x+i+(3<<4))};
+                __m512i xi0 {_mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf0, vinv_scale), k_round_mode)), vzero_point)))};
+                __m512i xi1 {_mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf1, vinv_scale), k_round_mode)), vzero_point)))};
+                __m512i xi2 {_mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf2, vinv_scale), k_round_mode)), vzero_point)))};
+                __m512i xi3 {_mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf3, vinv_scale), k_round_mode)),vzero_point)))};
+                __m512i pack16_0 {_mm512_packus_epi32(xi0, xi1)};
+                __m512i pack16_1 {_mm512_packus_epi32(xi2, xi3)};
+                __m512i result {_mm512_packus_epi16(pack16_0, pack16_1)};
                 _mm512_storeu_si512(reinterpret_cast<__m512i*>(o+i), result);
             }
         #elif defined(__AVX2__)
@@ -61,10 +61,10 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
             const __m256i vmax {_mm256_set1_epi32(0xff)};
             constexpr int k_round_mode {_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC};
             constexpr std::size_t step {32};
-            static const __m256i shuffle_matrix = _mm256_setr_epi8(
+            static const __m256i shuffle_matrix {_mm256_setr_epi8(
                 0,1,2,3, 8,9,10,11, 4,5,6,7, 12,13,14,15,
                 0,1,2,3, 8,9,10,11, 4,5,6,7, 12,13,14,15
-            );
+            )};
             for (; i+step <= numel; i += step) {
                 __m256 xf0 {_mm256_loadu_ps(x+i+(0<<3))};
                 __m256 xf1 {_mm256_loadu_ps(x+i+(1<<3))};
@@ -78,28 +78,28 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
                 __m256i pack16_1 {_mm256_packus_epi32(xi2, xi3)};
                 __m256i result {_mm256_packus_epi16(pack16_0, pack16_1)};
                 result = _mm256_permute4x64_epi64(result, 0xD8);
-                __m256i final = _mm256_shuffle_epi8(result, shuffle_matrix);
+                __m256i final {_mm256_shuffle_epi8(result, shuffle_matrix)};
                 _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i), final);
             }
         #elif defined(__SSE4_2__)
-            const __m128 vinv_scale = _mm_set1_ps(inv_scale);
-            const __m128i vzero_point = _mm_set1_epi32(zp);
-            const __m128i vmin = _mm_setzero_si128();
-            const __m128i vmax = _mm_set1_epi32(0xff);
+            const __m128 vinv_scale {_mm_set1_ps(inv_scale)};
+            const __m128i vzero_point {_mm_set1_epi32(zp)};
+            const __m128i vmin {_mm_setzero_si128()};
+            const __m128i vmax {_mm_set1_epi32(0xff)};
             constexpr int k_round_mode {_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC};
             constexpr std::size_t step {16};
             for (; i+step <= numel; i += step) {
-                __m128 xf0 = _mm_loadu_ps(x+i+(0<<2));
-                __m128 xf1 = _mm_loadu_ps(x+i+(1<<2));
-                __m128 xf2 = _mm_loadu_ps(x+i+(2<<2));
-                __m128 xf3 = _mm_loadu_ps(x+i+(3<<2));
-                __m128i xi0 = _mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(_mm_cvtps_epi32(_mm_round_ps(_mm_mul_ps(xf0, vinv_scale), k_round_mode)), vzero_point)));
-                __m128i xi1 = _mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(_mm_cvtps_epi32(_mm_round_ps(_mm_mul_ps(xf1, vinv_scale), k_round_mode)), vzero_point)));
-                __m128i xi2 = _mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(_mm_cvtps_epi32(_mm_round_ps(_mm_mul_ps(xf2, vinv_scale), k_round_mode)), vzero_point)));
-                __m128i xi3 = _mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(_mm_cvtps_epi32(_mm_round_ps(_mm_mul_ps(xf3, vinv_scale), k_round_mode)), vzero_point)));
-                __m128i pack16_0 = _mm_packus_epi32(xi0, xi1);
-                __m128i pack16_1 = _mm_packus_epi32(xi2, xi3);
-                __m128i result = _mm_packus_epi16(pack16_0, pack16_1);
+                __m128 xf0 {_mm_loadu_ps(x+i+(0<<2))};
+                __m128 xf1 {_mm_loadu_ps(x+i+(1<<2))};
+                __m128 xf2 {_mm_loadu_ps(x+i+(2<<2))};
+                __m128 xf3 {_mm_loadu_ps(x+i+(3<<2))};
+                __m128i xi0 {_mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(_mm_cvtps_epi32(_mm_round_ps(_mm_mul_ps(xf0, vinv_scale), k_round_mode)), vzero_point)))};
+                __m128i xi1 {_mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(_mm_cvtps_epi32(_mm_round_ps(_mm_mul_ps(xf1, vinv_scale), k_round_mode)), vzero_point)))};
+                __m128i xi2 {_mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(_mm_cvtps_epi32(_mm_round_ps(_mm_mul_ps(xf2, vinv_scale), k_round_mode)), vzero_point)))};
+                __m128i xi3 {_mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(_mm_cvtps_epi32(_mm_round_ps(_mm_mul_ps(xf3, vinv_scale), k_round_mode)), vzero_point)))};
+                __m128i pack16_0 {_mm_packus_epi32(xi0, xi1)};
+                __m128i pack16_1 {_mm_packus_epi32(xi2, xi3)};
+                __m128i result {_mm_packus_epi16(pack16_0, pack16_1)};
                 _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i), result);
             }
         #elif defined(__aarch64__) && defined(__ARM_NEON__)
@@ -174,26 +174,26 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
         std::int64_t i {};
         #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
 
-        #elif defined(__AVX2__) && 0
-            const __m256 vscale = _mm256_set1_ps(scale);
-            const __m256i vzp16 = _mm256_set1_epi16(static_cast<short>(zp));
+        #elif defined(__AVX2__)
+            const __m256 vscale {_mm256_set1_ps(scale)};
+            const __m256i vzp16 {_mm256_set1_epi16(static_cast<short>(zp))};
             constexpr std::size_t step = 32;
             for (; i+step <= numel; i += step) {
-                __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i));
-                __m128i v_low = _mm256_castsi256_si128(v);
-                __m128i v_high = _mm256_extracti128_si256(v, 1);
-                __m256i v_low_16 = _mm256_cvtepu8_epi16(v_low);
-                __m256i v_high_16 = _mm256_cvtepu8_epi16(v_high);
+                __m256i v {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i))};
+                __m128i v_low {_mm256_castsi256_si128(v)};
+                __m128i v_high {_mm256_extracti128_si256(v, 1)};
+                __m256i v_low_16 {_mm256_cvtepu8_epi16(v_low)};
+                __m256i v_high_16 {_mm256_cvtepu8_epi16(v_high)};
                 v_low_16 = _mm256_sub_epi16(v_low_16, vzp16);
                 v_high_16 = _mm256_sub_epi16(v_high_16, vzp16);
-                __m256i v_low_32_0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(v_low_16));
-                __m256i v_low_32_1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(v_low_16, 1));
-                __m256i v_high_32_0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(v_high_16));
-                __m256i v_high_32_1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(v_high_16, 1));
-                __m256 f_low_0 = _mm256_cvtepi32_ps(v_low_32_0);
-                __m256 f_low_1 = _mm256_cvtepi32_ps(v_low_32_1);
-                __m256 f_high_0 = _mm256_cvtepi32_ps(v_high_32_0);
-                __m256 f_high_1 = _mm256_cvtepi32_ps(v_high_32_1);
+                __m256i v_low_32_0 {_mm256_cvtepi16_epi32(_mm256_castsi256_si128(v_low_16))};
+                __m256i v_low_32_1 {_mm256_cvtepi16_epi32(_mm256_extracti128_si256(v_low_16, 1))};
+                __m256i v_high_32_0 {_mm256_cvtepi16_epi32(_mm256_castsi256_si128(v_high_16))};
+                __m256i v_high_32_1 {_mm256_cvtepi16_epi32(_mm256_extracti128_si256(v_high_16, 1))};
+                __m256 f_low_0 {_mm256_cvtepi32_ps(v_low_32_0)};
+                __m256 f_low_1 {_mm256_cvtepi32_ps(v_low_32_1)};
+                __m256 f_high_0 {_mm256_cvtepi32_ps(v_high_32_0)};
+                __m256 f_high_1 {_mm256_cvtepi32_ps(v_high_32_1)};
                 f_low_0 = _mm256_mul_ps(f_low_0, vscale);
                 f_low_1 = _mm256_mul_ps(f_low_1, vscale);
                 f_high_0 = _mm256_mul_ps(f_high_0, vscale);
@@ -209,7 +209,7 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
 
         #endif
         for (; i < numel; ++i) {
-            o[i] = static_cast<float>(x[i] - zp) * scale;
+            o[i] = static_cast<float>(x[i] - zp)*scale;
         }
     }
 };
@@ -228,8 +228,8 @@ namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
             return std::clamp<int>(std::round(x * inv_scale) + zp, 0, 0xf);
         };
         for (std::size_t i{0}; i < numel; ++i) {
-            std::uint8_t hi = f(x[2 * i])     & 15;
-            std::uint8_t lo = f(x[2 * i + 1]) & 15;
+            auto hi {f(x[(i<<1)])     & 0b0000'1111};
+            auto lo {f(x[(i<<1) + 1]) & 0b0000'1111};
             o[i] = (hi << 4) | lo;
         }
     }
