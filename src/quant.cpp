@@ -217,36 +217,39 @@ namespace quant {
         const std::int64_t tc {pl.tc};
         const std::int64_t ti {pl.ti};
 
-        const auto partition_row {[=] (const bool is_uint8) noexcept -> std::array<std::int64_t, 2> {
+        const auto partition_row {[=] (const bool is_uint8) noexcept -> std::optional<std::array<std::int64_t, 3>> {
             if (is_uint8) {
                 const std::int64_t chunk = (numel + tc - 1)/tc;
                 const std::int64_t ra = chunk*ti;
                 const std::int64_t rb = std::min(ra + chunk, numel);
-                return {ra, rb};
+                if (ra >= rb) [[unlikely]] return {};
+                return {{ra, ra, rb-ra}};
             }
             const std::int64_t pairs = (numel + 1)>>1;
-            const std::int64_t pair_chunk = (pairs + tc - 1) / tc;
-            const std::int64_t pra = pair_chunk * ti;
+            const std::int64_t pair_chunk = (pairs + tc - 1)/tc;
+            const std::int64_t pra = pair_chunk*ti;
             const std::int64_t prb = std::min(pra + pair_chunk, pairs);
+            if (pra >= prb) [[unlikely]] return {};
             const std::int64_t ra = pra<<1;
             const std::int64_t rb = prb<<1 > numel ? numel : prb<<1; /* When numel is odd, the last pair is incomplete */
-            return {ra, rb};
+            return {{ra, pra, rb-ra}};
         }};
 
-        const auto dispatch_quant {[=, this](const std::int64_t ra, const std::int64_t rb, const quant_descriptor& cmd) noexcept -> void {
-            if (rb <= ra) [[unlikely]] return; // No work in this partition
+        const auto dispatch_quant {[=, this](const std::int64_t oa, const std::int64_t ob, const std::int64_t n, const quant_descriptor& cmd) noexcept -> void {
             #ifdef __x86_64__
                 const auto level {static_cast<std::size_t>(ctx->cpu_caps)};
                 auto* const kernel {is_i8 ? quant8_routines[level] : quant4_routines[level]};
-                (*kernel)(cmd.in+ra, cmd.out+ra, rb - ra, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
+                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
             #else
                 auto* const kernel {op.format == op_info::q_i8 ? &f32_q8_generic : &f32_q4_generic};
                 (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, pl.prng);
             #endif
         }};
 
-        const auto [ra, rb] {partition_row(is_i8)};
-        dispatch_quant(ra, rb, std::get<quant_descriptor>(cmd));
+        if (const auto partition {partition_row(is_i8)}; partition) [[likely]] {
+            const auto [oa, ob, n] {*partition};
+            dispatch_quant(oa, ob, n, std::get<quant_descriptor>(cmd));
+        }
 
         if (1+ctx->m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx->m_workers.size()) { // Last worker
             std::unique_lock lock {ctx->m_mtx};
