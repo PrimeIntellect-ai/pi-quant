@@ -241,8 +241,8 @@ namespace quant {
                 auto* const kernel {is_i8 ? quant8_routines[level] : quant4_routines[level]};
                 (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
             #else
-                auto* const kernel {op.format == op_info::q_i8 ? &f32_q8_generic : &f32_q4_generic};
-                (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, pl.prng);
+                auto* const kernel {is_i8 ? &f32_quant8_generic : &f32_quant4_generic};
+                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
             #endif
         }};
 

@@ -103,8 +103,10 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
                 _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i), result);
             }
         #elif defined(__aarch64__) && defined(__ARM_NEON__)
-            const float32x4_t vinv_scale = vdupq_n_f32(inv_scale);
+            const float32x4_t vinv_scale = vdupq_n_f32(scale);
             const int32x4_t vzero_point = vdupq_n_s32(zp);
+            const int32x4_t vmin = vdupq_n_s32(0);
+            const int32x4_t vmax = vdupq_n_s32(0xff);
             constexpr std::size_t step = 16;
             for (; i+step <= numel; i += step) {
                 float32x4_t xf0 = vld1q_f32(x+i+(0<<2));
@@ -123,6 +125,14 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
                 xi1 = vaddq_s32(xi1, vzero_point);
                 xi2 = vaddq_s32(xi2, vzero_point);
                 xi3 = vaddq_s32(xi3, vzero_point);
+                xi0 = vmaxq_s32(xi0, vmin);
+                xi1 = vmaxq_s32(xi1, vmin);
+                xi2 = vmaxq_s32(xi2, vmin);
+                xi3 = vmaxq_s32(xi3, vmin);
+                xi0 = vminq_s32(xi0, vmax);
+                xi1 = vminq_s32(xi1, vmax);
+                xi2 = vminq_s32(xi2, vmax);
+                xi3 = vminq_s32(xi3, vmax);
                 int16x4_t p16_0_low = vqmovn_s32(xi0);
                 int16x4_t p16_0_high = vqmovn_s32(xi1);
                 int16x8_t pack16_0 = vcombine_s16(p16_0_low, p16_0_high);
