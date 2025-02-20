@@ -11,12 +11,6 @@
 
 #include "naive.hpp"
 
-#ifdef __x86_64__
-[[nodiscard]] extern auto check_sse42_support() noexcept -> bool;
-[[nodiscard]] extern auto check_avx2_support() noexcept -> bool;
-[[nodiscard]] extern auto check_avx512f_support() noexcept -> bool;
-#endif
-
 static auto test_q8(std::size_t nt) -> void {
     std::cout << "uint8 quant Test..." << std::endl;
     constexpr std::size_t numel {1'000'000};
@@ -132,11 +126,6 @@ static auto test_q4(std::size_t nt) -> void {
 auto main() -> int {
     const std::size_t nt {std::thread::hardware_concurrency()};
     std::cout << "Num threads: " << nt << std::endl;
-    #ifdef __x86_64__
-        std::cout << "SSE 4.2? " << (check_sse42_support() ? "YES" : "NO") << std::endl;
-        std::cout << "AVX-2? " << (check_avx2_support() ? "YES" : "NO") << std::endl;
-        std::cout << "AVX-512 F? " << (check_avx512f_support() ? "YES" : "NO") << std::endl;
-    #endif
     test_q8(nt);
     test_q8_stochastic(nt);
     test_q4(nt);

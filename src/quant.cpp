@@ -10,34 +10,53 @@
 #include <numeric>
 
 namespace quant {
-    #define decl_kernel_fn(impl) \
+    #define decl_quant_kernel_fn(impl) \
         extern auto impl( \
         const float* __restrict__ x, \
         std::uint8_t* __restrict__ o, \
         std::int64_t numel, \
-        float inv_scale, \
+        float scale, \
         std::int32_t zero_point, \
         const bool sto_rnd, \
         quant::prng_state& prng \
-    ) noexcept -> void;
+    ) noexcept -> void
 
-    decl_kernel_fn(f32_q8_generic);
-    decl_kernel_fn(f32_q4_generic);
+    #define decl_dequant_kernel_fn(impl) \
+        extern auto impl( \
+            const std::uint8_t* __restrict__ x, \
+            float* __restrict__ o, \
+            std::int64_t numel, \
+            float scale, \
+            std::int32_t zero_point \
+        ) noexcept -> void
 
-    using kernel_fn = auto (
+    decl_quant_kernel_fn(f32_quant8_generic);
+    decl_dequant_kernel_fn(f32_dequant8_generic);
+    decl_quant_kernel_fn(f32_quant4_generic);
+    decl_dequant_kernel_fn(f32_dequant4_generic);
+
+    using quant_kernel = auto (
         const float* __restrict__ x,
         std::uint8_t* __restrict__ o,
-        std::int64_t n,
-        float inv_scale,
+        std::int64_t numel,
+        float scale,
         std::int32_t zero_point,
         bool sto_rnd,
-        quant::prng_state& prng
+        prng_state& prng
+    ) -> void;
+
+    using dequant_kernel = auto (
+        const std::uint8_t* __restrict__ x,
+        float* __restrict__ o,
+        std::int64_t numel,
+        float scale,
+        std::int32_t zero_point
     ) -> void;
 
     #ifdef __x86_64__
         #include <cpuid.h>
 
-        [[nodiscard]] auto check_sse42_support() noexcept -> bool {
+        [[nodiscard]] static auto check_sse42_support() noexcept -> bool {
             int info[4] = {-1};
             __cpuid(0, info[0], info[1], info[2], info[3]);
             if (info[0] < 1) return false;
@@ -45,7 +64,7 @@ namespace quant {
             return (info[2] & (1<<20)) != 0;
         }
 
-        [[nodiscard]] auto check_avx2_support() noexcept -> bool {
+        [[nodiscard]] static auto check_avx2_support() noexcept -> bool {
             int info[4] = {-1};
             __cpuid(0, info[0], info[1], info[2], info[3]);
             if (info[0] < 7) return false;
@@ -58,7 +77,7 @@ namespace quant {
             return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 6) == 6;
         }
 
-        [[nodiscard]] auto check_avx512f_support() noexcept -> bool {
+        [[nodiscard]] static auto check_avx512f_support() noexcept -> bool {
             int info[4] = {-1};
            __cpuid(0, info[0], info[1], info[2], info[3]);
             if (info[0] < 7) return false;
@@ -71,24 +90,42 @@ namespace quant {
             return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 0xe0) == 0xe0;
         }
 
-        decl_kernel_fn(f32_q8_amd64_sse42);
-        decl_kernel_fn(f32_q4_amd64_sse42);
-        decl_kernel_fn(f32_q8_amd64_avx2);
-        decl_kernel_fn(f32_q4_amd64_avx2);
-        decl_kernel_fn(f32_q8_amd64_avx512f);
-        decl_kernel_fn(f32_q4_amd64_avx512f);
+        decl_quant_kernel_fn(f32_quant8_amd64_sse42);
+        decl_dequant_kernel_fn(f32_dequant8_amd64_sse42);
+        decl_quant_kernel_fn(f32_quant4_amd64_sse42);
+        decl_dequant_kernel_fn(f32_dequant4_amd64_sse42);
+        decl_quant_kernel_fn(f32_quant8_amd64_avx2);
+        decl_dequant_kernel_fn(f32_dequant8_amd64_avx2);
+        decl_quant_kernel_fn(f32_quant4_amd64_avx2);
+        decl_dequant_kernel_fn(f32_dequant4_amd64_avx2);
+        decl_quant_kernel_fn(f32_quant8_amd64_avx512f);
+        decl_dequant_kernel_fn(f32_dequant8_amd64_avx512f);
+        decl_quant_kernel_fn(f32_quant4_amd64_avx512f);
+        decl_dequant_kernel_fn(f32_dequant4_amd64_avx512f);
 
-        static constexpr std::array<kernel_fn*, static_cast<std::size_t>(amd64_cpu_caps::num_)> k_dispatch_i8 = {
-            &f32_q8_generic,
-            &f32_q8_amd64_sse42,
-            &f32_q8_amd64_avx2,
-            &f32_q8_amd64_avx512f
+        static constexpr std::array<quant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> quant8_routines = {
+            &f32_quant8_generic,
+            &f32_quant8_amd64_sse42,
+            &f32_quant8_amd64_avx2,
+            &f32_quant8_amd64_avx512f
         };
-        static constexpr std::array<kernel_fn*, static_cast<std::size_t>(amd64_cpu_caps::num_)> k_dispatch_i4 = {
-            &f32_q4_generic,
-            &f32_q4_amd64_sse42,
-            &f32_q4_amd64_avx2,
-            &f32_q4_amd64_avx512f
+        static constexpr std::array<dequant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> dequant8_routines = {
+            &f32_dequant8_generic,
+            &f32_dequant8_amd64_sse42,
+            &f32_dequant8_amd64_avx2,
+            &f32_dequant8_amd64_avx512f
+        };
+        static constexpr std::array<quant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> quant4_routines = {
+            &f32_quant4_generic,
+            &f32_quant4_amd64_sse42,
+            &f32_quant4_amd64_avx2,
+            &f32_quant4_amd64_avx512f
+        };
+        static constexpr std::array<dequant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> dequant4_routines = {
+            &f32_dequant4_generic,
+            &f32_dequant4_amd64_sse42,
+            &f32_dequant4_amd64_avx2,
+            &f32_dequant4_amd64_avx512f
         };
     #endif
 
@@ -165,50 +202,62 @@ namespace quant {
     }
 
     auto context::worker::exec_and_broadcast() -> void {
-        const auto* const bx {op.in};
-        auto* const br {op.out};
+        std::int64_t numel {};
+        bool is_i8 {};
+        if (const auto* quant_desc {std::get_if<quant_descriptor>(&cmd)}; quant_desc) {
+            numel = quant_desc->numel;
+            is_i8 = quant_desc->format == quant_format::q_uint8;
+        } else if (const auto* dequant_desc {std::get_if<dequant_descriptor>(&cmd)}; dequant_desc) {
+            numel = dequant_desc->numel;
+            is_i8 = dequant_desc->format == quant_format::q_uint8;
+        } else {
+            panic("Invalid command type");
+        }
+
         const std::int64_t tc {pl.tc};
         const std::int64_t ti {pl.ti};
-        const std::int64_t numel {op.numel};
-        const bool is_i8 {op.format == op_info::q_i8};
-        const auto dispatch {[=](const float* px, std::uint8_t* pr, std::int64_t vmel) noexcept -> void {
+
+        const auto partition_row {[=] (const bool is_uint8) noexcept -> std::array<std::int64_t, 2> {
+            if (is_uint8) {
+                const std::int64_t chunk = (numel + tc - 1)/tc;
+                const std::int64_t ra = chunk*ti;
+                const std::int64_t rb = std::min(ra + chunk, numel);
+                return {ra, rb};
+            }
+            const std::int64_t pairs = (numel + 1)>>1;
+            const std::int64_t pair_chunk = (pairs + tc - 1) / tc;
+            const std::int64_t pra = pair_chunk * ti;
+            const std::int64_t prb = std::min(pra + pair_chunk, pairs);
+            const std::int64_t ra = pra<<1;
+            const std::int64_t rb = prb<<1 > numel ? numel : prb<<1; /* When numel is odd, the last pair is incomplete */
+            return {ra, rb};
+        }};
+
+        const auto dispatch_quant {[=, this](const std::int64_t ra, const std::int64_t rb, const quant_descriptor& cmd) noexcept -> void {
+            if (rb <= ra) [[unlikely]] return; // No work in this partition
             #ifdef __x86_64__
-                const auto cap_idx {static_cast<std::size_t>(ctx->cpu_caps)};
-                auto* const kernel {is_i8 ? k_dispatch_i8[cap_idx] : k_dispatch_i4[cap_idx]};
-                (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, pl.prng);
+                const auto level {static_cast<std::size_t>(ctx->cpu_caps)};
+                auto* const kernel {is_i8 ? quant8_routines[level] : quant4_routines[level]};
+                (*kernel)(cmd.in+ra, cmd.out+ra, rb - ra, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
             #else
                 auto* const kernel {op.format == op_info::q_i8 ? &f32_q8_generic : &f32_q4_generic};
                 (*kernel)(px, pr, vmel, op.scale, op.zero_point, op.rnd_mode == round_mode::stochastic, pl.prng);
             #endif
         }};
-        if (is_i8) {
-            const std::int64_t chunk = (numel + tc - 1)/tc;
-            const std::int64_t ra = chunk*ti;
-            const std::int64_t rb = std::min(ra + chunk, numel);
-            if (rb > ra) [[likely]] {
-                dispatch(bx + ra, br + ra, rb - ra);
-            }
-        } else {
-            const std::int64_t pairs = (numel + 1)>>1;
-            const std::int64_t pair_chunk = (pairs + tc - 1) / tc;
-            const std::int64_t pra = pair_chunk * ti;
-            const std::int64_t prb = std::min(pra + pair_chunk, pairs);
-            if (prb > pra) [[likely]] {
-                const std::int64_t ra = pra<<1;
-                const std::int64_t rb = prb<<1 > numel ? numel : prb<<1; /* When numel is odd, the last pair is incomplete */
-                dispatch(bx + ra, br + pra, rb - ra);
-            }
-        }
-        if (1+ctx->m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx->m_workers.size()) {
+
+        const auto [ra, rb] {partition_row(is_i8)};
+        dispatch_quant(ra, rb, std::get<quant_descriptor>(cmd));
+
+        if (1+ctx->m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx->m_workers.size()) { // Last worker
             std::unique_lock lock {ctx->m_mtx};
             ctx->m_cv.notify_all();
         }
     }
 
-    auto context::kickoff_workers(const op_info& info) -> void {
+    auto context::kickoff_workers(quant_command&& cmd) -> void {
         std::unique_lock lock {m_mtx};
         for (auto& worker : m_workers)
-            worker.op = info;
+            worker.cmd = cmd;
         ++m_phase;
         m_num_completed.store(0, std::memory_order::relaxed);
         m_cv.notify_all();
@@ -219,8 +268,8 @@ namespace quant {
         m_cv.wait(lock, [&]() noexcept -> bool { return m_num_completed.load(std::memory_order_relaxed) == m_workers.size(); });
     }
 
-    auto context::operator()(const op_info& info) -> void {
-        kickoff_workers(info);
+    auto context::operator()(quant_command&& cmd) -> void {
+        kickoff_workers(std::forward<decltype(cmd)>(cmd));
         worker& w0 {m_workers[0]}; // Main thread does work too
         w0.exec_and_broadcast();
         barrier();
@@ -246,14 +295,14 @@ namespace quant {
         const round_mode mode
     ) -> void {
         quant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
-        const op_info info {
+        quant_descriptor info {
             .in = in.data(),
             .out = out.data(),
             .numel = static_cast<std::int64_t>(in.size()),
             .scale = scale,
             .zero_point = zero_point,
             .rnd_mode = mode,
-            .format = op_info::q_i8
+            .format = quant_format::q_uint8
         };
         (*this)(info);
     }
@@ -265,6 +314,15 @@ namespace quant {
         const std::int32_t zero_point
     ) -> void {
         quant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
+        dequant_descriptor info {
+            .in = in.data(),
+            .out = out.data(),
+            .numel = static_cast<std::int64_t>(in.size()),
+            .scale = scale,
+            .zero_point = zero_point,
+            .format = quant_format::q_uint8
+        };
+        (*this)(info);
     }
 
     auto context::quantize_uint4(
@@ -275,15 +333,15 @@ namespace quant {
         const round_mode mode
     ) -> void {
         std::size_t output_len {(in.size() + 1)>>1};
-        quant_assert(in.size() == output_len, "input and output spans must have the same length, but %zu != %zu", in.size(), output_len);
-        const op_info info {
+        quant_assert(out.size() == output_len, "input and output spans must have the same length, but %zu != %zu", out.size(), output_len);
+        const quant_descriptor info {
             .in = in.data(),
             .out = out.data(),
             .numel = static_cast<std::int64_t>(in.size()),
             .scale = scale,
             .zero_point = zero_point,
             .rnd_mode = mode,
-            .format = op_info::q_i4
+            .format = quant_format::q_uint4
         };
         (*this)(info);
     }

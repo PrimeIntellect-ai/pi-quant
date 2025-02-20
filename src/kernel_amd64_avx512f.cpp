@@ -5,8 +5,12 @@
 #error "Spec level too high"
 #endif
 
-#define Q8_KERNEL_IMPL f32_q8_amd64_avx512f
-#define Q4_KERNEL_IMPL f32_q4_amd64_avx512f
+#define QUANT8_KERNEL_IMPL f32_quant8_amd64_avx512f
+#define QUANT4_KERNEL_IMPL f32_quant4_amd64_avx512f
+#define DEQUANT8_KERNEL_IMPL f32_dequant8_amd64_avx512f
+#define DEQUANT4_KERNEL_IMPL f32_dequant4_amd64_avx512f
 #include "kernels.inl"
-#undef Q8_KERNEL_IMPL
-#undef Q4_KERNEL_IMPL
+#undef QUANT8_KERNEL_IMPL
+#undef QUANT4_KERNEL_IMPL
+#undef DEQUANT8_KERNEL_IMPL
+#undef DEQUANT4_KERNEL_IMPL

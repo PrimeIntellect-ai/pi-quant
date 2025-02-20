@@ -8,6 +8,7 @@
 #include <thread>
 #include <condition_variable>
 #include <optional>
+#include <variant>
 
 #ifdef _MSC_VER
 #define QUANT_EXPORT __declspec(dllexport)
@@ -127,18 +128,31 @@ namespace quant {
             #endif
         };
 
-        struct op_info final {
+        enum class quant_format : bool {
+            q_uint8 = true,
+            q_uint4 = false
+        };
+
+        struct quant_descriptor final {
             const float* in {};
             std::uint8_t* out {};
             std::int64_t numel {};
             float scale {};
             std::int32_t zero_point {};
             round_mode rnd_mode {};
-            enum {
-                q_i8,
-                q_i4
-            } format {q_i8};
+            quant_format format {};
         };
+
+        struct dequant_descriptor final {
+            const std::uint8_t* in {};
+            float* out {};
+            std::int64_t numel {};
+            float scale {};
+            std::int32_t zero_point {};
+            quant_format format {};
+        };
+
+        using quant_command = std::variant<std::monostate, quant_descriptor, dequant_descriptor>;
 
         struct payload {
             prng_state prng;
@@ -152,7 +166,7 @@ namespace quant {
         struct worker final {
             context* ctx;
             alignas(cache_line) payload pl;
-            alignas(cache_line) op_info op {};
+            alignas(cache_line) quant_command cmd {};
             std::optional<std::thread> thread {};
 
             explicit worker(context& ctx, std::int64_t ti, std::int64_t tc);
@@ -178,8 +192,8 @@ namespace quant {
             amd64_cpu_caps cpu_caps {};
         #endif
 
-        auto kickoff_workers(const op_info& info) -> void;
+        auto kickoff_workers(quant_command&& cmd) -> void;
         auto barrier() -> void;
-        auto operator()(const op_info& info) -> void;
+        auto operator()(quant_command&& cmd) -> void;
     };
 }

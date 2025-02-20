@@ -1,7 +1,7 @@
-#ifndef Q8_KERNEL_IMPL
+#ifndef QUANT8_KERNEL_IMPL
 #error "Q8 impl is not defined"
 #endif
-#ifndef Q4_KERNEL_IMPL
+#ifndef QUANT4_KERNEL_IMPL
 #error "Q4 impl is not defined"
 #endif
 
@@ -23,7 +23,7 @@
 #define concat(a, b) a ## b
 #define impl_namespace(a, b) concat(a, _impl)
 
-namespace impl_namespace(Q8_KERNEL_IMPL, _) {
+namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
     static auto __attribute__((hot)) nearest(
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
@@ -174,7 +174,7 @@ namespace impl_namespace(Q8_KERNEL_IMPL, _) {
         std::int64_t i {};
         #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
 
-        #elif defined(__AVX2__)
+        #elif defined(__AVX2__) && 0
             const __m256 vscale = _mm256_set1_ps(scale);
             const __m256i vzp16 = _mm256_set1_epi16(static_cast<short>(zp));
             constexpr std::size_t step = 32;
@@ -214,7 +214,7 @@ namespace impl_namespace(Q8_KERNEL_IMPL, _) {
     }
 };
 
-namespace impl_namespace(Q4_KERNEL_IMPL, _) {
+namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
     static auto __attribute__((hot)) nearest(
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
@@ -255,10 +255,59 @@ namespace impl_namespace(Q4_KERNEL_IMPL, _) {
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
     }
+
+    static auto __attribute__((hot)) dequant(
+       const std::uint8_t* const __restrict__ x,
+       float* const __restrict__ o,
+       const std::int64_t numel,
+       const float scale,
+       const std::int32_t zp
+    ) noexcept -> void {
+        std::int64_t i {};
+        #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
+
+        #elif defined(__AVX2__) && 0
+            const __m256 vscale = _mm256_set1_ps(scale);
+            const __m256i vzp16 = _mm256_set1_epi16(static_cast<short>(zp));
+            constexpr std::size_t step = 32;
+            for (; i+step <= numel; i += step) {
+                __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i));
+                __m128i v_low = _mm256_castsi256_si128(v);
+                __m128i v_high = _mm256_extracti128_si256(v, 1);
+                __m256i v_low_16 = _mm256_cvtepu8_epi16(v_low);
+                __m256i v_high_16 = _mm256_cvtepu8_epi16(v_high);
+                v_low_16 = _mm256_sub_epi16(v_low_16, vzp16);
+                v_high_16 = _mm256_sub_epi16(v_high_16, vzp16);
+                __m256i v_low_32_0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(v_low_16));
+                __m256i v_low_32_1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(v_low_16, 1));
+                __m256i v_high_32_0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(v_high_16));
+                __m256i v_high_32_1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(v_high_16, 1));
+                __m256 f_low_0 = _mm256_cvtepi32_ps(v_low_32_0);
+                __m256 f_low_1 = _mm256_cvtepi32_ps(v_low_32_1);
+                __m256 f_high_0 = _mm256_cvtepi32_ps(v_high_32_0);
+                __m256 f_high_1 = _mm256_cvtepi32_ps(v_high_32_1);
+                f_low_0 = _mm256_mul_ps(f_low_0, vscale);
+                f_low_1 = _mm256_mul_ps(f_low_1, vscale);
+                f_high_0 = _mm256_mul_ps(f_high_0, vscale);
+                f_high_1 = _mm256_mul_ps(f_high_1, vscale);
+                _mm256_storeu_ps(o+i, f_low_0);
+                _mm256_storeu_ps(o+i+8, f_low_1);
+                _mm256_storeu_ps(o+i+16, f_high_0);
+                _mm256_storeu_ps(o+i+24, f_high_1);
+            }
+        #elif defined(__SSE4_2__)
+
+        #elif defined(__aarch64__) && defined(__ARM_NEON__)
+
+        #endif
+        for (; i < numel; ++i) {
+            o[i] = static_cast<float>(x[i] - zp) * scale;
+        }
+    }
 };
 
 namespace quant {
-    auto __attribute__((hot)) Q8_KERNEL_IMPL(
+    auto __attribute__((hot)) QUANT8_KERNEL_IMPL(
       const float* const __restrict__ x,
       std::uint8_t* const __restrict__ o,
       const std::int64_t numel,
@@ -267,11 +316,21 @@ namespace quant {
       const bool sto_rnd,
       prng_state& prng
     ) noexcept -> void {
-        if (sto_rnd) impl_namespace(Q8_KERNEL_IMPL, _)::stochastic(x, o, numel, scale, zp, prng);
-        else impl_namespace(Q8_KERNEL_IMPL, _)::nearest(x, o, numel, scale, zp);
+        if (sto_rnd) impl_namespace(QUANT8_KERNEL_IMPL, _)::stochastic(x, o, numel, scale, zp, prng);
+        else impl_namespace(QUANT8_KERNEL_IMPL, _)::nearest(x, o, numel, scale, zp);
     }
 
-    auto __attribute__((hot)) Q4_KERNEL_IMPL(
+    auto __attribute__((hot)) DEQUANT8_KERNEL_IMPL(
+      const std::uint8_t* const __restrict__ x,
+      float* const __restrict__ o,
+      const std::int64_t numel,
+      const float scale,
+      const std::int32_t zp
+    ) noexcept -> void {
+        impl_namespace(QUANT8_KERNEL_IMPL, _)::dequant(x, o, numel, scale, zp);
+    }
+
+    auto __attribute__((hot)) QUANT4_KERNEL_IMPL(
       const float* const __restrict__ x,
       std::uint8_t* const __restrict__ o,
       const std::int64_t numel,
@@ -280,7 +339,17 @@ namespace quant {
       const bool sto_rnd,
       prng_state& prng
     ) noexcept -> void {
-        if (sto_rnd) impl_namespace(Q4_KERNEL_IMPL, _)::stochastic(x, o, numel, scale, zp, prng);
-        else impl_namespace(Q4_KERNEL_IMPL, _)::nearest(x, o, numel, scale, zp);
+        if (sto_rnd) impl_namespace(QUANT4_KERNEL_IMPL, _)::stochastic(x, o, numel, scale, zp, prng);
+        else impl_namespace(QUANT4_KERNEL_IMPL, _)::nearest(x, o, numel, scale, zp);
+    }
+
+    auto __attribute__((hot)) DEQUANT4_KERNEL_IMPL(
+        const std::uint8_t* const __restrict__ x,
+        float* const __restrict__ o,
+        const std::int64_t numel,
+        const float scale,
+        const std::int32_t zp
+    ) noexcept -> void {
+        impl_namespace(QUANT4_KERNEL_IMPL, _)::dequant(x, o, numel, scale, zp);
     }
 }
