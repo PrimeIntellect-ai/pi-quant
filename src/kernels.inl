@@ -28,10 +28,10 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         const std::int64_t numel,
-        float inv_scale,
+        float scale,
         const std::int32_t zp
    ) noexcept -> void {
-        inv_scale = 1.0f / inv_scale; /* We multiply by reciprocal */
+        scale = 1.0f / scale; /* We multiply by reciprocal */
         std::int64_t i {};
         #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
             const __m512 vinv_scale {_mm512_set1_ps(inv_scale)};
@@ -55,7 +55,7 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
                 _mm512_storeu_si512(reinterpret_cast<__m512i*>(o+i), result);
             }
         #elif defined(__AVX2__)
-            const __m256 vinv_scale {_mm256_set1_ps(inv_scale)};
+            const __m256 vinv_scale {_mm256_set1_ps(scale)};
             const __m256i vzero_point {_mm256_set1_epi32(zp)};
             const __m256i vmin {_mm256_setzero_si256()};
             const __m256i vmax {_mm256_set1_epi32(0xff)};
@@ -82,7 +82,7 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
                 _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i), final);
             }
         #elif defined(__SSE4_2__)
-            const __m128 vinv_scale {_mm_set1_ps(inv_scale)};
+            const __m128 vinv_scale {_mm_set1_ps(scale)};
             const __m128i vzero_point {_mm_set1_epi32(zp)};
             const __m128i vmin {_mm_setzero_si128()};
             const __m128i vmax {_mm_set1_epi32(0xff)};
@@ -136,7 +136,7 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
             }
         #endif
         for (; i < numel; ++i) {
-            const float rnd {std::round(x[i] * inv_scale)};
+            const float rnd {std::round(x[i] * scale)};
             const std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
@@ -146,14 +146,14 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         const std::int64_t numel,
-        float inv_scale,
+        float scale,
         const std::int32_t zp,
         quant::prng_state& prng
     ) noexcept -> void {
-        inv_scale = 1.0f / inv_scale; /* We multiply by reciprocal */
+        scale = 1.0f / scale; /* We multiply by reciprocal */
         std::int64_t i {};
         for (; i < numel; ++i) {
-            float rnd {x[i] * inv_scale};
+            float rnd {x[i] * scale};
             const float dec {std::abs(rnd - std::trunc(rnd))};
             const float xi {prng.gen_canonical()};
             float adj {xi < dec ? 1.0f : 0.0f};
@@ -219,13 +219,13 @@ namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         std::int64_t numel,
-        float inv_scale,
+        float scale,
         const std::int32_t zp
     ) noexcept -> void {
-        inv_scale = 1.0f / inv_scale; /* We multiply by reciprocal */
+        scale = 1.0f / scale; /* We multiply by reciprocal */
         numel = (numel + 1) / 2;
         const auto f = [=](float x) noexcept -> std::uint8_t {
-            return std::clamp<int>(std::round(x * inv_scale) + zp, 0, 0xf);
+            return std::clamp<int>(std::round(x * scale) + zp, 0, 0xf);
         };
         for (std::size_t i{0}; i < numel; ++i) {
             auto hi {f(x[(i<<1)])     & 0b0000'1111};
@@ -238,14 +238,14 @@ namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         const std::int64_t numel,
-        float inv_scale,
+        float scale,
         const std::int32_t zp,
         quant::prng_state& prng
     ) noexcept -> void {
-        inv_scale = 1.0f / inv_scale; /* We multiply by reciprocal */
+        scale = 1.0f / scale; /* We multiply by reciprocal */
         std::int64_t i {};
         for (; i < numel; ++i) {
-            float rnd {x[i] * inv_scale};
+            float rnd {x[i] * scale};
             const float dec {std::abs(rnd - std::trunc(rnd))};
             const float xi {prng.gen_canonical()};
             float adj {xi < dec ? 1.0f : 0.0f};
