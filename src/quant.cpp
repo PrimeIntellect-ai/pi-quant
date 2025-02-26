@@ -255,7 +255,7 @@ namespace quant {
                 auto* const kernel {is_i8 ? dequant8_routines[level] : dequant4_routines[level]};
                 (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point);
             #else
-                auto* const kernel {is_i8 ? &f32_quant8_generic : &f32_quant4_generic};
+                auto* const kernel {is_i8 ? &f32_dequant8_generic : &f32_dequant4_generic};
                 (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point);
             #endif
         }};

@@ -13,7 +13,6 @@
 #include "naive.hpp"
 
 TEST(uint8, round_nearest) {
-    std::cout << "uint8 quant Test..." << std::endl;
     constexpr std::size_t numel {1'000'000};
     std::vector<float> data_in {};
     std::vector<std::uint8_t> data_out_naive {};
@@ -35,12 +34,9 @@ TEST(uint8, round_nearest) {
         auto b = data_out[i];
         ASSERT_EQ(a, b);
     }
-
-    std::cout << "uint8 quant Test passed!" << std::endl;
 }
 
 TEST(uint8, round_stochastic) {
-    std::cout << "uint8 Stochastic Quant Test..." << std::endl;
     constexpr std::size_t numel {1'000'000};
     constexpr std::size_t iters {10};
     constexpr auto zp {128};
@@ -81,12 +77,9 @@ TEST(uint8, round_stochastic) {
     std::cout << "Original avg: " << avg_original << std::endl;
     std::cout << "Quantized uint8 Nearest avg: " << avg_near << std::endl;
     std::cout << "Quantized uint8 Stochastic avg: " << avg_sto << std::endl;
-
-    std::cout << "uint8 stochastic Test passed!" << std::endl;
 }
 
 TEST(uint4, round_nearest) {
-    std::cout << "uint4 quant Test" << std::endl;
     constexpr std::size_t numel {32};
     constexpr std::size_t out_numel {(numel + 1)/2};
     constexpr auto zp {128};
@@ -114,7 +107,5 @@ TEST(uint4, round_nearest) {
             std::abort();
         }
     }
-
-    std::cout << "uint4 quant Test passed!" << std::endl;
 }
 
