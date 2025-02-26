@@ -64,18 +64,16 @@ static auto test_q8_stochastic(std::size_t nt) -> void {
         quant::context ctx {nt};
         ctx.quantize_uint8(data_in, data_out_near, scale, zp, quant::round_mode::nearest);
         ctx.quantize_uint8(data_in, data_out_sto, scale, zp, quant::round_mode::stochastic);
-        float avg_near {std::accumulate(data_out_near.begin(), data_out_near.end(), 0.0f, [](float acc, std::uint8_t xi) {
-            return acc + static_cast<float>(xi);
-        }) / static_cast<float>(numel)};
-        float avg_sto {std::accumulate(data_out_sto.begin(), data_out_sto.end(), 0.0f, [](float acc, std::uint8_t xi) {
-            return acc + static_cast<float>(xi);
-        }) / static_cast<float>(numel)};
-        float avg_original {std::accumulate(data_in.begin(), data_in.end(), 0.0f, [](float acc, float xi) {
-            return acc + xi;
-        }) / static_cast<float>(numel)};
-        float dequant_avg_near = (avg_near - zp)*scale;
-        float dequant_avg_sto  = (avg_sto  - zp)*scale;
-        avgs.push_back({dequant_avg_near, dequant_avg_sto, avg_original});
+        std::vector<float> dequant_near {};
+        std::vector<float> dequant_sto {};
+        dequant_near.resize(numel);
+        dequant_sto.resize(numel);
+        ctx.dequantize_uint8(data_out_near, dequant_near, scale, zp);
+        ctx.dequantize_uint8(data_out_sto, dequant_sto, scale, zp);
+        float avg_near {std::accumulate(dequant_near.begin(), dequant_near.end(), 0.0f) / static_cast<float>(numel)};
+        float avg_sto {std::accumulate(dequant_sto.begin(), dequant_sto.end(), 0.0f) / static_cast<float>(numel)};
+        float avg_original {std::accumulate(data_in.begin(), data_in.end(), 0.0f) / static_cast<float>(numel)};
+        avgs.push_back({avg_near, avg_sto, avg_original});
     }
 
     float avg_near {std::accumulate(avgs.begin(), avgs.end(), 0.0f, [](float acc, const auto& v) { return acc + v[0]; }) / static_cast<float>(iters)};

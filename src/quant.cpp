@@ -204,12 +204,15 @@ namespace quant {
     auto context::worker::exec_and_broadcast() -> void {
         std::int64_t numel {};
         bool is_i8 {};
+        bool is_dequant {};
         if (const auto* quant_desc {std::get_if<quant_descriptor>(&cmd)}; quant_desc) {
             numel = quant_desc->numel;
             is_i8 = quant_desc->format == quant_format::q_uint8;
+            is_dequant = false;
         } else if (const auto* dequant_desc {std::get_if<dequant_descriptor>(&cmd)}; dequant_desc) {
             numel = dequant_desc->numel;
             is_i8 = dequant_desc->format == quant_format::q_uint8;
+            is_dequant = true;
         } else {
             panic("Invalid command type");
         }
@@ -246,9 +249,21 @@ namespace quant {
             #endif
         }};
 
+        const auto dispatch_dequant {[=, this](const std::int64_t oa, const std::int64_t ob, const std::int64_t n, const dequant_descriptor& cmd) noexcept -> void {
+            #ifdef __x86_64__
+                const auto level {static_cast<std::size_t>(ctx->cpu_caps)};
+                auto* const kernel {is_i8 ? dequant8_routines[level] : dequant4_routines[level]};
+                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point);
+            #else
+                auto* const kernel {is_i8 ? &f32_quant8_generic : &f32_quant4_generic};
+                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point);
+            #endif
+        }};
+
         if (const auto partition {partition_row(is_i8)}; partition) [[likely]] {
             const auto [oa, ob, n] {*partition};
-            dispatch_quant(oa, ob, n, std::get<quant_descriptor>(cmd));
+            if (is_dequant) dispatch_dequant(oa, ob, n, std::get<dequant_descriptor>(cmd));
+            else dispatch_quant(oa, ob, n, std::get<quant_descriptor>(cmd));
         }
 
         if (1+ctx->m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx->m_workers.size()) { // Last worker
