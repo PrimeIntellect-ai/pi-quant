@@ -69,12 +69,10 @@ def test_custom_quant_vs_torch():
         zero_point=zero_point
     ))
 
-    """
-        torch_int = torch_quant.int_repr()
+    torch_int = torch_quant.int_repr()
         custom_int = custom_quant.int_repr() if hasattr(custom_quant, "int_repr") else custom_quant
     
         assert torch.allclose(torch_int.float(), custom_int.float(), atol=1)
-    """
 
     torch_dequant = torch_quant.dequantize()
     custom_dequant = torch.tensor([x - zero_point * scale for x in custom_quant.tolist()])
