@@ -8,10 +8,11 @@
 #include <span>
 
 #include <quant.hpp>
+#include <gtest/gtest.h>
 
 #include "naive.hpp"
 
-static auto test_q8(std::size_t nt) -> void {
+TEST(uint8, round_nearest) {
     std::cout << "uint8 quant Test..." << std::endl;
     constexpr std::size_t numel {1'000'000};
     std::vector<float> data_in {};
@@ -26,23 +27,19 @@ static auto test_q8(std::size_t nt) -> void {
     std::ranges::generate(data_in, [&] { return dist(gen); });
 
     q8_naive(data_in, data_out_naive, 0.5, 0);
-    quant::context ctx {nt};
+    quant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
     ctx.quantize_uint8(data_in, data_out, 0.5, 0, quant::round_mode::nearest);
 
     for (std::size_t i {}; i < numel; ++i) {
         auto a = data_out_naive[i];
         auto b = data_out[i];
-        if (a != b) {
-            std::cerr << "Mismatch at index " << i << ": " << static_cast<int>(a) << " != " << static_cast<int>(b) << std::endl;
-            std::cerr << "Original: " << data_in[i] << std::endl;
-            std::abort();
-        }
+        ASSERT_EQ(a, b);
     }
 
     std::cout << "uint8 quant Test passed!" << std::endl;
 }
 
-static auto test_q8_stochastic(std::size_t nt) -> void {
+TEST(uint8, round_stochastic) {
     std::cout << "uint8 Stochastic Quant Test..." << std::endl;
     constexpr std::size_t numel {1'000'000};
     constexpr std::size_t iters {10};
@@ -61,7 +58,7 @@ static auto test_q8_stochastic(std::size_t nt) -> void {
         std::mt19937 gen {rd()};
         std::uniform_real_distribution<float> dist {-1.0f, 1.0f};
         std::ranges::generate(data_in, [&] { return dist(gen); });
-        quant::context ctx {nt};
+        quant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
         ctx.quantize_uint8(data_in, data_out_near, scale, zp, quant::round_mode::nearest);
         ctx.quantize_uint8(data_in, data_out_sto, scale, zp, quant::round_mode::stochastic);
         std::vector<float> dequant_near {};
@@ -88,7 +85,7 @@ static auto test_q8_stochastic(std::size_t nt) -> void {
     std::cout << "uint8 stochastic Test passed!" << std::endl;
 }
 
-static auto test_q4(std::size_t nt) -> void {
+TEST(uint4, round_nearest) {
     std::cout << "uint4 quant Test" << std::endl;
     constexpr std::size_t numel {32};
     constexpr std::size_t out_numel {(numel + 1)/2};
@@ -106,7 +103,7 @@ static auto test_q4(std::size_t nt) -> void {
     std::ranges::generate(data_in, [&] { return dist(gen); });
 
     q4_naive(data_in, data_out_naive, scale, zp);
-    quant::context ctx {nt};
+    quant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
     ctx.quantize_uint4(data_in, data_out, scale, zp, quant::round_mode::nearest);
 
     for (std::size_t i {}; i < out_numel; ++i) {
@@ -119,14 +116,5 @@ static auto test_q4(std::size_t nt) -> void {
     }
 
     std::cout << "uint4 quant Test passed!" << std::endl;
-}
-
-auto main() -> int {
-    const std::size_t nt {std::thread::hardware_concurrency()};
-    std::cout << "Num threads: " << nt << std::endl;
-    test_q8(nt);
-    test_q8_stochastic(nt);
-    test_q4(nt);
-    return 0;
 }
 
