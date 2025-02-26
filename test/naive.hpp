@@ -21,8 +21,8 @@ inline auto q8_naive(
     const double inv_scale {1.0 / scale};
     quant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
     for (std::size_t i {}; i < numel; ++i) {
-        int32_t quant_val = static_cast<int32_t>(std::round(p_in[i] * inv_scale)) + zero_point;
-        p_out[i] = static_cast<uint8_t>(std::clamp(quant_val, 0, 255));
+        std::int32_t quant_val = static_cast<std::int32_t>(std::round(p_in[i] * inv_scale)) + zero_point;
+        p_out[i] = static_cast<std::uint8_t>(std::clamp(quant_val, 0, 255));
     }
 }
 
