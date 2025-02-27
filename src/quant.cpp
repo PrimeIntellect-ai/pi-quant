@@ -326,7 +326,7 @@ namespace quant {
     }
 
     auto context::dequantize_uint8(
-        const std::span<std::uint8_t> in,
+        const std::span<const std::uint8_t> in,
         const std::span<float> out,
         const float scale,
         const std::int32_t zero_point

@@ -24,7 +24,7 @@ extern "C" auto quant_context_destroy(quant_context_t* ctx) -> void {
 }
 
 extern "C" auto quant_uint8(
-    quant_context_t* ctx,
+    quant_context_t* const ctx,
     const float* const in,
     std::uint8_t* const out,
     const std::size_t numel,
@@ -41,6 +41,25 @@ extern "C" auto quant_uint8(
         scale,
         zero_point,
         mode == QUANT_NEAREST ? round_mode::nearest : round_mode::stochastic
+    );
+}
+
+extern "C" auto dequant_uint8(
+    quant_context_t* const ctx,
+    const std::uint8_t* const in,
+    float* const out,
+    const std::size_t numel,
+    const float scale,
+    const std::int32_t zero_point
+) -> void {
+    auto* const ct {std::bit_cast<context*>(ctx)};
+    std::span<const std::uint8_t> span_in {in, in+numel};
+    std::span<float> span_out {out, out+numel};
+    ct->dequantize_uint8(
+        span_in,
+        span_out,
+        scale,
+        zero_point
     );
 }
 

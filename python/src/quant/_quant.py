@@ -65,6 +65,27 @@ class Context:
         ptr_out: ffi.CData = ffi.cast("uint8_t*", ptr_out)
         C.quant_uint8(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, mode.value)
 
+    def ptr_dequant_uint8(
+        self,
+        ptr_in: int,
+        ptr_out: int,
+        *,
+        numel: int,
+        scale: float,
+        zero_point: int
+    ) -> None:
+        """
+            Quantize a float tensor to uint8 tensor.
+            :param ptr_in: input tensor data pointer (must point to a valid, contiguous memory region of type uint8_t (in C uint8_t*))
+            :param ptr_out: output tensor data pointer (must point to a valid, contiguous memory region of type float (in C float*))
+            :param numel: number of elements in the tensor
+            :param scale: quantization scale
+            :param zero_point: quantization zero point
+        """
+        ptr_in: ffi.CData = ffi.cast("uint8_t*", ptr_in)
+        ptr_out: ffi.CData = ffi.cast("float*", ptr_out)
+        C.dequant_uint8(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point)
+
     def ptr_quant_uint4(
         self,
         ptr_in: int,
@@ -99,6 +120,11 @@ class QuantConfig:
     zero_point: int = 0
     mode: RoundMode = RoundMode.NEAREST
     output_dtype: QuantDtype = QuantDtype.INT8
+
+@dataclass
+class DequantConfig:
+    scale: float = 1.0
+    zero_point: int = 0
 
 def compute_config_properties_from_data(ptr: int, numel: int) -> Tuple[float, int]:
     """
@@ -169,6 +195,37 @@ def quant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = None,
     assert out.is_contiguous(), "Output tensor must be contiguous"
 
     ctx.ptr_quant_uint8(tensor.data_ptr(), out.data_ptr(), numel=tensor.numel(), scale=config.scale, zero_point=config.zero_point, mode=config.mode)
+    return out
+
+def dequant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = None, *, config: DequantConfig = DequantConfig(), ctx: Union[Context, None] = None) -> "torch.Tensor":
+    """
+    Dequantize a quantized torch tensor.
+    :param tensor: input tensor
+    :param out: output tensor
+    :param config: dequantization configuration, allow to change zero point and scaling originally used for quantization.
+    :param ctx: quantization context, if None a singleton context is used. If you are using multiprocessing, you should create a new context for each process.
+    """
+    if torch is None:
+        raise ImportError("torch is not installed")
+
+    if ctx is None:
+        ctx = get_default_context()
+
+    assert tensor.is_contiguous(), "Input tensor must be contiguous"
+
+    if tensor.dtype in [torch.int8]:
+        if out is None:
+            out = torch.empty_like(tensor, dtype=torch.float32)
+        elif out.dtype != torch.float32:
+            raise ValueError("Output tensor must be of type float32")
+    elif tensor.dtype in [torch.int4]:
+        raise NotImplementedError("Dequantization from int4 is not implemented yet for torch Tensor")
+    else:
+        raise ValueError(f"Unsupported dtype: {tensor.dtype}")
+
+    assert out.is_contiguous(), "Output tensor must be contiguous"
+
+    ctx.ptr_dequant_uint8(tensor.data_ptr(), out.data_ptr(), numel=tensor.numel(), scale=config.scale, zero_point=config.zero_point)
     return out
 
 def quant_numpy(tensor: np.ndarray, out: Union[np.ndarray, None] = None, *, config: QuantConfig = QuantConfig(), ctx: Union[Context, None] = None) -> np.ndarray:

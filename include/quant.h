@@ -40,6 +40,15 @@ extern QUANT_EXPORT void quant_uint8(
     quant_round_mode_t mode
 );
 
+extern QUANT_EXPORT void dequant_uint8(
+    quant_context_t* ctx,
+    const uint8_t* in,
+    float* out,
+    size_t numel,
+    float scale,
+    int32_t zero_point
+);
+
 extern QUANT_EXPORT void quant_uint4(
     quant_context_t* ctx,
     const float* in,
