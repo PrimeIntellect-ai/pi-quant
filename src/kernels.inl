@@ -117,10 +117,10 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
                 xf1 = vmulq_f32(xf1, vinv_scale);
                 xf2 = vmulq_f32(xf2, vinv_scale);
                 xf3 = vmulq_f32(xf3, vinv_scale);
-                int32x4_t xi0 = vcvtnq_s32_f32(xf0);
-                int32x4_t xi1 = vcvtnq_s32_f32(xf1);
-                int32x4_t xi2 = vcvtnq_s32_f32(xf2);
-                int32x4_t xi3 = vcvtnq_s32_f32(xf3);
+                int32x4_t xi0 = vcvtaq_s32_f32(xf0);
+                int32x4_t xi1 = vcvtaq_s32_f32(xf1);
+                int32x4_t xi2 = vcvtaq_s32_f32(xf2);
+                int32x4_t xi3 = vcvtaq_s32_f32(xf3);
                 xi0 = vaddq_s32(xi0, vzero_point);
                 xi1 = vaddq_s32(xi1, vzero_point);
                 xi2 = vaddq_s32(xi2, vzero_point);

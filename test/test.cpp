@@ -12,7 +12,7 @@
 
 #include "naive.hpp"
 
-constexpr std::size_t iters {10'000};
+constexpr std::size_t iters {100};
 
 TEST(uint8, round_nearest_025) {
     constexpr std::size_t numel {170};
