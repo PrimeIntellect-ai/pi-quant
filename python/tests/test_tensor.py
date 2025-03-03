@@ -66,6 +66,9 @@ def test_custom_quant_vs_torch_uint8():
     scale, zero_point = compute_config_properties_from_data_torch(tensor)
     torch_quant = torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8).int_repr()
     fast_quant = quant_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8, scale=scale, zero_point=zero_point))
+    assert torch_quant.dtype == fast_quant.dtype
+    assert torch_quant.numel() == tensor.numel()
+    assert torch_quant.numel() == fast_quant.numel()
     for i in range(tensor.numel()):
         assert torch_quant[i].item() == fast_quant[i].item()
 
