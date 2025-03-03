@@ -3,11 +3,16 @@ import pytest
 import torch
 from quant import *
 
-def test_ptr_factors_compute():
+def test_ptr_dequant_config_compute():
     tensor = torch.rand(32)
 
-    ctx = Context()
     scale, zero_point = compute_config_properties_from_data(tensor.data_ptr(), tensor.numel())
+    assert scale > 0
+    assert zero_point >= 0
+
+def test_torch_dequant_config_compute():
+    tensor = torch.rand(8192)
+    scale, zero_point = compute_config_properties_from_data_torch(tensor)
     assert scale > 0
     assert zero_point >= 0
 
@@ -24,7 +29,7 @@ def test_ptr_quant_int8():
 def test_quant_torch():
     tensor = torch.rand(32)
     
-    quantized_tensor = quant_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.INT8))
+    quantized_tensor = quant_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8))
     
     assert quantized_tensor.dtype == torch.int8
     assert quantized_tensor.numel() == tensor.numel()
@@ -33,7 +38,7 @@ def test_quant_torch():
 def test_quant_numpy():
     tensor = np.random.rand(32).astype(np.float32)
 
-    quantized_tensor = quant_numpy(tensor, config=QuantConfig(output_dtype=QuantDtype.INT8))
+    quantized_tensor = quant_numpy(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8))
     
     assert quantized_tensor.dtype == np.int8
     assert quantized_tensor.shape == tensor.shape
@@ -43,7 +48,7 @@ def test_quant_numpy():
 def test_quant_torch_half_precision(dtype):
     tensor = torch.rand(32).bfloat16()
     
-    quantized_tensor = quant_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.INT8))
+    quantized_tensor = quant_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8))
     
     assert quantized_tensor.dtype == torch.int8
     assert quantized_tensor.numel() == tensor.numel()
@@ -51,30 +56,26 @@ def test_quant_torch_half_precision(dtype):
 def test_quant_numpy_fp16():
     tensor = np.random.rand(32).astype(np.float16)
     
-    quantized_tensor = quant_numpy(tensor, config=QuantConfig(output_dtype=QuantDtype.INT8))
+    quantized_tensor = quant_numpy(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8))
     
     assert quantized_tensor.dtype == np.int8
     assert quantized_tensor.shape == tensor.shape
 
-"""
-def test_custom_quant_vs_torch():
-    tensor = torch.rand(32)
+def test_custom_quant_vs_torch_uint8():
+    tensor = torch.rand(8192)
+    scale, zero_point = compute_config_properties_from_data_torch(tensor)
+    torch_quant = torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8).int_repr()
+    fast_quant = quant_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8, scale=scale, zero_point=zero_point))
+    for i in range(tensor.numel()):
+        assert torch_quant[i].item() == fast_quant[i].item()
 
+def test_custom_quant_dequant_roundtrip_vs_torch_uint8():
+    tensor = torch.rand(8192)
     scale, zero_point = compute_config_properties_from_data_torch(tensor)
     torch_quant = torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8)
-
-    custom_quant = quant_torch(tensor, config=QuantConfig(
-        output_dtype=QuantDtype.INT8,
-        scale=scale,
-        zero_point=zero_point
-    ))
-
-    torch_int = torch_quant.int_repr()
-        custom_int = custom_quant.int_repr() if hasattr(custom_quant, "int_repr") else custom_quant
-    
-        assert torch.allclose(torch_int.float(), custom_int.float(), atol=1)
-
-    torch_dequant = torch_quant.dequantize()
-    custom_dequant = torch.tensor([x - zero_point * scale for x in custom_quant.tolist()])
-    assert torch.allclose(torch_dequant, custom_dequant, atol=scale)
-"""
+    torch_dequant = torch.dequantize(torch_quant)
+    assert torch_dequant.dtype == torch.float32
+    fast_quant = quant_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8, scale=scale, zero_point=zero_point))
+    fast_dequant = dequant_torch(fast_quant, None, config=DequantConfig(scale, zero_point))
+    assert fast_dequant.dtype == torch.float32
+    assert torch.allclose(torch_dequant, fast_dequant)

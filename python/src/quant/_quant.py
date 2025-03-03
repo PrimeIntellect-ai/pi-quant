@@ -31,8 +31,8 @@ class RoundMode(Enum):
     STOCHASTIC = C.QUANT_STOCHASTIC
     
 class QuantDtype(Enum):
-    INT8 = "int8"
-    INT4 = "int4"
+    UINT8 = 'uint8'
+    UINT4 = 'uint4'
 
 class Context:
     def __init__(self, num_threads: Union[int, None] = None) -> None:
@@ -119,7 +119,7 @@ class QuantConfig:
     scale: float = 1.0
     zero_point: int = 0
     mode: RoundMode = RoundMode.NEAREST
-    output_dtype: QuantDtype = QuantDtype.INT8
+    output_dtype: QuantDtype = QuantDtype.UINT8
 
 @dataclass
 class DequantConfig:
@@ -133,8 +133,8 @@ def compute_config_properties_from_data(ptr: int, numel: int) -> Tuple[float, in
         :param numel: number of elements in the tensor
     """
     ptr: ffi.CData = ffi.cast("float*", ptr)
-    scale = ffi.new("float*")
-    zero_point = ffi.new("int32_t*")
+    scale: ffi.CData = ffi.new("float*")
+    zero_point: ffi.CData = ffi.new("int32_t*")
     C.compute_quant_config_from_data(ptr, numel, scale, zero_point)
     return scale[0], zero_point[0]
 
@@ -184,12 +184,12 @@ def quant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = None,
     else:
         raise ValueError(f"Unsupported dtype: {tensor.dtype}")
     
-    if config.output_dtype == QuantDtype.INT8:
+    if config.output_dtype == QuantDtype.UINT8:
         if out is None:
-            out = torch.empty_like(tensor, dtype=torch.int8)
-        elif out.dtype != torch.int8:
+            out = torch.empty_like(tensor, dtype=torch.uint8)
+        elif out.dtype != torch.uint8:
             raise ValueError("Output tensor must be of type int8")
-    elif config.output_dtype == QuantDtype.INT4:
+    elif config.output_dtype == QuantDtype.UINT4:
         raise NotImplementedError("Quantization to int4 is not implemented yet for torch Tensor")
 
     assert out.is_contiguous(), "Output tensor must be contiguous"
@@ -213,7 +213,7 @@ def dequant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = Non
 
     assert tensor.is_contiguous(), "Input tensor must be contiguous"
 
-    if tensor.dtype in [torch.int8]:
+    if tensor.dtype in [torch.uint8]:
         if out is None:
             out = torch.empty_like(tensor, dtype=torch.float32)
         elif out.dtype != torch.float32:
@@ -251,13 +251,13 @@ def quant_numpy(tensor: np.ndarray, out: Union[np.ndarray, None] = None, *, conf
     else:
         raise ValueError(f"Unsupported dtype: {tensor.dtype}")
 
-    if config.output_dtype == QuantDtype.INT8:
+    if config.output_dtype == QuantDtype.UINT8:
         if out is None:
             out = np.empty_like(tensor, dtype=np.int8)
         elif out.dtype != np.int8:
             raise ValueError("Output tensor must be of type int8")
         
-    elif config.output_dtype == QuantDtype.INT4:
+    elif config.output_dtype == QuantDtype.UINT4:
         raise NotImplementedError("Quantization to int4 is not implemented yet for torch Tensor")
 
     ctx.ptr_quant_uint8(tensor.ctypes.data, out.ctypes.data, numel=tensor.size, scale=config.scale, zero_point=config.zero_point, mode=config.mode)
