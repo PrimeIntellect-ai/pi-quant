@@ -72,6 +72,18 @@ def test_custom_quant_vs_torch_uint8():
     for i in range(tensor.numel()):
         assert torch_quant[i].item() == fast_quant[i].item()
 
+def test_custom_quant_vs_torch_decomposed_uint8():
+    from torch.ao.quantization.fx._decomposed import quantize_per_tensor
+    tensor = torch.rand(8192)
+    scale, zero_point = compute_config_properties_from_data_torch(tensor)
+    torch_quant = quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, quant_min=0, quant_max=255, dtype=torch.uint8)
+    fast_quant = quant_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8, scale=scale, zero_point=zero_point))
+    assert torch_quant.dtype == fast_quant.dtype
+    assert torch_quant.numel() == tensor.numel()
+    assert torch_quant.numel() == fast_quant.numel()
+    for i in range(tensor.numel()):
+        assert torch_quant[i].item() == fast_quant[i].item()
+
 def test_custom_quant_dequant_roundtrip_vs_torch_uint8():
     tensor = torch.rand(8192)
     scale, zero_point = compute_config_properties_from_data_torch(tensor)
