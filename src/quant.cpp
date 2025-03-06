@@ -18,7 +18,7 @@ namespace quant {
         float scale, \
         std::int32_t zero_point, \
         const bool sto_rnd, \
-        quant::prng_state& prng \
+        prng_state& prng \
     ) noexcept -> void
 
     #define decl_dequant_kernel_fn(impl) \
@@ -27,7 +27,8 @@ namespace quant {
             float* __restrict__ o, \
             std::int64_t numel, \
             float scale, \
-            std::int32_t zero_point \
+            std::int32_t zero_point, \
+            reduce_op op \
         ) noexcept -> void
 
     decl_quant_kernel_fn(f32_quant8_generic);
@@ -50,7 +51,8 @@ namespace quant {
         float* __restrict__ o,
         std::int64_t numel,
         float scale,
-        std::int32_t zero_point
+        std::int32_t zero_point,
+        reduce_op op
     ) -> void;
 
     #ifdef __x86_64__
@@ -253,10 +255,10 @@ namespace quant {
             #ifdef __x86_64__
                 const auto level {static_cast<std::size_t>(ctx->cpu_caps)};
                 auto* const kernel {is_i8 ? dequant8_routines[level] : dequant4_routines[level]};
-                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point);
+                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.op);
             #else
                 auto* const kernel {is_i8 ? &f32_dequant8_generic : &f32_dequant4_generic};
-                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point);
+                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.op);
             #endif
         }};
 
@@ -310,8 +312,7 @@ namespace quant {
         const std::span<std::uint8_t> out,
         const float scale,
         const std::int32_t zero_point,
-        const round_mode mode,
-        const reduce_op op
+        const round_mode mode
     ) -> void {
         quant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
         quant_descriptor info {
@@ -322,7 +323,6 @@ namespace quant {
             .zero_point = zero_point,
             .rnd_mode = mode,
             .format = quant_format::q_uint8,
-            .op = op
         };
         (*this)(info);
     }
@@ -331,7 +331,8 @@ namespace quant {
         const std::span<const std::uint8_t> in,
         const std::span<float> out,
         const float scale,
-        const std::int32_t zero_point
+        const std::int32_t zero_point,
+        const reduce_op op
     ) -> void {
         quant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
         dequant_descriptor info {
@@ -340,7 +341,8 @@ namespace quant {
             .numel = static_cast<std::int64_t>(in.size()),
             .scale = scale,
             .zero_point = zero_point,
-            .format = quant_format::q_uint8
+            .format = quant_format::q_uint8,
+            .op = op
         };
         (*this)(info);
     }
@@ -350,8 +352,7 @@ namespace quant {
         const std::span<std::uint8_t> out,
         const float scale,
         const std::int32_t zero_point,
-        const round_mode mode,
-        const reduce_op op
+        const round_mode mode
     ) -> void {
         std::size_t output_len {(in.size() + 1)>>1};
         quant_assert(out.size() == output_len, "input and output spans must have the same length, but %zu != %zu", out.size(), output_len);
@@ -362,6 +363,25 @@ namespace quant {
             .scale = scale,
             .zero_point = zero_point,
             .rnd_mode = mode,
+            .format = quant_format::q_uint4,
+        };
+        (*this)(info);
+    }
+
+    auto context::dequantize_uint4(
+        const std::span<const std::uint8_t> in,
+        const std::span<float> out,
+        const float scale,
+        const std::int32_t zero_point,
+        const reduce_op op
+    ) -> void {
+        quant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
+        dequant_descriptor info {
+            .in = in.data(),
+            .out = out.data(),
+            .numel = static_cast<std::int64_t>(in.size()),
+            .scale = scale,
+            .zero_point = zero_point,
             .format = quant_format::q_uint4,
             .op = op
         };

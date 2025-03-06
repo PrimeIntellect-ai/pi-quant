@@ -16,7 +16,6 @@ extern "C" {
 #define QUANT_EXPORT __attribute__((visibility("default")))
 #endif
 
-
 /* computes and returns {scale, zero_point} derived from the data's mean and stddev. */
 extern QUANT_EXPORT void compute_quant_config_from_data(const float* x, size_t n, float* out_scale, int32_t* out_zero_point);
 
@@ -42,8 +41,7 @@ extern QUANT_EXPORT void quant_uint8(
     size_t numel,
     float scale,
     int32_t zero_point,
-    quant_round_mode_t mode,
-    quant_reduce_op_t op
+    quant_round_mode_t mode
 );
 
 extern QUANT_EXPORT void dequant_uint8(
@@ -52,7 +50,8 @@ extern QUANT_EXPORT void dequant_uint8(
     float* out,
     size_t numel,
     float scale,
-    int32_t zero_point
+    int32_t zero_point,
+    quant_reduce_op_t op
 );
 
 extern QUANT_EXPORT void quant_uint4(
@@ -62,7 +61,16 @@ extern QUANT_EXPORT void quant_uint4(
     size_t numel,
     float scale,
     int32_t zero_point,
-    quant_round_mode_t mode,
+    quant_round_mode_t mode
+);
+
+extern QUANT_EXPORT void dequant_uint4(
+    quant_context_t* ctx,
+    const uint8_t* in,
+    float* out,
+    size_t numel,
+    float scale,
+    int32_t zero_point,
     quant_reduce_op_t op
 );
 

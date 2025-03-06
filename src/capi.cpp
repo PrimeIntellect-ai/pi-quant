@@ -30,8 +30,7 @@ extern "C" auto quant_uint8(
     const std::size_t numel,
     const float scale,
     const std::int32_t zero_point,
-    const quant_round_mode_t mode,
-    const quant_reduce_op_t op
+    const quant_round_mode_t mode
 ) -> void {
     auto* const ct {std::bit_cast<context*>(ctx)};
     std::span<const float> span_in {in, in+numel};
@@ -41,8 +40,7 @@ extern "C" auto quant_uint8(
         span_out,
         scale,
         zero_point,
-        mode == QUANT_NEAREST ? round_mode::nearest : round_mode::stochastic,
-        static_cast<reduce_op>(op)
+        mode == QUANT_NEAREST ? round_mode::nearest : round_mode::stochastic
     );
 }
 
@@ -52,7 +50,8 @@ extern "C" auto dequant_uint8(
     float* const out,
     const std::size_t numel,
     const float scale,
-    const std::int32_t zero_point
+    const std::int32_t zero_point,
+    const quant_reduce_op_t op
 ) -> void {
     auto* const ct {std::bit_cast<context*>(ctx)};
     std::span<const std::uint8_t> span_in {in, in+numel};
@@ -61,7 +60,8 @@ extern "C" auto dequant_uint8(
         span_in,
         span_out,
         scale,
-        zero_point
+        zero_point,
+        static_cast<reduce_op>(op)
     );
 }
 
@@ -72,8 +72,7 @@ extern "C" auto quant_uint4(
     const std::size_t numel,
     const float scale,
     const std::int32_t zero_point,
-    const quant_round_mode_t mode,
-    const quant_reduce_op_t op
+    const quant_round_mode_t mode
 ) -> void {
     auto* const ct {std::bit_cast<context*>(ctx)};
     std::span<const float> span_in {in, in+numel};
@@ -83,7 +82,27 @@ extern "C" auto quant_uint4(
         span_out,
         scale,
         zero_point,
-        mode == QUANT_NEAREST ? round_mode::nearest : round_mode::stochastic,
+        mode == QUANT_NEAREST ? round_mode::nearest : round_mode::stochastic
+    );
+}
+
+extern "C" auto dequant_uint4(
+    quant_context_t* const ctx,
+    const std::uint8_t* const in,
+    float* const out,
+    const std::size_t numel,
+    const float scale,
+    const std::int32_t zero_point,
+    const quant_reduce_op_t op
+) -> void {
+    auto* const ct {std::bit_cast<context*>(ctx)};
+    std::span<const std::uint8_t> span_in {in, in+numel};
+    std::span<float> span_out {out, out+numel};
+    ct->dequantize_uint4(
+        span_in,
+        span_out,
+        scale,
+        zero_point,
         static_cast<reduce_op>(op)
     );
 }

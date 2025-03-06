@@ -56,8 +56,7 @@ class Context:
         numel: int,
         scale: float,
         zero_point: int,
-        mode: RoundMode,
-        op: ReduceOp = ReduceOp.SET
+        mode: RoundMode
     ) -> None:
         """
             Quantize a float tensor to uint8 tensor.
@@ -70,7 +69,7 @@ class Context:
         """
         ptr_in: ffi.CData = ffi.cast("float*", ptr_in)
         ptr_out: ffi.CData = ffi.cast("uint8_t*", ptr_out)
-        C.quant_uint8(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, mode.value, op.value)
+        C.quant_uint8(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, mode.value)
 
     def ptr_dequant_uint8(
         self,
@@ -79,10 +78,11 @@ class Context:
         *,
         numel: int,
         scale: float,
-        zero_point: int
+        zero_point: int,
+        op: ReduceOp = ReduceOp.SET
     ) -> None:
         """
-            Quantize a float tensor to uint8 tensor.
+            Dequantize a uint8 tensor to float tensor.
             :param ptr_in: input tensor data pointer (must point to a valid, contiguous memory region of type uint8_t (in C uint8_t*))
             :param ptr_out: output tensor data pointer (must point to a valid, contiguous memory region of type float (in C float*))
             :param numel: number of elements in the tensor
@@ -91,7 +91,7 @@ class Context:
         """
         ptr_in: ffi.CData = ffi.cast("uint8_t*", ptr_in)
         ptr_out: ffi.CData = ffi.cast("float*", ptr_out)
-        C.dequant_uint8(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point)
+        C.dequant_uint8(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, op.value)
 
     def ptr_quant_uint4(
         self,
@@ -101,8 +101,7 @@ class Context:
         numel: int,
         scale: float,
         zero_point: int,
-        mode: RoundMode,
-        op: ReduceOp = ReduceOp.SET
+        mode: RoundMode
     ) -> None:
         """
            Quantize a float tensor to uint8 tensor.
@@ -115,7 +114,29 @@ class Context:
         """
         ptr_in: ffi.CData = ffi.cast("float*", ptr_in)
         ptr_out: ffi.CData = ffi.cast("uint8_t*", ptr_out)
-        C.quant_uint4(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, mode.value, op.value)
+        C.quant_uint4(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, mode.value)
+
+    def ptr_dequant_uint4(
+        self,
+        ptr_in: int,
+        ptr_out: int,
+        *,
+        numel: int,
+        scale: float,
+        zero_point: int,
+        op: ReduceOp = ReduceOp.SET
+    ) -> None:
+        """
+            Dequantize a uint4 tensor to float tensor.
+            :param ptr_in: input tensor data pointer (must point to a valid, contiguous memory region of type uint8_t (in C uint8_t*))
+            :param ptr_out: output tensor data pointer (must point to a valid, contiguous memory region of type float (in C float*))
+            :param numel: number of elements in the tensor
+            :param scale: quantization scale
+            :param zero_point: quantization zero point
+        """
+        ptr_in: ffi.CData = ffi.cast("uint8_t*", ptr_in)
+        ptr_out: ffi.CData = ffi.cast("float*", ptr_out)
+        C.dequant_uint4(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, op.value)
 
     def __del__(self) -> None:
         """Destroy the quantization context."""
@@ -133,6 +154,7 @@ class QuantConfig:
 class DequantConfig:
     scale: float = 1.0
     zero_point: int = 0
+    reduce_op: ReduceOp = ReduceOp.SET
 
 def compute_config_properties_from_data(ptr: int, numel: int) -> Tuple[float, int]:
     """
@@ -233,7 +255,7 @@ def dequant_torch(tensor: "torch.Tensor", out: Union["torch.Tensor", None] = Non
 
     assert out.is_contiguous(), "Output tensor must be contiguous"
 
-    ctx.ptr_dequant_uint8(tensor.data_ptr(), out.data_ptr(), numel=tensor.numel(), scale=config.scale, zero_point=config.zero_point)
+    ctx.ptr_dequant_uint8(tensor.data_ptr(), out.data_ptr(), numel=tensor.numel(), scale=config.scale, zero_point=config.zero_point, op=config.reduce_op)
     return out
 
 def quant_numpy(tensor: np.ndarray, out: Union[np.ndarray, None] = None, *, config: QuantConfig = QuantConfig(), ctx: Union[Context, None] = None) -> np.ndarray:

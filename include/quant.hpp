@@ -88,8 +88,8 @@ namespace quant {
     #endif
 
     enum class reduce_op {
-        set, // output[i] = quantize(input[i])
-        add, // output[i] += quantize(input[i])
+        set, // output[i] = dequantize(input[i])
+        add, // output[i] += qdeuantize(input[i])
     };
 
     class QUANT_EXPORT context final {
@@ -106,15 +106,15 @@ namespace quant {
             std::span<std::uint8_t> out,
             float scale,
             std::int32_t zero_point,
-            round_mode mode,
-            reduce_op op
+            round_mode mode
         ) -> void;
 
         auto dequantize_uint8(
             std::span<const std::uint8_t> in,
             std::span<float> out,
             float scale,
-            std::int32_t zero_point
+            std::int32_t zero_point,
+            reduce_op op
         ) -> void;
 
         auto quantize_uint4(
@@ -122,8 +122,15 @@ namespace quant {
             std::span<std::uint8_t> out,
             float scale,
             std::int32_t zero_point,
-            round_mode mode,
-            reduce_op
+            round_mode mode
+        ) -> void;
+
+        auto dequantize_uint4(
+            std::span<const std::uint8_t> in,
+            std::span<float> out,
+            float scale,
+            std::int32_t zero_point,
+            reduce_op op
         ) -> void;
 
     private:
@@ -148,7 +155,6 @@ namespace quant {
             std::int32_t zero_point {};
             round_mode rnd_mode {};
             quant_format format {};
-            reduce_op op {};
         };
 
         struct dequant_descriptor final {
@@ -158,6 +164,7 @@ namespace quant {
             float scale {};
             std::int32_t zero_point {};
             quant_format format {};
+            reduce_op op {};
         };
 
         using quant_command = std::variant<std::monostate, quant_descriptor, dequant_descriptor>;

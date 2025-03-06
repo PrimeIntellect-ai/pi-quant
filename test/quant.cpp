@@ -33,7 +33,7 @@ TEST(quant, uint8_round_nearest) {
         std::ranges::generate(data_in, [&] { return dist(gen); });
         q8_naive(data_in, data_out_naive, scale, zero_point);
         quant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
-        ctx.quantize_uint8(data_in, data_out, scale, zero_point, quant::round_mode::nearest, quant::reduce_op::set);
+        ctx.quantize_uint8(data_in, data_out, scale, zero_point, quant::round_mode::nearest);
         for (std::size_t i {}; i < numel; ++i) {
             if (data_out[i] != data_out_naive[i]) {
                 std::cout << "Mismatch at index " << i << ": " << static_cast<int>(data_out[i]) << " != " << static_cast<int>(data_out_naive[i]) << std::endl;
@@ -62,7 +62,7 @@ TEST(quant, uint8_round_nearest_025) {
         std::ranges::generate(data_in, [&] { return 0.25f; });
         q8_naive(data_in, data_out_naive, scale, zero_point);
         quant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
-        ctx.quantize_uint8(data_in, data_out, scale, zero_point, quant::round_mode::nearest, quant::reduce_op::set);
+        ctx.quantize_uint8(data_in, data_out, scale, zero_point, quant::round_mode::nearest);
         for (std::size_t i {}; i < numel; ++i) {
             if (data_out[i] != data_out_naive[i]) {
                 std::cout << "Mismatch at index " << i << ": " << static_cast<int>(data_out[i]) << " != " << static_cast<int>(data_out_naive[i]) << std::endl;
@@ -92,14 +92,14 @@ TEST(quant, uint8_round_stochastic) {
         data_out_near.resize(numel);
         std::ranges::generate(data_in, [&] { return dist(gen); });
         quant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
-        ctx.quantize_uint8(data_in, data_out_near, scale, zero_point, quant::round_mode::nearest, quant::reduce_op::set);
-        ctx.quantize_uint8(data_in, data_out_sto, scale, zero_point, quant::round_mode::stochastic, quant::reduce_op::set);
+        ctx.quantize_uint8(data_in, data_out_near, scale, zero_point, quant::round_mode::nearest);
+        ctx.quantize_uint8(data_in, data_out_sto, scale, zero_point, quant::round_mode::stochastic);
         std::vector<float> dequant_near {};
         std::vector<float> dequant_sto {};
         dequant_near.resize(numel);
         dequant_sto.resize(numel);
-        ctx.dequantize_uint8(data_out_near, dequant_near, scale, zero_point);
-        ctx.dequantize_uint8(data_out_sto, dequant_sto, scale, zero_point);
+        ctx.dequantize_uint8(data_out_near, dequant_near, scale, zero_point, quant::reduce_op::set);
+        ctx.dequantize_uint8(data_out_sto, dequant_sto, scale, zero_point, quant::reduce_op::set);
         float avg_near {std::accumulate(dequant_near.begin(), dequant_near.end(), 0.0f) / static_cast<float>(numel)};
         float avg_sto {std::accumulate(dequant_sto.begin(), dequant_sto.end(), 0.0f) / static_cast<float>(numel)};
         float avg_original {std::accumulate(data_in.begin(), data_in.end(), 0.0f) / static_cast<float>(numel)};
@@ -128,7 +128,7 @@ TEST(quant, uint4_round_nearest) {
 
         q4_naive(data_in, data_out_naive, scale, zero_point);
         quant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
-        ctx.quantize_uint4(data_in, data_out, scale, zero_point, quant::round_mode::nearest, quant::reduce_op::set);
+        ctx.quantize_uint4(data_in, data_out, scale, zero_point, quant::round_mode::nearest);
 
         for (std::size_t i {}; i < out_numel; ++i) {
             auto a = data_out_naive[i];
