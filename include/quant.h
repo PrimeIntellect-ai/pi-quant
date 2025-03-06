@@ -23,9 +23,14 @@ extern QUANT_EXPORT void compute_quant_config_from_data(const float* x, size_t n
 typedef struct quant_context_t quant_context_t; /* Opaque context ptr */
 
 typedef enum quant_round_mode_t {
-    QUANT_NEAREST = 1,
-    QUANT_STOCHASTIC = 0
+    QUANT_NEAREST,
+    QUANT_STOCHASTIC
 } quant_round_mode_t;
+
+typedef enum quant_reduce_op_t {
+    QUANT_REDUCE_OP_SET, /* output[i] = quantize(input[i]) */
+    QUANT_REDUCE_OP_ADD, /* output[i] += quantize(input[i]) */
+} quant_reduce_op_t;
 
 extern QUANT_EXPORT quant_context_t* quant_context_create(size_t num_threads);
 extern QUANT_EXPORT void quant_context_destroy(quant_context_t* ctx);
@@ -37,7 +42,8 @@ extern QUANT_EXPORT void quant_uint8(
     size_t numel,
     float scale,
     int32_t zero_point,
-    quant_round_mode_t mode
+    quant_round_mode_t mode,
+    quant_reduce_op_t op
 );
 
 extern QUANT_EXPORT void dequant_uint8(
@@ -56,7 +62,8 @@ extern QUANT_EXPORT void quant_uint4(
     size_t numel,
     float scale,
     int32_t zero_point,
-    quant_round_mode_t mode
+    quant_round_mode_t mode,
+    quant_reduce_op_t op
 );
 
 #ifdef __cplusplus

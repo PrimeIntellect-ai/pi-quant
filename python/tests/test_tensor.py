@@ -31,7 +31,7 @@ def test_quant_torch():
     
     quantized_tensor = quant_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8))
     
-    assert quantized_tensor.dtype == torch.int8
+    assert quantized_tensor.dtype == torch.uint8
     assert quantized_tensor.numel() == tensor.numel()
     
 
@@ -50,7 +50,7 @@ def test_quant_torch_half_precision(dtype):
     
     quantized_tensor = quant_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8))
     
-    assert quantized_tensor.dtype == torch.int8
+    assert quantized_tensor.dtype == torch.uint8
     assert quantized_tensor.numel() == tensor.numel()
     
 def test_quant_numpy_fp16():

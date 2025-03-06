@@ -71,9 +71,9 @@ namespace quant {
         }
     };
 
-    enum class round_mode : bool {
-        nearest = true,
-        stochastic = false
+    enum class round_mode {
+        nearest,
+        stochastic
     };
 
     #ifdef __x86_64__
@@ -86,6 +86,11 @@ namespace quant {
             num_
         };
     #endif
+
+    enum class reduce_op {
+        set, // output[i] = quantize(input[i])
+        add, // output[i] += quantize(input[i])
+    };
 
     class QUANT_EXPORT context final {
     public:
@@ -101,7 +106,8 @@ namespace quant {
             std::span<std::uint8_t> out,
             float scale,
             std::int32_t zero_point,
-            round_mode mode
+            round_mode mode,
+            reduce_op op
         ) -> void;
 
         auto dequantize_uint8(
@@ -116,7 +122,8 @@ namespace quant {
             std::span<std::uint8_t> out,
             float scale,
             std::int32_t zero_point,
-            round_mode mode
+            round_mode mode,
+            reduce_op
         ) -> void;
 
     private:
@@ -141,6 +148,7 @@ namespace quant {
             std::int32_t zero_point {};
             round_mode rnd_mode {};
             quant_format format {};
+            reduce_op op {};
         };
 
         struct dequant_descriptor final {

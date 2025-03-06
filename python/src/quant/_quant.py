@@ -29,7 +29,13 @@ ffi, C = load_native_module()
 class RoundMode(Enum):
     NEAREST = C.QUANT_NEAREST
     STOCHASTIC = C.QUANT_STOCHASTIC
-    
+
+@unique
+class ReduceOp(Enum):
+    SET = C.QUANT_REDUCE_OP_SET
+    ADD = C.QUANT_REDUCE_OP_ADD
+
+@unique
 class QuantDtype(Enum):
     UINT8 = 'uint8'
     UINT4 = 'uint4'
@@ -51,6 +57,7 @@ class Context:
         scale: float,
         zero_point: int,
         mode: RoundMode,
+        op: ReduceOp = ReduceOp.SET
     ) -> None:
         """
             Quantize a float tensor to uint8 tensor.
@@ -63,7 +70,7 @@ class Context:
         """
         ptr_in: ffi.CData = ffi.cast("float*", ptr_in)
         ptr_out: ffi.CData = ffi.cast("uint8_t*", ptr_out)
-        C.quant_uint8(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, mode.value)
+        C.quant_uint8(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, mode.value, op.value)
 
     def ptr_dequant_uint8(
         self,
@@ -95,6 +102,7 @@ class Context:
         scale: float,
         zero_point: int,
         mode: RoundMode,
+        op: ReduceOp = ReduceOp.SET
     ) -> None:
         """
            Quantize a float tensor to uint8 tensor.
@@ -107,7 +115,7 @@ class Context:
         """
         ptr_in: ffi.CData = ffi.cast("float*", ptr_in)
         ptr_out: ffi.CData = ffi.cast("uint8_t*", ptr_out)
-        C.quant_uint4(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, mode.value)
+        C.quant_uint4(self.__ctx, ptr_in, ptr_out, numel, scale, zero_point, mode.value, op.value)
 
     def __del__(self) -> None:
         """Destroy the quantization context."""

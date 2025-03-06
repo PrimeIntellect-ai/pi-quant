@@ -40,7 +40,7 @@ auto main() -> int {
     quant::context ctx {nt};
 
     bench.run("OPTIMIZED", [&] {
-        ctx.quantize_uint8(data_in, data_out, 1.0, 0, quant::round_mode::nearest);
+        ctx.quantize_uint8(data_in, data_out, 1.0, 0, quant::round_mode::nearest, quant::reduce_op::set);
     });
 
     ankerl::nanobench::doNotOptimizeAway(data_in.data());

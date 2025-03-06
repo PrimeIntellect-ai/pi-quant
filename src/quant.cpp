@@ -310,7 +310,8 @@ namespace quant {
         const std::span<std::uint8_t> out,
         const float scale,
         const std::int32_t zero_point,
-        const round_mode mode
+        const round_mode mode,
+        const reduce_op op
     ) -> void {
         quant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
         quant_descriptor info {
@@ -320,7 +321,8 @@ namespace quant {
             .scale = scale,
             .zero_point = zero_point,
             .rnd_mode = mode,
-            .format = quant_format::q_uint8
+            .format = quant_format::q_uint8,
+            .op = op
         };
         (*this)(info);
     }
@@ -348,7 +350,8 @@ namespace quant {
         const std::span<std::uint8_t> out,
         const float scale,
         const std::int32_t zero_point,
-        const round_mode mode
+        const round_mode mode,
+        const reduce_op op
     ) -> void {
         std::size_t output_len {(in.size() + 1)>>1};
         quant_assert(out.size() == output_len, "input and output spans must have the same length, but %zu != %zu", out.size(), output_len);
@@ -359,7 +362,8 @@ namespace quant {
             .scale = scale,
             .zero_point = zero_point,
             .rnd_mode = mode,
-            .format = quant_format::q_uint4
+            .format = quant_format::q_uint4,
+            .op = op
         };
         (*this)(info);
     }

@@ -28,7 +28,7 @@ TEST(dequant, uint8_round_nearest) {
         std::ranges::generate(data_in, [&] { return dist(gen); });
         auto [scale, zero_point] {quant::compute_quant_config_from_data(data_in)};
         quant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
-        ctx.quantize_uint8(data_in, quantized, scale, zero_point, quant::round_mode::nearest);
+        ctx.quantize_uint8(data_in, quantized, scale, zero_point, quant::round_mode::nearest, quant::reduce_op::set);
 
         std::vector<float> dequantized {};
         dequantized.resize(numel);
@@ -55,7 +55,7 @@ TEST(dequant, uint8_round_stochastic) {
         std::ranges::generate(data_in, [&] { return dist(gen); });
         auto [scale, zero_point] {quant::compute_quant_config_from_data(data_in)};
         quant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
-        ctx.quantize_uint8(data_in, quantized, scale, zero_point, quant::round_mode::stochastic);
+        ctx.quantize_uint8(data_in, quantized, scale, zero_point, quant::round_mode::stochastic, quant::reduce_op::set);
 
         std::vector<float> dequantized {};
         dequantized.resize(numel);
