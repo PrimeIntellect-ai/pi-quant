@@ -12,10 +12,10 @@ num_runs = 1000
 numel = 27264000 #  Value from realistic test
 
 def quantize_torch_fx(tensor, scale, zero_point):
-    return torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8).int_repr()
+    return quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, quant_min=0, quant_max=255, dtype=torch.uint8)
 
 def quantize_torch_builtin(tensor, scale, zero_point):
-    return quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, quant_min=0, quant_max=255, dtype=torch.uint8)
+    return torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8).int_repr()
 
 def quantize_fast(tensor, scale, zero_point):
     return quant.quant_torch(tensor, config=quant.QuantConfig(output_dtype=quant.QuantDtype.UINT8, scale=scale, zero_point=zero_point))
