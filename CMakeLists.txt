@@ -47,7 +47,7 @@ if (${IS_AMD64})
 endif()
 add_library(quant SHARED ${QUANT_SOURCES})
 target_compile_options(quant PRIVATE -fomit-frame-pointer -fno-rtti -fno-exceptions)
-target_include_directories(quant PRIVATE include)
+target_include_directories(quant PUBLIC include)
 
 # release mode opt
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
