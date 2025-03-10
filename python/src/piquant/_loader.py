@@ -5,8 +5,8 @@ import sys
 
 MAG_LIBS: List[Tuple[str, str]] = [
     ('win32', 'piquant.dll'),
-    ('linux', 'libquant.so'),
-    ('darwin', 'libquant.dylib'),
+    ('linux', 'libpiquant.so'),
+    ('darwin', 'libpiquant.dylib'),
 ]
 
 DECLS: str = """
