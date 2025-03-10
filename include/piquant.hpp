@@ -76,6 +76,11 @@ namespace piquant {
         stochastic
     };
 
+    enum class dtype {
+        uint8,
+        uint4
+    };
+
     #ifdef __x86_64__
         enum class amd64_cpu_caps {
             none=0,
@@ -133,6 +138,12 @@ namespace piquant {
             reduce_op op
         ) -> void;
 
+        auto quantize_dequantize_redundant(
+            std::span<const float> in,
+            std::span<std::uint8_t> out,
+            dtype format
+        ) -> void;
+
     private:
         static constexpr std::size_t cache_line {
             #ifdef __cpp_lib_hardware_interference_size
@@ -142,11 +153,6 @@ namespace piquant {
             #endif
         };
 
-        enum class quant_format : bool {
-            q_uint8 = true,
-            q_uint4 = false
-        };
-
         struct quant_descriptor final {
             const float* in {};
             std::uint8_t* out {};
@@ -154,7 +160,7 @@ namespace piquant {
             float scale {};
             std::int32_t zero_point {};
             round_mode rnd_mode {};
-            quant_format format {};
+            dtype format {};
         };
 
         struct dequant_descriptor final {
@@ -163,7 +169,7 @@ namespace piquant {
             std::int64_t numel {};
             float scale {};
             std::int32_t zero_point {};
-            quant_format format {};
+            dtype format {};
             reduce_op op {};
         };
 

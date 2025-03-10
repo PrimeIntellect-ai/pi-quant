@@ -209,11 +209,11 @@ namespace piquant {
         bool is_dequant {};
         if (const auto* quant_desc {std::get_if<quant_descriptor>(&cmd)}; quant_desc) {
             numel = quant_desc->numel;
-            is_i8 = quant_desc->format == quant_format::q_uint8;
+            is_i8 = quant_desc->format == dtype::uint8;
             is_dequant = false;
         } else if (const auto* dequant_desc {std::get_if<dequant_descriptor>(&cmd)}; dequant_desc) {
             numel = dequant_desc->numel;
-            is_i8 = dequant_desc->format == quant_format::q_uint8;
+            is_i8 = dequant_desc->format == dtype::uint8;
             is_dequant = true;
         } else {
             panic("Invalid command type");
@@ -322,7 +322,7 @@ namespace piquant {
             .scale = scale,
             .zero_point = zero_point,
             .rnd_mode = mode,
-            .format = quant_format::q_uint8,
+            .format = dtype::uint8,
         };
         (*this)(info);
     }
@@ -341,7 +341,7 @@ namespace piquant {
             .numel = static_cast<std::int64_t>(in.size()),
             .scale = scale,
             .zero_point = zero_point,
-            .format = quant_format::q_uint8,
+            .format = dtype::uint4,
             .op = op
         };
         (*this)(info);
@@ -363,7 +363,7 @@ namespace piquant {
             .scale = scale,
             .zero_point = zero_point,
             .rnd_mode = mode,
-            .format = quant_format::q_uint4,
+            .format = dtype::uint8
         };
         (*this)(info);
     }
@@ -382,9 +382,17 @@ namespace piquant {
             .numel = static_cast<std::int64_t>(in.size()),
             .scale = scale,
             .zero_point = zero_point,
-            .format = quant_format::q_uint4,
+            .format = dtype::uint4,
             .op = op
         };
         (*this)(info);
+    }
+
+    auto quantize_dequantize_redundant(
+        std::span<const float> in,
+        std::span<std::uint8_t> out,
+        dtype format
+    ) -> void {
+
     }
 }
