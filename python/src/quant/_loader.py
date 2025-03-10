@@ -4,7 +4,7 @@ from cffi import FFI
 import sys
 
 MAG_LIBS: List[Tuple[str, str]] = [
-    ('win32', 'quant.dll'),
+    ('win32', 'piquant.dll'),
     ('linux', 'libquant.so'),
     ('darwin', 'libquant.dylib'),
 ]
@@ -77,7 +77,7 @@ def load_native_module() -> Tuple[FFI, object]:
     # Locate the library in the package directory
     pkg_path = Path(__file__).parent
     lib_path = pkg_path / lib_name
-    assert lib_path.exists(), f'quant shared library not found: {lib_path}'
+    assert lib_path.exists(), f'piquant shared library not found: {lib_path}'
 
     ffi = FFI()
     ffi.cdef(DECLS)  # Define the C declarations

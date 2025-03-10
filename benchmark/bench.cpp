@@ -6,7 +6,7 @@
 #include <random>
 #include <span>
 
-#include <quant.hpp>
+#include <piquant.hpp>
 #include "../test/naive.hpp"
 
 #define ANKERL_NANOBENCH_IMPLEMENT
@@ -26,7 +26,7 @@ auto main() -> int {
 
     ankerl::nanobench::Bench bench {};
     bench.title("int8 Quantization Benchmark")
-        .unit("quant")
+        .unit("piquant")
         .minEpochIterations(10)
         .relative(true);
     bench.performanceCounters(true);
@@ -37,10 +37,10 @@ auto main() -> int {
     ankerl::nanobench::doNotOptimizeAway(data_in.data());
     ankerl::nanobench::doNotOptimizeAway(data_out.data());
 
-    quant::context ctx {nt};
+    piquant::context ctx {nt};
 
     bench.run("OPTIMIZED", [&] {
-        ctx.quantize_uint8(data_in, data_out, 1.0, 0, quant::round_mode::nearest);
+        ctx.quantize_uint8(data_in, data_out, 1.0, 0, piquant::round_mode::nearest);
     });
 
     ankerl::nanobench::doNotOptimizeAway(data_in.data());

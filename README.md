@@ -63,7 +63,7 @@ The most optimal kernel is selected at runtime.
 
 ## Usage
 
-The main interface is provided through the `quant::context` class, which allows for quantization of data using the `quantize_uint8` and `quantize_uint4` methods. These methods require input data, output buffers, a scale factor, a zero point, and a rounding mode.
+The main interface is provided through the `piquant::context` class, which allows for quantization of data using the `quantize_uint8` and `quantize_uint4` methods. These methods require input data, output buffers, a scale factor, a zero point, and a rounding mode.
 
 ## License
 

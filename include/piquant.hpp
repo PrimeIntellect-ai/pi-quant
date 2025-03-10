@@ -16,7 +16,7 @@
 #define QUANT_EXPORT __attribute__((visibility("default")))
 #endif
 
-namespace quant {
+namespace piquant {
     // computes and returns {scale, zero_point} derived from the data's mean and stddev.
     [[nodiscard]] extern auto compute_quant_config_from_data(std::span<const float> x) -> std::pair<float, std::int32_t>;
 
@@ -29,7 +29,7 @@ namespace quant {
 
     #define quant_assert(expr, msg, ...) \
         if ((!(expr))) [[unlikely]] { \
-            ::quant::panic("%s:%d Assertion failed: " #expr " <- " msg, __FILE__, __LINE__, ## __VA_ARGS__);\
+            ::piquant::panic("%s:%d Assertion failed: " #expr " <- " msg, __FILE__, __LINE__, ## __VA_ARGS__);\
         }
     #define quant_assert2(expr) quant_assert(expr, "")
 

@@ -32,7 +32,7 @@ class CMakeBuildExecutor(build_ext):
             print(subprocess.check_output(['cmake', '--version']))
         except OSError:
             raise BuildException(
-                'CMake must be installed to build the quant binaries from source. Please install CMake and try again.'
+                'CMake must be installed to build the piquant binaries from source. Please install CMake and try again.'
             )
         super().run()
         for ext in self.extensions:
@@ -45,11 +45,11 @@ class CMakeBuildExecutor(build_ext):
         os.makedirs(self.build_temp)
         
         cmake_args = [
-            f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={os.path.abspath(os.path.join(self.build_lib, "quant"))}',
+            f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={os.path.abspath(os.path.join(self.build_lib, "piquant"))}',
             '-DCMAKE_BUILD_TYPE=Release',
         ]
         build_args = [
-            '--target quant',
+            '--target piquant',
             f'-j{NUM_JOBS}',
             '-v',
         ]
@@ -65,14 +65,14 @@ class CMakeBuildExecutor(build_ext):
         )
         
 setup(
-    name='quant',
-    packages=['quant'],
+    name='piquant',
+    packages=['piquant'],
     package_dir={'': 'src'},  # tell setuptools packages are under src/
     package_data={
-        'quant': ['libquant.so', 'libquant.dylib', 'libquant.dll'],
+        'piquant': ['libquant.so', 'libquant.dylib', 'libquant.dll'],
     },
     include_package_data=True,
-    ext_modules=[CMakeBuildExtension('quant', root_dir=CMAKE_ROOT)],
+    ext_modules=[CMakeBuildExtension('piquant', root_dir=CMAKE_ROOT)],
     cmdclass={
         'build_ext': CMakeBuildExecutor,
     },

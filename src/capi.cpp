@@ -1,8 +1,8 @@
-#include <quant.h>
-#include <quant.hpp>
+#include <piquant.h>
+#include <piquant.hpp>
 #include <bit>
 
-using namespace quant;
+using namespace piquant;
 
 struct quant_context_t final {
     context* ctx {};

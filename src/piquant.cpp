@@ -1,4 +1,4 @@
-#include "quant.hpp"
+#include "piquant.hpp"
 
 #include <cassert>
 #include <cstdarg>
@@ -9,7 +9,7 @@
 #include <iostream>
 #include <numeric>
 
-namespace quant {
+namespace piquant {
     #define decl_quant_kernel_fn(impl) \
         extern auto impl( \
         const float* __restrict__ x, \

@@ -5,7 +5,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="" # Force CPU usage
 
 import torch
 from torch.ao.quantization.fx._decomposed import quantize_per_tensor
-import quant
+import piquant
 import matplotlib.pyplot as plt
 
 num_runs = 1000
@@ -18,10 +18,10 @@ def quantize_torch_builtin(tensor, scale, zero_point):
     return torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8).int_repr()
 
 def quantize_fast(tensor, scale, zero_point):
-    return quant.quant_torch(tensor, config=quant.QuantConfig(output_dtype=quant.QuantDtype.UINT8, scale=scale, zero_point=zero_point))
+    return piquant.quant_torch(tensor, config=piquant.QuantConfig(output_dtype=piquant.QuantDtype.UINT8, scale=scale, zero_point=zero_point))
 
 tensor = torch.rand(numel, device='cpu')
-scale, zero_point = quant.compute_config_properties_from_data_torch(tensor)
+scale, zero_point = piquant.compute_config_properties_from_data_torch(tensor)
 
 def benchmark_torch_fx_quant():
     quantize_torch_fx(tensor, scale, zero_point)

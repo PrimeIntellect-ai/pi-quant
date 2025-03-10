@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 import torch
-from quant import *
+from piquant import *
 
 def test_ptr_dequant_config_compute():
     tensor = torch.rand(32)

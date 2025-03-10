@@ -5,7 +5,7 @@
 #error "Q4 impl is not defined"
 #endif
 
-#include <quant.hpp>
+#include <piquant.hpp>
 
 
 #include <algorithm>
@@ -210,7 +210,7 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
         const std::int64_t numel,
         float scale,
         const std::int32_t zp,
-        quant::prng_state& prng
+        piquant::prng_state& prng
     ) noexcept -> void {
         scale = 1.0f / scale; /* We multiply by reciprocal */
         std::int64_t i {};
@@ -226,7 +226,7 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
         }
     }
 
-    template <const quant::reduce_op op>
+    template <const piquant::reduce_op op>
     static auto __attribute__((hot)) dequant(
        const std::uint8_t* const __restrict__ x,
        float* const __restrict__ o,
@@ -244,16 +244,16 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
         #elif defined(__aarch64__) && defined(__ARM_NEON__)
 
         #endif
-        if constexpr (op == quant::reduce_op::set) {
+        if constexpr (op == piquant::reduce_op::set) {
             for (; i < numel; ++i) {
                 o[i] = static_cast<float>(x[i] - zp) * scale;
             }
-        } else if constexpr (op == quant::reduce_op::add) {
+        } else if constexpr (op == piquant::reduce_op::add) {
             for (; i < numel; ++i) {
                 o[i] += static_cast<float>(x[i] - zp) * scale;
             }
         } else {
-            quant::panic("Invalid reduce operation");
+            piquant::panic("Invalid reduce operation");
         }
     }
 };
@@ -284,7 +284,7 @@ namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
         const std::int64_t numel,
         float scale,
         const std::int32_t zp,
-        quant::prng_state& prng
+        piquant::prng_state& prng
     ) noexcept -> void {
         scale = 1.0f / scale; /* We multiply by reciprocal */
         std::int64_t i {};
@@ -300,7 +300,7 @@ namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
         }
     }
 
-    template <const quant::reduce_op op>
+    template <const piquant::reduce_op op>
     static auto __attribute__((hot)) dequant(
        const std::uint8_t* const __restrict__ x,
        float* const __restrict__ o,
@@ -345,21 +345,21 @@ namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
         #elif defined(__aarch64__) && defined(__ARM_NEON__)
 
         #endif
-        if constexpr (op == quant::reduce_op::set) {
+        if constexpr (op == piquant::reduce_op::set) {
             for (; i < numel; ++i) {
                 o[i] = static_cast<float>(x[i] - zp) * scale;
             }
-        } else if constexpr (op == quant::reduce_op::add) {
+        } else if constexpr (op == piquant::reduce_op::add) {
             for (; i < numel; ++i) {
                 o[i] += static_cast<float>(x[i] - zp) * scale;
             }
         } else {
-            quant::panic("Invalid reduce operation");
+            piquant::panic("Invalid reduce operation");
         }
     }
 };
 
-namespace quant {
+namespace piquant {
     auto __attribute__((hot)) QUANT8_KERNEL_IMPL(
       const float* const __restrict__ x,
       std::uint8_t* const __restrict__ o,

@@ -4,7 +4,7 @@ from enum import Enum, unique
 from typing import Union, TYPE_CHECKING, Tuple
 from functools import lru_cache
 
-from quant._loader import load_native_module
+from piquant._loader import load_native_module
 import importlib.util
 
 
