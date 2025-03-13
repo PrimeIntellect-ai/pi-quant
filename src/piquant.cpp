@@ -105,33 +105,35 @@ namespace piquant {
         decl_quant_kernel_fn(f32_quant4_amd64_avx512f);
         decl_dequant_kernel_fn(f32_dequant4_amd64_avx512f);
 
-        static constexpr std::array<quant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> quant8_routines = {
-            &f32_quant8_generic,
-            &f32_quant8_amd64_sse42,
-            &f32_quant8_amd64_avx2,
-            &f32_quant8_amd64_avx512f
+        static constexpr auto k_num_cpu_levels {static_cast<std::size_t>(amd64_cpu_caps::num_)};
+        static constexpr auto k_num_dtypes {2};
+
+        static constexpr std::array quant_routines = {
+            std::array<quant_kernel*, k_num_dtypes> {&f32_quant8_generic, &f32_quant4_generic},
+            std::array<quant_kernel*, k_num_dtypes> {&f32_quant8_amd64_sse42, &f32_quant4_amd64_sse42},
+            std::array<quant_kernel*, k_num_dtypes> {&f32_quant8_amd64_avx2, &f32_quant4_amd64_avx2},
+            std::array<quant_kernel*, k_num_dtypes> {&f32_quant8_amd64_avx512f, &f32_quant4_amd64_avx512f},
         };
-        static constexpr std::array<dequant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> dequant8_routines = {
-            &f32_dequant8_generic,
-            &f32_dequant8_amd64_sse42,
-            &f32_dequant8_amd64_avx2,
-            &f32_dequant8_amd64_avx512f
+
+        static constexpr std::array dequant_routines = {
+            std::array<dequant_kernel*, k_num_dtypes> {&f32_dequant8_generic, &f32_dequant4_generic},
+            std::array<dequant_kernel*, k_num_dtypes> {&f32_dequant8_amd64_sse42, &f32_dequant4_amd64_sse42},
+            std::array<dequant_kernel*, k_num_dtypes> {&f32_dequant8_amd64_avx2, &f32_dequant4_amd64_avx2},
+            std::array<dequant_kernel*, k_num_dtypes> {&f32_dequant8_amd64_avx512f, &f32_dequant4_amd64_avx512f},
         };
-        static constexpr std::array<quant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> quant4_routines = {
-            &f32_quant4_generic,
-            &f32_quant4_amd64_sse42,
-            &f32_quant4_amd64_avx2,
-            &f32_quant4_amd64_avx512f
-        };
-        static constexpr std::array<dequant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> dequant4_routines = {
-            &f32_dequant4_generic,
-            &f32_dequant4_amd64_sse42,
-            &f32_dequant4_amd64_avx2,
-            &f32_dequant4_amd64_avx512f
-        };
+
     #endif
 
     #undef decl_kernel_pair
+
+    template <class... T>
+    struct overloads final : T... { using T::operator()...; };
+
+    static constexpr std::array<std::size_t, static_cast<std::size_t>(dtype::num_)> dtype_mem_sizes = {
+        sizeof(float),
+        sizeof(std::uint8_t),
+        sizeof(std::uint8_t)>>1
+    };
 
     auto compute_quant_config_from_data(const std::span<const float> x) -> std::pair<float, std::int32_t> {
         if (x.empty()) [[unlikely]] return {0.0f, 0.0f};
@@ -163,7 +165,198 @@ namespace piquant {
         std::abort();
     }
 
-    context::context(std::size_t num_threads) {
+    static constexpr std::size_t cache_line {
+        #ifdef __cpp_lib_hardware_interference_size
+            std::hardware_destructive_interference_size
+        #else
+            64
+        #endif
+    };
+
+    struct quant_descriptor final {
+        const std::byte* in {};
+        std::byte* out {};
+        std::int64_t numel {};
+        float scale {};
+        std::int32_t zero_point {};
+        round_mode rnd_mode {};
+        dtype format {};
+    };
+
+    struct dequant_descriptor final {
+        const std::byte* in {};
+        std::byte* out {};
+        std::int64_t numel {};
+        float scale {};
+        std::int32_t zero_point {};
+        dtype format {};
+        reduce_op op {};
+    };
+
+    struct quant_depiquant_descriptor final {
+        quant_descriptor quant {};
+        dequant_descriptor dequant {};
+    };
+
+    using quant_command = std::variant<std::monostate, quant_descriptor, dequant_descriptor, quant_depiquant_descriptor>;
+
+    struct payload {
+        prng_state prng;
+        std::int64_t ti {}; // thread index
+        std::int64_t tc {}; // thread count
+        std::uint64_t phase {};
+
+        explicit constexpr payload(const std::uint32_t seed) noexcept : prng{seed} {}
+    };
+
+    struct worker;
+
+    class context::pimpl final {
+    public:
+        explicit pimpl(std::size_t num_threads);
+        pimpl(const pimpl&) = delete;
+        pimpl(pimpl&&) = default;
+        auto operator = (const pimpl&) -> pimpl& = delete;
+        auto operator = (pimpl&&) -> pimpl& = default;
+        ~pimpl();
+
+        alignas(cache_line) volatile bool m_interrupt {};
+        alignas(cache_line) std::uint64_t m_phase {};
+        alignas(cache_line) std::atomic_int64_t m_num_completed {};
+        std::vector<worker> m_workers {};
+        std::condition_variable m_cv {};
+        std::mutex m_mtx {};
+        std::atomic_size_t m_workers_online {};
+        #ifdef __x86_64__
+            amd64_cpu_caps cpu_caps {};
+        #endif
+
+        auto kickoff_workers(quant_command&& cmd) -> void;
+        auto barrier() -> void;
+        auto operator()(quant_command&& cmd) -> void;
+    };
+
+    struct worker final {
+        context::pimpl* pimpl;
+        alignas(cache_line) payload pl;
+        alignas(cache_line) quant_command cmd {};
+        std::optional<std::thread> thread {};
+
+        explicit worker(context::pimpl& ctx, const std::int64_t ti, const std::int64_t tc) : pimpl{&ctx}, pl{static_cast<std::uint32_t>(ti ^ tc)} {
+            pl.ti = ti;
+            pl.tc = tc;
+            pl.phase = 0;
+            if (ti != 0) { // ti != 0 are extra worker thread, ti == 0 is main thread
+                thread.emplace(&worker::entry, this);
+            }
+        }
+
+        worker(const worker&) = delete;
+        worker(worker&&) = default;
+        auto operator = (const worker&) -> worker& = delete;
+        auto operator = (worker&&) -> worker& = default;
+
+        ~worker() {
+            if (thread && thread->joinable())
+                thread->join();
+        }
+
+        [[nodiscard]] auto await_work() -> bool {
+            std::unique_lock lock {pimpl->m_mtx};
+            pimpl->m_cv.wait(lock, [this]() noexcept -> bool { return pimpl->m_interrupt || pimpl->m_phase > pl.phase; });
+            if (pimpl->m_interrupt) [[unlikely]] return false;
+            pl.phase = pimpl->m_phase;
+            return true;
+        }
+
+        auto entry() -> void {
+            pimpl->m_workers_online.fetch_add(1, std::memory_order_seq_cst);
+            while (await_work()) [[likely]]
+                exec_and_broadcast();
+        }
+
+        auto exec_and_broadcast() -> void {
+            std::int64_t numel {};
+            dtype format {};
+            bool is_dequant {};
+            const auto visitor = overloads {
+                [](std::monostate) -> void {},
+                [&](const quant_descriptor& desc) -> void {
+                    numel = desc.numel;
+                    format = desc.format;
+                    is_dequant = false;
+                },
+                [&](const dequant_descriptor& desc) -> void {
+                    numel = desc.numel;
+                    format = desc.format;
+                    is_dequant = true;
+                },
+                [&](const quant_depiquant_descriptor& desc) -> void {
+
+                }
+            };
+            std::visit(visitor, cmd);
+            piquant_assert2(format != dtype::f32);
+
+            const std::int64_t tc {pl.tc};
+            const std::int64_t ti {pl.ti};
+
+            const auto partition_row {[=] (const bool is_uint8) noexcept -> std::optional<std::array<std::int64_t, 3>> {
+                if (is_uint8) {
+                    const std::int64_t chunk {(numel + tc - 1)/tc};
+                    const std::int64_t ra {chunk*ti};
+                    const std::int64_t rb {std::min(ra + chunk, numel)};
+                    if (ra >= rb) [[unlikely]] return {};
+                    return {{ra, ra, rb-ra}};
+                }
+                const std::int64_t pairs {(numel + 1)>>1};
+                const std::int64_t pair_chunk {(pairs + tc - 1)/tc};
+                const std::int64_t pra {pair_chunk*ti};
+                const std::int64_t prb {std::min(pra + pair_chunk, pairs)};
+                if (pra >= prb) [[unlikely]] return {};
+                const std::int64_t ra {pra<<1};
+                const std::int64_t rb {prb<<1 > numel ? numel : prb<<1}; /* When numel is odd, the last pair is incomplete */
+                return {{ra, pra, rb-ra}};
+            }};
+
+            const auto dispatch_quant {[=, this](const std::int64_t oa, const std::int64_t ob, const std::int64_t n, const quant_descriptor& cmd) noexcept -> void {
+                #ifdef __x86_64__
+                    const auto level {static_cast<std::size_t>(pimpl->cpu_caps)};
+                    const auto fmt {static_cast<std::size_t>(format)};
+                    auto* const kernel {quant_routines[level][fmt]};
+                    (*kernel)(reinterpret_cast<const float*>(cmd.in+oa), reinterpret_cast<std::uint8_t*>(cmd.out+ob), n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
+                #else
+                    auto* const kernel {is_i8 ? &f32_quant8_generic : &f32_quant4_generic};
+                    (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
+                #endif
+            }};
+
+            const auto dispatch_dequant {[=, this](const std::int64_t oa, const std::int64_t ob, const std::int64_t n, const dequant_descriptor& cmd) noexcept -> void {
+                #ifdef __x86_64__
+                const auto level {static_cast<std::size_t>(pimpl->cpu_caps)};
+                const auto fmt {static_cast<std::size_t>(format)};
+                auto* const kernel {dequant_routines[level][fmt]};
+                    (*kernel)(reinterpret_cast<const std::uint8_t*>(cmd.in+oa), reinterpret_cast<float*>(cmd.out+ob), n, cmd.scale, cmd.zero_point, cmd.op);
+                #else
+                    auto* const kernel {is_i8 ? &f32_dequant8_generic : &f32_dequant4_generic};
+                    (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.op);
+                #endif
+            }};
+
+            if (const auto partition {partition_row(format == dtype::uint8)}; partition) [[likely]] {
+                const auto [oa, ob, n] {*partition};
+                if (is_dequant) dispatch_dequant(oa, ob, n, std::get<dequant_descriptor>(cmd));
+                else dispatch_quant(oa, ob, n, std::get<quant_descriptor>(cmd));
+            }
+
+            if (1+pimpl->m_num_completed.fetch_add(1, std::memory_order::relaxed) == pimpl->m_workers.size()) { // Last worker
+                std::unique_lock lock {pimpl->m_mtx};
+                pimpl->m_cv.notify_all();
+            }
+        }
+    };
+
+    context::pimpl::pimpl(std::size_t num_threads) {
         num_threads = std::max<std::size_t>(1, num_threads);
         m_workers.reserve(num_threads);
         for (std::int64_t ti {}; ti < num_threads; ++ti) { // Initialize workers (main thread is worker 0)
@@ -179,102 +372,16 @@ namespace piquant {
             std::this_thread::yield();
     }
 
-    context::worker::worker(context& ctx, const std::int64_t ti, const std::int64_t tc)
-        : ctx{&ctx}, pl{static_cast<std::uint32_t>(ti ^ tc)} {
-        pl.ti = ti;
-        pl.tc = tc;
-        pl.phase = 0;
-        if (ti != 0) { // ti != 0 are extra worker thread, ti == 0 is main thread
-            thread.emplace(&worker::entry, this);
-        }
+    context::pimpl::~pimpl() {
+        std::unique_lock lock {m_mtx};
+        m_interrupt = true;
+        ++m_phase;
+        lock.unlock();
+        m_cv.notify_all();
+        m_workers.clear();
     }
 
-    auto context::worker::await_work() -> bool {
-        std::unique_lock lock {ctx->m_mtx};
-        ctx->m_cv.wait(lock, [this]() noexcept -> bool { return ctx->m_interrupt || ctx->m_phase > pl.phase; });
-        if (ctx->m_interrupt) [[unlikely]] return false;
-        pl.phase = ctx->m_phase;
-        return true;
-    }
-
-    auto context::worker::entry() -> void {
-        ctx->m_workers_online.fetch_add(1, std::memory_order_seq_cst);
-        while (await_work()) [[likely]]
-            exec_and_broadcast();
-    }
-
-    auto context::worker::exec_and_broadcast() -> void {
-        std::int64_t numel {};
-        bool is_i8 {};
-        bool is_dequant {};
-        if (const auto* quant_desc {std::get_if<quant_descriptor>(&cmd)}; quant_desc) {
-            numel = quant_desc->numel;
-            is_i8 = quant_desc->format == dtype::uint8;
-            is_dequant = false;
-        } else if (const auto* dequant_desc {std::get_if<dequant_descriptor>(&cmd)}; dequant_desc) {
-            numel = dequant_desc->numel;
-            is_i8 = dequant_desc->format == dtype::uint8;
-            is_dequant = true;
-        } else {
-            panic("Invalid command type");
-        }
-
-        const std::int64_t tc {pl.tc};
-        const std::int64_t ti {pl.ti};
-
-        const auto partition_row {[=] (const bool is_uint8) noexcept -> std::optional<std::array<std::int64_t, 3>> {
-            if (is_uint8) {
-                const std::int64_t chunk {(numel + tc - 1)/tc};
-                const std::int64_t ra {chunk*ti};
-                const std::int64_t rb {std::min(ra + chunk, numel)};
-                if (ra >= rb) [[unlikely]] return {};
-                return {{ra, ra, rb-ra}};
-            }
-            const std::int64_t pairs {(numel + 1)>>1};
-            const std::int64_t pair_chunk {(pairs + tc - 1)/tc};
-            const std::int64_t pra {pair_chunk*ti};
-            const std::int64_t prb {std::min(pra + pair_chunk, pairs)};
-            if (pra >= prb) [[unlikely]] return {};
-            const std::int64_t ra {pra<<1};
-            const std::int64_t rb {prb<<1 > numel ? numel : prb<<1}; /* When numel is odd, the last pair is incomplete */
-            return {{ra, pra, rb-ra}};
-        }};
-
-        const auto dispatch_quant {[=, this](const std::int64_t oa, const std::int64_t ob, const std::int64_t n, const quant_descriptor& cmd) noexcept -> void {
-            #ifdef __x86_64__
-                const auto level {static_cast<std::size_t>(ctx->cpu_caps)};
-                auto* const kernel {is_i8 ? quant8_routines[level] : quant4_routines[level]};
-                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
-            #else
-                auto* const kernel {is_i8 ? &f32_quant8_generic : &f32_quant4_generic};
-                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
-            #endif
-        }};
-
-        const auto dispatch_dequant {[=, this](const std::int64_t oa, const std::int64_t ob, const std::int64_t n, const dequant_descriptor& cmd) noexcept -> void {
-            #ifdef __x86_64__
-                const auto level {static_cast<std::size_t>(ctx->cpu_caps)};
-                auto* const kernel {is_i8 ? dequant8_routines[level] : dequant4_routines[level]};
-                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.op);
-            #else
-                auto* const kernel {is_i8 ? &f32_dequant8_generic : &f32_dequant4_generic};
-                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.op);
-            #endif
-        }};
-
-        if (const auto partition {partition_row(is_i8)}; partition) [[likely]] {
-            const auto [oa, ob, n] {*partition};
-            if (is_dequant) dispatch_dequant(oa, ob, n, std::get<dequant_descriptor>(cmd));
-            else dispatch_quant(oa, ob, n, std::get<quant_descriptor>(cmd));
-        }
-
-        if (1+ctx->m_num_completed.fetch_add(1, std::memory_order::relaxed) == ctx->m_workers.size()) { // Last worker
-            std::unique_lock lock {ctx->m_mtx};
-            ctx->m_cv.notify_all();
-        }
-    }
-
-    auto context::kickoff_workers(quant_command&& cmd) -> void {
+    auto context::pimpl::kickoff_workers(quant_command&& cmd) -> void {
         std::unique_lock lock {m_mtx};
         for (auto& worker : m_workers)
             worker.cmd = cmd;
@@ -283,38 +390,38 @@ namespace piquant {
         m_cv.notify_all();
     }
 
-    auto context::barrier() -> void {
+    auto context::pimpl::barrier() -> void {
         std::unique_lock lock {m_mtx};
         m_cv.wait(lock, [&]() noexcept -> bool { return m_num_completed.load(std::memory_order_relaxed) == m_workers.size(); });
     }
 
-    auto context::operator()(quant_command&& cmd) -> void {
+    auto context::pimpl::operator()(quant_command&& cmd) -> void {
         kickoff_workers(std::forward<decltype(cmd)>(cmd));
         worker& w0 {m_workers[0]}; // Main thread does work too
         w0.exec_and_broadcast();
         barrier();
     }
 
-    context::~context() {
-        std::unique_lock lock {m_mtx};
-        m_interrupt = true;
-        ++m_phase;
-        lock.unlock();
-        m_cv.notify_all();
-        for (auto& worker : m_workers)
-            if (worker.thread && worker.thread->joinable())
-                worker.thread->join();
-        m_workers.clear();
+    context::context(std::size_t num_threads) {
+        m_pimpl = std::make_shared<pimpl>(num_threads);
     }
 
-    auto context::quantize_uint8(
-        const std::span<const float> in,
-        const std::span<std::uint8_t> out,
+    context::~context() = default;
+
+    auto context::quantize(
+        const std::span<const std::byte> in,
+        const dtype dtype_in,
+        const std::span<std::byte> out,
+        const dtype dtype_out,
         const float scale,
         const std::int32_t zero_point,
         const round_mode mode
-    ) -> void {
-        quant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
+    ) const -> void {
+        if (dtype_info_of(dtype_out).bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
+            piquant_assert(in.size() == ((in.size()+1)>>1), "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
+        } else {
+            piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
+        }
         quant_descriptor info {
             .in = in.data(),
             .out = out.data(),
@@ -322,77 +429,30 @@ namespace piquant {
             .scale = scale,
             .zero_point = zero_point,
             .rnd_mode = mode,
-            .format = dtype::uint8,
+            .format = dtype_out,
         };
-        (*this)(info);
+        (*this->m_pimpl)(info);
     }
 
-    auto context::dequantize_uint8(
-        const std::span<const std::uint8_t> in,
-        const std::span<float> out,
+    auto context::dequantize(
+        const std::span<const std::byte> in,
+        const dtype dtype_in,
+        const std::span<std::byte> out,
+        const dtype dtype_out,
         const float scale,
         const std::int32_t zero_point,
         const reduce_op op
-    ) -> void {
-        quant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
+    ) const -> void {
+        piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
         dequant_descriptor info {
             .in = in.data(),
             .out = out.data(),
             .numel = static_cast<std::int64_t>(in.size()),
             .scale = scale,
             .zero_point = zero_point,
-            .format = dtype::uint4,
+            .format = dtype_in,
             .op = op
         };
-        (*this)(info);
-    }
-
-    auto context::quantize_uint4(
-        const std::span<const float> in,
-        const std::span<std::uint8_t> out,
-        const float scale,
-        const std::int32_t zero_point,
-        const round_mode mode
-    ) -> void {
-        std::size_t output_len {(in.size() + 1)>>1};
-        quant_assert(out.size() == output_len, "input and output spans must have the same length, but %zu != %zu", out.size(), output_len);
-        const quant_descriptor info {
-            .in = in.data(),
-            .out = out.data(),
-            .numel = static_cast<std::int64_t>(in.size()),
-            .scale = scale,
-            .zero_point = zero_point,
-            .rnd_mode = mode,
-            .format = dtype::uint8
-        };
-        (*this)(info);
-    }
-
-    auto context::dequantize_uint4(
-        const std::span<const std::uint8_t> in,
-        const std::span<float> out,
-        const float scale,
-        const std::int32_t zero_point,
-        const reduce_op op
-    ) -> void {
-        quant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
-        dequant_descriptor info {
-            .in = in.data(),
-            .out = out.data(),
-            .numel = static_cast<std::int64_t>(in.size()),
-            .scale = scale,
-            .zero_point = zero_point,
-            .format = dtype::uint4,
-            .op = op
-        };
-        (*this)(info);
-    }
-
-    auto quantize_dequantize_redundant(
-        std::span<const float> in,
-        std::span<std::uint8_t> out,
-        dtype format
-    ) -> void {
-
+        (*this->m_pimpl)(info);
     }
 }

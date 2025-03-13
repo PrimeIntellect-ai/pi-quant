@@ -21,18 +21,18 @@ TEST(dequant, uint8_round_nearest_set) {
     for (std::size_t n {}; n < iters; ++n) {
         std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)};
 
-        std::vector<float> data_in {};
-        std::vector<std::uint8_t> quantized {};
+        std::vector<piquant::f32> data_in {};
+        std::vector<piquant::quint8> quantized {};
         data_in.resize(numel);
         quantized.resize(numel);
         std::ranges::generate(data_in, [&] { return dist(gen); });
         auto [scale, zero_point] {piquant::compute_quant_config_from_data(data_in)};
         piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
-        ctx.quantize_uint8(data_in, quantized, scale, zero_point, piquant::round_mode::nearest);
+        ctx.quantize_generic<piquant::f32, piquant::quint8>(data_in, quantized, scale, zero_point, piquant::round_mode::nearest);
 
         std::vector<float> dequantized {};
         dequantized.resize(numel);
-        ctx.dequantize_uint8(quantized, dequantized, scale, zero_point, piquant::reduce_op::set);
+        ctx.dequantize_generic<piquant::quint8, piquant::f32>(quantized, dequantized, scale, zero_point, piquant::reduce_op::set);
 
         for (std::size_t i {}; i < numel; ++i) {
             ASSERT_NEAR(data_in[i], dequantized[i], 1e-1);
@@ -48,18 +48,18 @@ TEST(dequant, uint8_round_stochastic_set) {
     for (std::size_t n {}; n < iters; ++n) {
         std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)};
 
-        std::vector<float> data_in {};
-        std::vector<std::uint8_t> quantized {};
+        std::vector<piquant::f32> data_in {};
+        std::vector<piquant::quint8> quantized {};
         data_in.resize(numel);
         quantized.resize(numel);
         std::ranges::generate(data_in, [&] { return dist(gen); });
         auto [scale, zero_point] {piquant::compute_quant_config_from_data(data_in)};
         piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
-        ctx.quantize_uint8(data_in, quantized, scale, zero_point, piquant::round_mode::stochastic);
+        ctx.quantize_generic<piquant::f32, piquant::quint8>(data_in, quantized, scale, zero_point, piquant::round_mode::stochastic);
 
         std::vector<float> dequantized {};
         dequantized.resize(numel);
-        ctx.dequantize_uint8(quantized, dequantized, scale, zero_point, piquant::reduce_op::set);
+        ctx.dequantize_generic<piquant::quint8, piquant::f32>(quantized, dequantized, scale, zero_point, piquant::reduce_op::set);
 
         for (std::size_t i {}; i < numel; ++i) {
             ASSERT_NEAR(data_in[i], dequantized[i], 1e-1);
@@ -76,20 +76,20 @@ TEST(dequant, uint8_round_nearest_add) {
     for (std::size_t n {}; n < iters; ++n) {
         std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)};
 
-        std::vector<float> data_in {};
-        std::vector<std::uint8_t> quantized {};
+        std::vector<piquant::f32> data_in {};
+        std::vector<piquant::quint8> quantized {};
         data_in.resize(numel);
         quantized.resize(numel);
         std::ranges::generate(data_in, [&] { return dist(gen); });
         auto [scale, zero_point] {piquant::compute_quant_config_from_data(data_in)};
         piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
-        ctx.quantize_uint8(data_in, quantized, scale, zero_point, piquant::round_mode::nearest);
+        ctx.quantize_generic<piquant::f32, piquant::quint8>(data_in, quantized, scale, zero_point, piquant::round_mode::nearest);
 
-        std::vector<float> dequantized {};
+        std::vector<piquant::f32> dequantized {};
         dequantized.resize(numel);
         float prev {dist(gen)};
         std::ranges::fill(dequantized, prev);
-        ctx.dequantize_uint8(quantized, dequantized, scale, zero_point, piquant::reduce_op::add);
+        ctx.dequantize_generic<piquant::quint8, piquant::f32>(quantized, dequantized, scale, zero_point, piquant::reduce_op::add);
         for (std::size_t i {}; i < numel; ++i) {
             ASSERT_NEAR(data_in[i], dequantized[i]-prev, 1e-1);
         }
@@ -104,19 +104,19 @@ TEST(dequant, uint8_round_stochastic_add) {
     for (std::size_t n {}; n < iters; ++n) {
         std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)};
 
-        std::vector<float> data_in {};
-        std::vector<std::uint8_t> quantized {};
+        std::vector<piquant::f32> data_in {};
+        std::vector<piquant::quint8> quantized {};
         data_in.resize(numel);
         quantized.resize(numel);
         std::ranges::generate(data_in, [&] { return dist(gen); });
         auto [scale, zero_point] {piquant::compute_quant_config_from_data(data_in)};
         piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
-        ctx.quantize_uint8(data_in, quantized, scale, zero_point, piquant::round_mode::stochastic);
+        ctx.quantize_generic<piquant::f32, piquant::quint8>(data_in, quantized, scale, zero_point, piquant::round_mode::stochastic);
         std::vector<float> dequantized {};
         dequantized.resize(numel);
         float prev {dist(gen)};
         std::ranges::fill(dequantized, prev);
-        ctx.dequantize_uint8(quantized, dequantized, scale, zero_point, piquant::reduce_op::add);
+        ctx.dequantize_generic<piquant::quint8, piquant::f32>(quantized, dequantized, scale, zero_point, piquant::reduce_op::add);
         for (std::size_t i {}; i < numel; ++i) {
             ASSERT_NEAR(data_in[i], dequantized[i]-prev, 1e-1);
         }

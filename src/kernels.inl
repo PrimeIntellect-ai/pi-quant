@@ -20,8 +20,37 @@
 #include <arm_neon.h>
 #endif
 
+namespace piquant {
+    [[nodiscard]] static constexpr auto prng_canonical(prng_state& p) -> float { // returns ξ ∈ [0, 1)
+        auto& remaining {p.remaining};
+        auto& next {p.next};
+        auto& state {p.state};
+        if (--remaining <= 0) {
+            remaining = 624;
+            next = 0;
+            uint32_t y, i;
+            for (i = 0; i < 624-397; ++i) {
+                y = (state[i] & 0x80000000u) | (state[i+1] & 0x7fffffffu);
+                state[i] = state[i+397] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
+            }
+            for (; i < 624-1; ++i) {
+                y = (state[i] & 0x80000000u) | (state[i+1] & 0x7fffffffu);
+                state[i] = state[i + (397-624)] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
+            }
+            y = (state[624-1] & 0x80000000u) | (state[0] & 0x7fffffffu);
+            state[624-1] = state[397-1] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
+        }
+        uint32_t y = state[next++];
+        y ^= y >> 11;
+        y ^= (y << 7) & 0x9d2c5680;
+        y ^= (y << 15) & 0xefc60000;
+        y ^= y >> 18;
+        return (1.f/static_cast<float>(1<<23)*(static_cast<float>(y>>9) + 0.5f));
+    }
+}
+
 #define concat(a, b) a ## b
-#define impl_namespace(a, b) concat(a, _impl)
+#define impl_namespace(a, b) piquant::concat(a, _impl)
 
 namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
     static auto __attribute__((hot)) nearest(
@@ -217,7 +246,7 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
         for (; i < numel; ++i) {
             float rnd {x[i] * scale};
             const float dec {std::abs(rnd - std::trunc(rnd))};
-            const float xi {prng.gen_canonical()};
+            const float xi {prng_canonical(prng)};
             float adj {xi < dec ? 1.0f : 0.0f};
             if (rnd < 0.0f) adj = -1.0f * adj;
             rnd = std::trunc(rnd) + adj;
@@ -291,7 +320,7 @@ namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
         for (; i < numel; ++i) {
             float rnd {x[i] * scale};
             const float dec {std::abs(rnd - std::trunc(rnd))};
-            const float xi {prng.gen_canonical()};
+            const float xi {prng_canonical(prng)};
             float adj {xi < dec ? 1.0f : 0.0f};
             if (rnd < 0.0f) adj = -1.0f * adj;
             rnd = std::trunc(rnd) + adj;

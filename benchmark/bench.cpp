@@ -14,9 +14,9 @@
 
 auto main() -> int {
     const std::size_t nt {std::max(1u, std::thread::hardware_concurrency())};
-    volatile std::size_t numel {1'000'000};
-    std::vector<float> data_in {};
-    std::vector<std::uint8_t> data_out {};
+    volatile std::size_t numel {1024*1024*1024/4};
+    std::vector<piquant::f32> data_in {};
+    std::vector<piquant::quint8> data_out {};
     data_in.resize(numel);
     data_out.resize(numel);
     std::random_device rd {};
@@ -25,22 +25,11 @@ auto main() -> int {
     std::ranges::generate(data_in, [&] { return dist(gen); });
 
     ankerl::nanobench::Bench bench {};
-    bench.title("int8 Quantization Benchmark")
-        .unit("piquant")
-        .minEpochIterations(10)
-        .relative(true);
-    bench.performanceCounters(true);
-    bench.run("NAIVE", [&] {
-        q8_naive(data_in, data_out, 1.0, 0);
-    });
-
-    ankerl::nanobench::doNotOptimizeAway(data_in.data());
-    ankerl::nanobench::doNotOptimizeAway(data_out.data());
 
     piquant::context ctx {nt};
 
     bench.run("OPTIMIZED", [&] {
-        ctx.quantize_uint8(data_in, data_out, 1.0, 0, piquant::round_mode::nearest);
+        ctx.quantize_generic<piquant::f32, piquant::quint8>(data_in, data_out, 1.0, 0, piquant::round_mode::nearest);
     });
 
     ankerl::nanobench::doNotOptimizeAway(data_in.data());
