@@ -1,14 +1,9 @@
-/* Core C++ 20 API */
-
 #pragma once
 
 #include <span>
 #include <cstdint>
-#include <vector>
-#include <thread>
-#include <condition_variable>
 #include <optional>
-#include <variant>
+#include <memory>
 
 #ifdef _MSC_VER
 #define QUANT_EXPORT __declspec(dllexport)
@@ -84,12 +79,14 @@ namespace piquant {
     struct dtype_info final {
         std::size_t sto_size;
         std::size_t bit_size;
+        bool is_quant;
+        bool is_dequant;
     };
 
     constexpr std::array dtype_infos {
-        dtype_info{sizeof(f32), sizeof(f32)<<3},
-        dtype_info{sizeof(quint8), sizeof(quint8)<<3},
-        dtype_info{sizeof(quint4), 4}
+        dtype_info{sizeof(f32), sizeof(f32)<<3, false, true},
+        dtype_info{sizeof(quint8), sizeof(quint8)<<3, true, false},
+        dtype_info{sizeof(quint4), 4, true, false}
     };
     [[nodiscard]] constexpr auto dtype_info_of(dtype dtype) noexcept -> const dtype_info& {
         return dtype_infos[static_cast<std::size_t>(dtype)];
@@ -103,7 +100,7 @@ namespace piquant {
     template <typename T> requires is_dtype<T>
     struct dtype_traits final {};
     template<> struct dtype_traits<f32> final { static constexpr auto ty{dtype::f32}; };
-    template<> struct dtype_traits<quint8> final { static constexpr auto ty{dtype::uint8}; };;
+    template<> struct dtype_traits<quint8> final { static constexpr auto ty{dtype::uint8}; };
     template<> struct dtype_traits<quint4> final { static constexpr auto ty{dtype::uint4}; };
 
     class QUANT_EXPORT context final {
@@ -132,7 +129,7 @@ namespace piquant {
             float scale,
             std::int32_t zero_point,
             round_mode mode
-        ) {
+        ) -> void {
             quantize(
                 {reinterpret_cast<const std::byte*>(in.data()), in.size()},
                 dtype_traits<IN>::ty,

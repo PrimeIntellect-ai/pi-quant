@@ -13,7 +13,6 @@
 constexpr std::size_t iters {1000};
 
 TEST(dequant, uint8_round_nearest_set) {
-
     std::random_device rd {};
     std::mt19937 gen {rd()};
     std::uniform_real_distribution<float> dist {-1.0f, 1.0f};
@@ -30,7 +29,7 @@ TEST(dequant, uint8_round_nearest_set) {
         piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
         ctx.quantize_generic<piquant::f32, piquant::quint8>(data_in, quantized, scale, zero_point, piquant::round_mode::nearest);
 
-        std::vector<float> dequantized {};
+        std::vector<piquant::f32> dequantized {};
         dequantized.resize(numel);
         ctx.dequantize_generic<piquant::quint8, piquant::f32>(quantized, dequantized, scale, zero_point, piquant::reduce_op::set);
 
@@ -57,7 +56,7 @@ TEST(dequant, uint8_round_stochastic_set) {
         piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())};
         ctx.quantize_generic<piquant::f32, piquant::quint8>(data_in, quantized, scale, zero_point, piquant::round_mode::stochastic);
 
-        std::vector<float> dequantized {};
+        std::vector<piquant::f32> dequantized {};
         dequantized.resize(numel);
         ctx.dequantize_generic<piquant::quint8, piquant::f32>(quantized, dequantized, scale, zero_point, piquant::reduce_op::set);
 
@@ -68,7 +67,6 @@ TEST(dequant, uint8_round_stochastic_set) {
 }
 
 TEST(dequant, uint8_round_nearest_add) {
-
     std::random_device rd {};
     std::mt19937 gen {rd()};
     std::uniform_real_distribution<float> dist {-1.0f, 1.0f};

@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <iostream>
 #include <numeric>
+#include <variant>
+#include <condition_variable>
 
 namespace piquant {
     #define decl_quant_kernel_fn(impl) \
@@ -417,6 +419,8 @@ namespace piquant {
         const std::int32_t zero_point,
         const round_mode mode
     ) const -> void {
+        piquant_assert(dtype_info_of(dtype_in).is_dequant, "input dtype must be a dequantized type");
+        piquant_assert(dtype_info_of(dtype_out).is_quant, "output dtype must be a quantized type");
         if (dtype_info_of(dtype_out).bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
             piquant_assert(in.size() == ((in.size()+1)>>1), "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
         } else {
@@ -443,6 +447,8 @@ namespace piquant {
         const std::int32_t zero_point,
         const reduce_op op
     ) const -> void {
+        piquant_assert(dtype_info_of(dtype_in).is_quant, "input dtype must be a quantized type");
+        piquant_assert(dtype_info_of(dtype_out).is_dequant, "output dtype must be a dequantized type");
         piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
         dequant_descriptor info {
             .in = in.data(),

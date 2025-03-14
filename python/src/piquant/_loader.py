@@ -10,62 +10,51 @@ MAG_LIBS: List[Tuple[str, str]] = [
 ]
 
 DECLS: str = """
-/* computes and returns {scale, zero_point} derived from the data's mean and stddev. */
-extern  void compute_quant_config_from_data(const float* x, size_t n, float* out_scale, int32_t* out_zero_point);
+extern  void piquant_compute_quant_config_from_data(const float* x, size_t n, float* out_scale, int32_t* out_zero_point);
 
-typedef struct quant_context_t quant_context_t; /* Opaque context ptr */
+typedef struct piquant_context_t piquant_context_t; /* Opaque context ptr */
 
-typedef enum quant_round_mode_t {
-    QUANT_NEAREST,
-    QUANT_STOCHASTIC
-} quant_round_mode_t;
+typedef enum piquant_round_mode_t {
+    PIQUANT_NEAREST,
+    PIQUANT_STOCHASTIC
+} piquant_round_mode_t;
 
-typedef enum quant_reduce_op_t {
-    QUANT_REDUCE_OP_SET, /* output[i] = quantize(input[i]) */
-    QUANT_REDUCE_OP_ADD, /* output[i] += quantize(input[i]) */
-} quant_reduce_op_t;
+typedef enum piquant_reduce_op_t {
+    PIQUANT_REDUCE_OP_SET, /* output[i] = quantize(input[i]) */
+    PIQUANT_REDUCE_OP_ADD, /* output[i] += quantize(input[i]) */
+} piquant_reduce_op_t;
 
-extern  quant_context_t* quant_context_create(size_t num_threads);
-extern  void quant_context_destroy(quant_context_t* ctx);
+typedef enum piquant_dtype_t {
+    PIQUANT_DTYPE_F32,
+    PIQUANT_DTYPE_UINT8,
+    PIQUANT_DTYPE_UINT4
+} piquant_dtype_t;
 
-extern  void quant_uint8(
-    quant_context_t* ctx,
-    const float* in,
-    uint8_t* out,
+extern  piquant_context_t* piquant_context_create(size_t num_threads);
+extern  void piquant_context_destroy(piquant_context_t* ctx);
+
+extern  void piquant_quantize(
+    piquant_context_t* ctx,
+    const void* in,
+    piquant_dtype_t dtype_in,
+    void* out,
+    piquant_dtype_t dtype_out,
     size_t numel,
     float scale,
     int32_t zero_point,
-    quant_round_mode_t mode
+    piquant_round_mode_t mode
 );
 
-extern  void dequant_uint8(
-    quant_context_t* ctx,
-    const uint8_t* in,
-    float* out,
+extern  void piquant_dequantize(
+    piquant_context_t* ctx,
+    const void* in,
+    piquant_dtype_t dtype_in,
+    void* out,
+    piquant_dtype_t dtype_out,
     size_t numel,
     float scale,
     int32_t zero_point,
-    quant_reduce_op_t op
-);
-
-extern  void quant_uint4(
-    quant_context_t* ctx,
-    const float* in,
-    uint8_t* out,
-    size_t numel,
-    float scale,
-    int32_t zero_point,
-    quant_round_mode_t mode
-);
-
-extern  void dequant_uint4(
-    quant_context_t* ctx,
-    const uint8_t* in,
-    float* out,
-    size_t numel,
-    float scale,
-    int32_t zero_point,
-    quant_reduce_op_t op
+    piquant_reduce_op_t op
 );
 """
 
