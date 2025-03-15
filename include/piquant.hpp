@@ -77,7 +77,7 @@ namespace piquant {
     enum class quint4 : std::uint8_t {};
 
     struct dtype_info final {
-        std::size_t sto_size;
+        std::size_t stride;
         std::size_t bit_size;
         bool is_quant;
         bool is_dequant;

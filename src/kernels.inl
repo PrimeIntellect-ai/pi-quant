@@ -239,7 +239,7 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
         const std::int64_t numel,
         float scale,
         const std::int32_t zp,
-        piquant::prng_state& prng
+        prng_state& prng
     ) noexcept -> void {
         scale = 1.0f / scale; /* We multiply by reciprocal */
         std::int64_t i {};
@@ -255,7 +255,7 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
         }
     }
 
-    template <const piquant::reduce_op op>
+    template <const reduce_op op>
     static auto __attribute__((hot)) dequant(
        const std::uint8_t* const __restrict__ x,
        float* const __restrict__ o,
@@ -313,7 +313,7 @@ namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
         const std::int64_t numel,
         float scale,
         const std::int32_t zp,
-        piquant::prng_state& prng
+        prng_state& prng
     ) noexcept -> void {
         scale = 1.0f / scale; /* We multiply by reciprocal */
         std::int64_t i {};
@@ -329,7 +329,7 @@ namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
         }
     }
 
-    template <const piquant::reduce_op op>
+    template <const reduce_op op>
     static auto __attribute__((hot)) dequant(
        const std::uint8_t* const __restrict__ x,
        float* const __restrict__ o,
@@ -390,8 +390,8 @@ namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
 
 namespace piquant {
     auto __attribute__((hot)) QUANT8_KERNEL_IMPL(
-      const float* const __restrict__ x,
-      std::uint8_t* const __restrict__ o,
+      const void* const __restrict__ x,
+      void* const __restrict__ o,
       const std::int64_t numel,
       const float scale,
       const std::int32_t zp,
@@ -399,30 +399,30 @@ namespace piquant {
       prng_state& prng
     ) noexcept -> void {
         if (sto_rnd) {
-            impl_namespace(QUANT8_KERNEL_IMPL, _)::stochastic(x, o, numel, scale, zp, prng);
+            impl_namespace(QUANT8_KERNEL_IMPL, _)::stochastic(static_cast<const float*>(x), static_cast<std::uint8_t*>(o), numel, scale, zp, prng);
         } else {
-            impl_namespace(QUANT8_KERNEL_IMPL, _)::nearest(x, o, numel, scale, zp);
+            impl_namespace(QUANT8_KERNEL_IMPL, _)::nearest(static_cast<const float*>(x), static_cast<std::uint8_t*>(o), numel, scale, zp);
         }
     }
 
     auto __attribute__((hot)) DEQUANT8_KERNEL_IMPL(
-      const std::uint8_t* const __restrict__ x,
-      float* const __restrict__ o,
+      const void* const __restrict__ x,
+      void* const __restrict__ o,
       const std::int64_t numel,
       const float scale,
       const std::int32_t zp,
       const reduce_op op
     ) noexcept -> void {
         switch (op) {
-            case reduce_op::set: impl_namespace(QUANT8_KERNEL_IMPL, _)::dequant<reduce_op::set>(x, o, numel, scale, zp); break;
-            case reduce_op::add: impl_namespace(QUANT8_KERNEL_IMPL, _)::dequant<reduce_op::add>(x, o, numel, scale, zp); break;
+            case reduce_op::set: impl_namespace(QUANT8_KERNEL_IMPL, _)::dequant<reduce_op::set>(static_cast<const std::uint8_t*>(x), static_cast<float*>(o), numel, scale, zp); break;
+            case reduce_op::add: impl_namespace(QUANT8_KERNEL_IMPL, _)::dequant<reduce_op::add>(static_cast<const std::uint8_t*>(x), static_cast<float*>(o), numel, scale, zp); break;
             default: panic("Invalid reduce_op");
         }
     }
 
     auto __attribute__((hot)) QUANT4_KERNEL_IMPL(
-      const float* const __restrict__ x,
-      std::uint8_t* const __restrict__ o,
+      const void* const __restrict__ x,
+      void* const __restrict__ o,
       const std::int64_t numel,
       const float scale,
       const std::int32_t zp,
@@ -430,23 +430,23 @@ namespace piquant {
       prng_state& prng
     ) noexcept -> void {
         if (sto_rnd) {
-            impl_namespace(QUANT4_KERNEL_IMPL, _)::stochastic(x, o, numel, scale, zp, prng);
+            impl_namespace(QUANT4_KERNEL_IMPL, _)::stochastic(static_cast<const float*>(x), static_cast<std::uint8_t*>(o), numel, scale, zp, prng);
         } else {
-            impl_namespace(QUANT4_KERNEL_IMPL, _)::nearest(x, o, numel, scale, zp);
+            impl_namespace(QUANT4_KERNEL_IMPL, _)::nearest(static_cast<const float*>(x), static_cast<std::uint8_t*>(o), numel, scale, zp);
         }
     }
 
     auto __attribute__((hot)) DEQUANT4_KERNEL_IMPL(
-        const std::uint8_t* const __restrict__ x,
-        float* const __restrict__ o,
+        const void* const __restrict__ x,
+        void* const __restrict__ o,
         const std::int64_t numel,
         const float scale,
         const std::int32_t zp,
         const reduce_op op
     ) noexcept -> void {
         switch (op) {
-            case reduce_op::set: impl_namespace(QUANT4_KERNEL_IMPL, _)::dequant<reduce_op::set>(x, o, numel, scale, zp); break;
-            case reduce_op::add: impl_namespace(QUANT4_KERNEL_IMPL, _)::dequant<reduce_op::add>(x, o, numel, scale, zp); break;
+            case reduce_op::set: impl_namespace(QUANT4_KERNEL_IMPL, _)::dequant<reduce_op::set>(static_cast<const std::uint8_t*>(x), static_cast<float*>(o), numel, scale, zp); break;
+            case reduce_op::add: impl_namespace(QUANT4_KERNEL_IMPL, _)::dequant<reduce_op::add>(static_cast<const std::uint8_t*>(x), static_cast<float*>(o), numel, scale, zp); break;
             default: panic("Invalid reduce_op");
         }
     }

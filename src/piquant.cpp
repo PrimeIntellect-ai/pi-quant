@@ -14,8 +14,8 @@
 namespace piquant {
     #define decl_quant_kernel_fn(impl) \
         extern auto impl( \
-        const float* __restrict__ x, \
-        std::uint8_t* __restrict__ o, \
+        const void* __restrict__ x, \
+        void* __restrict__ o, \
         std::int64_t numel, \
         float scale, \
         std::int32_t zero_point, \
@@ -25,8 +25,8 @@ namespace piquant {
 
     #define decl_dequant_kernel_fn(impl) \
         extern auto impl( \
-            const std::uint8_t* __restrict__ x, \
-            float* __restrict__ o, \
+            const void* __restrict__ x, \
+            void* __restrict__ o, \
             std::int64_t numel, \
             float scale, \
             std::int32_t zero_point, \
@@ -39,8 +39,8 @@ namespace piquant {
     decl_dequant_kernel_fn(f32_dequant4_generic);
 
     using quant_kernel = auto (
-        const float* __restrict__ x,
-        std::uint8_t* __restrict__ o,
+        const void* __restrict__ x,
+        void* __restrict__ o,
         std::int64_t numel,
         float scale,
         std::int32_t zero_point,
@@ -49,8 +49,8 @@ namespace piquant {
     ) -> void;
 
     using dequant_kernel = auto (
-        const std::uint8_t* __restrict__ x,
-        float* __restrict__ o,
+        const void* __restrict__ x,
+        void* __restrict__ o,
         std::int64_t numel,
         float scale,
         std::int32_t zero_point,
@@ -108,20 +108,52 @@ namespace piquant {
         decl_dequant_kernel_fn(f32_dequant4_amd64_avx512f);
 
         static constexpr auto k_num_cpu_levels {static_cast<std::size_t>(amd64_cpu_caps::num_)};
-        static constexpr auto k_num_dtypes {2};
+        static constexpr auto k_num_dtypes {static_cast<std::size_t>(dtype::num_)};
 
         static constexpr std::array quant_routines = {
-            std::array<quant_kernel*, k_num_dtypes> {&f32_quant8_generic, &f32_quant4_generic},
-            std::array<quant_kernel*, k_num_dtypes> {&f32_quant8_amd64_sse42, &f32_quant4_amd64_sse42},
-            std::array<quant_kernel*, k_num_dtypes> {&f32_quant8_amd64_avx2, &f32_quant4_amd64_avx2},
-            std::array<quant_kernel*, k_num_dtypes> {&f32_quant8_amd64_avx512f, &f32_quant4_amd64_avx512f},
+            std::array<quant_kernel*, k_num_dtypes> {
+                nullptr,                    // f32
+                &f32_quant8_generic,        // quint8
+                &f32_quant4_generic         // quint4
+            },
+            std::array<quant_kernel*, k_num_dtypes> {
+                nullptr,                    // f32
+                &f32_quant8_amd64_sse42,    // quint8
+                &f32_quant4_amd64_sse42     // quint4
+            },
+            std::array<quant_kernel*, k_num_dtypes> {
+                nullptr,                    // f32
+                &f32_quant8_amd64_avx2,     // quint8
+                &f32_quant4_amd64_avx2      // quint4
+            },
+            std::array<quant_kernel*, k_num_dtypes> {
+                nullptr,                    // f32
+                &f32_quant8_amd64_avx512f,  // quint8
+                &f32_quant4_amd64_avx512f   // quint4
+            },
         };
 
         static constexpr std::array dequant_routines = {
-            std::array<dequant_kernel*, k_num_dtypes> {&f32_dequant8_generic, &f32_dequant4_generic},
-            std::array<dequant_kernel*, k_num_dtypes> {&f32_dequant8_amd64_sse42, &f32_dequant4_amd64_sse42},
-            std::array<dequant_kernel*, k_num_dtypes> {&f32_dequant8_amd64_avx2, &f32_dequant4_amd64_avx2},
-            std::array<dequant_kernel*, k_num_dtypes> {&f32_dequant8_amd64_avx512f, &f32_dequant4_amd64_avx512f},
+            std::array<dequant_kernel*, k_num_dtypes> {
+                nullptr,                        // f32
+                &f32_dequant8_generic,          // quint8
+                &f32_dequant4_generic           // quint4
+            },
+            std::array<dequant_kernel*, k_num_dtypes> {
+                nullptr,                        // f32
+                &f32_dequant8_amd64_sse42,      // quint8
+                &f32_dequant4_amd64_sse42       // quint4
+            },
+            std::array<dequant_kernel*, k_num_dtypes> {
+                nullptr,                        // f32
+                &f32_dequant8_amd64_avx2,       // quint8
+                &f32_dequant4_amd64_avx2        // quint4
+            },
+            std::array<dequant_kernel*, k_num_dtypes> {
+                nullptr,                        // f32
+                &f32_dequant8_amd64_avx512f,    // quint8
+                &f32_dequant4_amd64_avx512f     // quint4
+            },
         };
 
     #endif
@@ -130,12 +162,6 @@ namespace piquant {
 
     template <class... T>
     struct overloads final : T... { using T::operator()...; };
-
-    static constexpr std::array<std::size_t, static_cast<std::size_t>(dtype::num_)> dtype_mem_sizes = {
-        sizeof(float),
-        sizeof(std::uint8_t),
-        sizeof(std::uint8_t)>>1
-    };
 
     auto compute_quant_config_from_data(const std::span<const float> x) -> std::pair<float, std::int32_t> {
         if (x.empty()) [[unlikely]] return {0.0f, 0.0f};
@@ -181,8 +207,9 @@ namespace piquant {
         std::int64_t numel {};
         float scale {};
         std::int32_t zero_point {};
+        dtype dt_in {};
+        dtype dt_out {};
         round_mode rnd_mode {};
-        dtype format {};
     };
 
     struct dequant_descriptor final {
@@ -191,7 +218,8 @@ namespace piquant {
         std::int64_t numel {};
         float scale {};
         std::int32_t zero_point {};
-        dtype format {};
+        dtype dt_in {};
+        dtype dt_out {};
         reduce_op op {};
     };
 
@@ -217,9 +245,9 @@ namespace piquant {
     public:
         explicit pimpl(std::size_t num_threads);
         pimpl(const pimpl&) = delete;
-        pimpl(pimpl&&) = default;
+        pimpl(pimpl&&) = delete;
         auto operator = (const pimpl&) -> pimpl& = delete;
-        auto operator = (pimpl&&) -> pimpl& = default;
+        auto operator = (pimpl&&) -> pimpl& = delete;
         ~pimpl();
 
         alignas(cache_line) volatile bool m_interrupt {};
@@ -279,18 +307,20 @@ namespace piquant {
 
         auto exec_and_broadcast() -> void {
             std::int64_t numel {};
-            dtype format {};
+            dtype dt_in {}, dt_out {};
             bool is_dequant {};
             const auto visitor = overloads {
                 [](std::monostate) -> void {},
                 [&](const quant_descriptor& desc) -> void {
                     numel = desc.numel;
-                    format = desc.format;
+                    dt_in = desc.dt_in;
+                    dt_out = desc.dt_out;
                     is_dequant = false;
                 },
                 [&](const dequant_descriptor& desc) -> void {
                     numel = desc.numel;
-                    format = desc.format;
+                    dt_in = desc.dt_in;
+                    dt_out = desc.dt_out;
                     is_dequant = true;
                 },
                 [&](const quant_depiquant_descriptor& desc) -> void {
@@ -298,7 +328,6 @@ namespace piquant {
                 }
             };
             std::visit(visitor, cmd);
-            piquant_assert2(format != dtype::f32);
 
             const std::int64_t tc {pl.tc};
             const std::int64_t ti {pl.ti};
@@ -324,28 +353,55 @@ namespace piquant {
             const auto dispatch_quant {[=, this](const std::int64_t oa, const std::int64_t ob, const std::int64_t n, const quant_descriptor& cmd) noexcept -> void {
                 #ifdef __x86_64__
                     const auto level {static_cast<std::size_t>(pimpl->cpu_caps)};
-                    const auto fmt {static_cast<std::size_t>(format)};
+                    const auto fmt {static_cast<std::size_t>(dt_out)};
+                    const std::size_t stride_in {dtype_info_of(dt_in).stride};
+                    const std::size_t stride_out {dtype_info_of(dt_out).stride};
+                    piquant_assert2(level < quant_routines.size());
+                    piquant_assert2(fmt < quant_routines[0].size());
                     auto* const kernel {quant_routines[level][fmt]};
-                    (*kernel)(reinterpret_cast<const float*>(cmd.in+oa), reinterpret_cast<std::uint8_t*>(cmd.out+ob), n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
+                    piquant_assert2(kernel != nullptr);
+                    (*kernel)(
+                        reinterpret_cast<const std::byte*>(cmd.in) + oa*stride_in,
+                        reinterpret_cast<std::byte*>(cmd.out)+ ob*stride_out,
+                        n,
+                        cmd.scale,
+                        cmd.zero_point,
+                        cmd.rnd_mode == round_mode::stochastic,
+                        pl.prng
+                    );
                 #else
                     auto* const kernel {is_i8 ? &f32_quant8_generic : &f32_quant4_generic};
+                    piquant_assert2(kernel != nullptr);
                     (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
                 #endif
             }};
 
             const auto dispatch_dequant {[=, this](const std::int64_t oa, const std::int64_t ob, const std::int64_t n, const dequant_descriptor& cmd) noexcept -> void {
                 #ifdef __x86_64__
-                const auto level {static_cast<std::size_t>(pimpl->cpu_caps)};
-                const auto fmt {static_cast<std::size_t>(format)};
-                auto* const kernel {dequant_routines[level][fmt]};
-                    (*kernel)(reinterpret_cast<const std::uint8_t*>(cmd.in+oa), reinterpret_cast<float*>(cmd.out+ob), n, cmd.scale, cmd.zero_point, cmd.op);
+                    const auto level {static_cast<std::size_t>(pimpl->cpu_caps)};
+                    const auto fmt {static_cast<std::size_t>(dt_in)};
+                    const std::size_t stride_in {dtype_info_of(dt_in).stride};
+                    const std::size_t stride_out {dtype_info_of(dt_out).stride};
+                    piquant_assert2(level < dequant_routines.size());
+                    piquant_assert2(fmt < dequant_routines[0].size());
+                    auto* const kernel {dequant_routines[level][fmt]};
+                    piquant_assert2(kernel != nullptr);
+                    (*kernel)(
+                        reinterpret_cast<const std::byte*>(cmd.in) + oa*stride_in,
+                        reinterpret_cast<std::byte*>(cmd.out)+ ob*stride_out,
+                        n,
+                        cmd.scale,
+                        cmd.zero_point,
+                        cmd.op
+                    );
                 #else
                     auto* const kernel {is_i8 ? &f32_dequant8_generic : &f32_dequant4_generic};
+                    piquant_assert2(kernel != nullptr);
                     (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.op);
                 #endif
             }};
 
-            if (const auto partition {partition_row(format == dtype::uint8)}; partition) [[likely]] {
+            if (const auto partition {partition_row(dt_out == dtype::uint8)}; partition) [[likely]] {
                 const auto [oa, ob, n] {*partition};
                 if (is_dequant) dispatch_dequant(oa, ob, n, std::get<dequant_descriptor>(cmd));
                 else dispatch_quant(oa, ob, n, std::get<quant_descriptor>(cmd));
@@ -422,7 +478,7 @@ namespace piquant {
         piquant_assert(dtype_info_of(dtype_in).is_dequant, "input dtype must be a dequantized type");
         piquant_assert(dtype_info_of(dtype_out).is_quant, "output dtype must be a quantized type");
         if (dtype_info_of(dtype_out).bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
-            piquant_assert(in.size() == ((in.size()+1)>>1), "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
+            piquant_assert(out.size() == in.size()+1>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
         } else {
             piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
         }
@@ -432,8 +488,9 @@ namespace piquant {
             .numel = static_cast<std::int64_t>(in.size()),
             .scale = scale,
             .zero_point = zero_point,
+            .dt_in = dtype_in,
+            .dt_out = dtype_out,
             .rnd_mode = mode,
-            .format = dtype_out,
         };
         (*this->m_pimpl)(info);
     }
@@ -456,7 +513,8 @@ namespace piquant {
             .numel = static_cast<std::int64_t>(in.size()),
             .scale = scale,
             .zero_point = zero_point,
-            .format = dtype_in,
+            .dt_in = dtype_in,
+            .dt_out = dtype_out,
             .op = op
         };
         (*this->m_pimpl)(info);
