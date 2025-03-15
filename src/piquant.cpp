@@ -388,7 +388,7 @@ namespace piquant {
                     piquant_assert2(kernel != nullptr);
                     (*kernel)(
                         reinterpret_cast<const std::byte*>(cmd.in) + oa*stride_in,
-                        reinterpret_cast<std::byte*>(cmd.out)+ ob*stride_out,
+                        reinterpret_cast<std::byte*>(cmd.out) + ob*stride_out,
                         n,
                         cmd.scale,
                         cmd.zero_point,

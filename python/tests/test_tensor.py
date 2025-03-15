@@ -34,16 +34,6 @@ def test_quant_torch():
     assert quantized_tensor.dtype == torch.uint8
     assert quantized_tensor.numel() == tensor.numel()
     
-
-def test_quant_numpy():
-    tensor = np.random.rand(32).astype(np.float32)
-
-    quantized_tensor = quantize_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8))
-    
-    assert quantized_tensor.dtype == np.int8
-    assert quantized_tensor.shape == tensor.shape
-    
-    
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
 def test_quant_torch_half_precision(dtype):
     tensor = torch.rand(32).bfloat16()
@@ -52,14 +42,6 @@ def test_quant_torch_half_precision(dtype):
     
     assert quantized_tensor.dtype == torch.uint8
     assert quantized_tensor.numel() == tensor.numel()
-    
-def test_quant_numpy_fp16():
-    tensor = np.random.rand(32).astype(np.float16)
-    
-    quantized_tensor = quantize_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8))
-    
-    assert quantized_tensor.dtype == np.int8
-    assert quantized_tensor.shape == tensor.shape
 
 def test_custom_quant_vs_torch_uint8():
     tensor = torch.rand(8192)

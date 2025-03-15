@@ -6,7 +6,7 @@
 #include <random>
 #include <span>
 
-#include <piquant.hpp>
+#include <quant.hpp>
 #include "../test/naive.hpp"
 
 #define ANKERL_NANOBENCH_IMPLEMENT
