@@ -260,7 +260,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     template <const round_mode RND, typename IN, typename OUT, typename... Args>
          requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>) && std::is_same_v<std::common_type_t<Args...>, IN> && sizeof...(Args) != 0)
-    static auto __attribute__((always_inline)) quant_step(const double inv_scale, const std::int32_t zp, prng_state& prng, const Args... args) noexcept -> OUT {
+    static inline auto __attribute__((always_inline)) quant_step(const double inv_scale, const std::int32_t zp, prng_state& prng, const Args... args) noexcept -> OUT {
         if constexpr (RND == round_mode::stochastic) {
             const auto Q{[&](const IN x) noexcept -> OUT {
                 double rnd {x * inv_scale};
@@ -312,7 +312,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     template <typename IN, typename OUT>
           requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
-    static auto __attribute__((always_inline)) dequant_step(const double scale, const std::int32_t zp, const IN x) noexcept -> OUT {
+    static inline auto __attribute__((always_inline)) dequant_step(const double scale, const std::int32_t zp, const IN x) noexcept -> OUT {
         return static_cast<OUT>(static_cast<std::make_signed_t<IN>>(x) - zp)*scale;
     }
 

@@ -52,19 +52,11 @@ def quantize_torch(
     if ctx is None:
         ctx = Context.default()
 
-    if in_tensor.dtype in [torch.float16, torch.bfloat16]:  # we don't have a native implementation for these dtypes yet
+    if in_tensor.dtype in [torch.float16, torch.bfloat16, torch.quint8, torch.quint2x4, torch.quint4x2]:  # we don't have a native implementation for these dtypes yet
         in_tensor = in_tensor.float()
-    elif in_tensor.dtype == torch.float32:
-        pass
-    else:
-        raise ValueError(f'unsupported dtype: {in_tensor.dtype}')
 
-    if config.output_dtype == QuantDtype.UINT8:
-        if out_tensor is None:
-            out_tensor = torch.empty_like(in_tensor, dtype=torch.uint8)
-        assert out_tensor.dtype == torch.uint8
-    elif config.output_dtype == QuantDtype.UINT4:
-            raise NotImplementedError('quantization to int4 is not yet implemented for torch tensors')
+    if out_tensor is None:
+        out_tensor = torch.empty_like(in_tensor, dtype=torch.uint8)
 
     assert in_tensor.is_contiguous()
     assert out_tensor.is_contiguous()
@@ -96,14 +88,9 @@ def dequantize_torch(
     if ctx is None:
         ctx = Context.default()
 
-    if in_tensor.dtype == torch.uint8:
-        if out_tensor is None:
-            out_tensor = torch.empty_like(in_tensor, dtype=torch.float32)
-        assert out_tensor.dtype == torch.float32
-    elif in_tensor.dtype == torch.int4:
-        raise NotImplementedError('dequantization from int4 is not yet implemented for torch tensors')
-    else:
-        raise ValueError(f'unsupported dtype: {in_tensor.dtype}')
+    if out_tensor is None:
+        out_tensor = torch.empty_like(in_tensor, dtype=torch.float32)
+    assert out_tensor.dtype == torch.float32
 
     assert in_tensor.is_contiguous()
     assert out_tensor.is_contiguous()

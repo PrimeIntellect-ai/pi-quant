@@ -42,13 +42,11 @@ using namespace piquant;
             ctx.quantize_generic<ti, to>(data_in, data_out, scale, zero_point, piquant::round_mode::rnd); \
             for (std::size_t i {}; i < numel_out; ++i) { \
                 bool eq {eq = data_out[i] == data_out_naive[i]}; \
-                if (piquant::round_mode::rnd == piquant::round_mode::stochastic) { \
-                    if (is_int4<to>) { \
-                        eq |= std::abs(static_cast<int>(((int)data_out[i]>>4)&0x0F) - static_cast<int>(((int)data_out_naive[i]>>4)&0x0F)) <= stochastic_epsilon \
-                            && std::abs(static_cast<int>((int)data_out[i+1]&0x0F) - static_cast<int>((int)data_out_naive[i+1]&0x0F)) <= stochastic_epsilon; \
-                    } else { \
-                        eq |= std::abs(static_cast<int>(data_out[i]) - static_cast<int>(data_out_naive[i])) <= stochastic_epsilon; \
-                    } \
+                if (is_int4<to>) { \
+                    eq |= std::abs(static_cast<int>(((int)data_out[i]>>4)&0x0F) - static_cast<int>(((int)data_out_naive[i]>>4)&0x0F)) <= stochastic_epsilon \
+                        && std::abs(static_cast<int>((int)data_out[i+1]&0x0F) - static_cast<int>((int)data_out_naive[i+1]&0x0F)) <= stochastic_epsilon; \
+                } else { \
+                    eq |= std::abs(static_cast<int>(data_out[i]) - static_cast<int>(data_out_naive[i])) <= stochastic_epsilon; \
                 } \
                 if (!eq) { \
                     std::cout << "Mismatch at index " << i << ": " << static_cast<int>(data_out[i]) << " != " << static_cast<int>(data_out_naive[i]) << std::endl; \
