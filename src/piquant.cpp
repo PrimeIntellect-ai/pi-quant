@@ -133,33 +133,6 @@ namespace piquant {
         explicit constexpr payload(const std::uint32_t seed) noexcept : prng{seed} {}
     };
 
-    struct worker;
-
-    class context::pimpl final {
-    public:
-        explicit pimpl(std::size_t num_threads);
-        pimpl(const pimpl&) = delete;
-        pimpl(pimpl&&) = delete;
-        auto operator = (const pimpl&) -> pimpl& = delete;
-        auto operator = (pimpl&&) -> pimpl& = delete;
-        ~pimpl();
-
-        alignas(cache_line) volatile bool m_interrupt {};
-        alignas(cache_line) std::uint64_t m_phase {};
-        alignas(cache_line) std::atomic_int64_t m_num_completed {};
-        std::vector<worker> m_workers {};
-        std::condition_variable m_cv {};
-        std::mutex m_mtx {};
-        std::atomic_size_t m_workers_online {};
-        #ifdef __x86_64__
-            amd64_cpu_caps cpu_caps {};
-        #endif
-
-        auto kickoff_workers(quant_descriptor&& cmd) -> void;
-        auto barrier() -> void;
-        auto operator()(quant_descriptor&& cmd) -> void;
-    };
-
     struct worker final {
         context::pimpl* pimpl;
         alignas(cache_line) payload pl;
@@ -185,72 +158,101 @@ namespace piquant {
                 thread->join();
         }
 
-        [[nodiscard]] auto await_work() -> bool {
-            std::unique_lock lock {pimpl->m_mtx};
-            pimpl->m_cv.wait(lock, [this]() noexcept -> bool { return pimpl->m_interrupt || pimpl->m_phase > pl.phase; });
-            if (pimpl->m_interrupt) [[unlikely]] return false;
-            pl.phase = pimpl->m_phase;
-            return true;
-        }
-
-        auto entry() -> void {
-            pimpl->m_workers_online.fetch_add(1, std::memory_order_seq_cst);
-            while (await_work()) [[likely]]
-                exec_and_broadcast();
-        }
-
-        auto exec_and_broadcast() -> void {
-            const std::int64_t tc {pl.tc};
-            const std::int64_t ti {pl.ti};
-            const auto partition_row {[=, this] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
-                if (dtype_info_of(cmd.dt_out).bit_size < 8) {       // Subbyte granularity requires special handling to not split packed bit pairs
-                    const std::int64_t pairs {(cmd.numel + 1)>>1};
-                    const std::int64_t pair_chunk {(pairs + tc - 1)/tc};
-                    const std::int64_t pra {pair_chunk*ti};
-                    const std::int64_t prb {std::min(pra + pair_chunk, pairs)};
-                    if (pra >= prb) [[unlikely]] return {};
-                    const std::int64_t ra {pra<<1};
-                    const std::int64_t rb {prb<<1 > cmd.numel ? cmd.numel : prb<<1}; // When numel is odd, the last pair is incomplete
-                    return {{ra, pra, rb-ra}};
-                }
-                const std::int64_t chunk {(cmd.numel + tc - 1)/tc};
-                const std::int64_t ra {chunk*ti};
-                const std::int64_t rb {std::min(ra + chunk, cmd.numel)};
-                if (ra >= rb) [[unlikely]] return {};
-                return {{ra, ra, rb-ra}};
-            }};
-            const auto dispatch_quant {[=, this](const std::int64_t oa, const std::int64_t ob, const std::int64_t range, const context::quant_descriptor& cmd) noexcept -> void {
-                #ifdef __x86_64__
-                    const auto level {static_cast<std::size_t>(pimpl->cpu_caps)};
-                    piquant_assert2(level < quant_routines.size());
-                    auto* const kernel {quant_routines[level]};
-                    piquant_assert2(kernel != nullptr);
-                    const auto si {dtype_info_of(cmd.dt_in).stride}, so {dtype_info_of(cmd.dt_out).stride};
-                    (*kernel)(
-                        cmd.in + si*oa,
-                        cmd.out + so*ob,
-                        range,
-                        cmd,
-                        pl.prng
-                    );
-                #else
-                    auto* const kernel {is_i8 ? &f32_quant8_generic : &f32_quant4_generic};
-                    piquant_assert2(kernel != nullptr);
-                    (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
-                #endif
-            }};
-
-            if (const auto partition {partition_row()}; partition) [[likely]] {
-                const auto [oa, ob, n] {*partition};
-                dispatch_quant(oa, ob, n, cmd);
-            }
-
-            if (1+pimpl->m_num_completed.fetch_add(1, std::memory_order::relaxed) == pimpl->m_workers.size()) { // Last worker
-                std::unique_lock lock {pimpl->m_mtx};
-                pimpl->m_cv.notify_all();
-            }
-        }
+        [[nodiscard]] auto await_work() -> bool;
+        auto entry() -> void;
+        auto exec_and_broadcast() -> void;
     };
+
+    class context::pimpl final {
+    public:
+        explicit pimpl(std::size_t num_threads);
+        pimpl(const pimpl&) = delete;
+        pimpl(pimpl&&) = delete;
+        auto operator = (const pimpl&) -> pimpl& = delete;
+        auto operator = (pimpl&&) -> pimpl& = delete;
+        ~pimpl();
+
+        alignas(cache_line) volatile bool m_interrupt {};
+        alignas(cache_line) std::uint64_t m_phase {};
+        alignas(cache_line) std::atomic_int64_t m_num_completed {};
+        std::vector<worker> m_workers {};
+        std::condition_variable m_cv {};
+        std::mutex m_mtx {};
+        std::atomic_size_t m_workers_online {};
+#ifdef __x86_64__
+        amd64_cpu_caps cpu_caps {};
+#endif
+
+        auto kickoff_workers(quant_descriptor&& cmd) -> void;
+        auto barrier() -> void;
+        auto operator()(quant_descriptor&& cmd) -> void;
+    };
+
+    auto worker::await_work() -> bool {
+        std::unique_lock lock {pimpl->m_mtx};
+        pimpl->m_cv.wait(lock, [this]() noexcept -> bool { return pimpl->m_interrupt || pimpl->m_phase > pl.phase; });
+        if (pimpl->m_interrupt) [[unlikely]] return false;
+        pl.phase = pimpl->m_phase;
+        return true;
+    }
+
+    auto worker::entry() -> void {
+        pimpl->m_workers_online.fetch_add(1, std::memory_order_seq_cst);
+        while (await_work()) [[likely]]
+            exec_and_broadcast();
+    }
+
+    auto worker::exec_and_broadcast() -> void {
+        const std::int64_t tc {pl.tc};
+        const std::int64_t ti {pl.ti};
+        const auto partition_row {[=, this] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
+            if (dtype_info_of(cmd.dt_out).bit_size < 8) {       // Subbyte granularity requires special handling to not split packed bit pairs
+                const std::int64_t pairs {(cmd.numel + 1)>>1};
+                const std::int64_t pair_chunk {(pairs + tc - 1)/tc};
+                const std::int64_t pra {pair_chunk*ti};
+                const std::int64_t prb {std::min(pra + pair_chunk, pairs)};
+                if (pra >= prb) [[unlikely]] return {};
+                const std::int64_t ra {pra<<1};
+                const std::int64_t rb {prb<<1 > cmd.numel ? cmd.numel : prb<<1}; // When numel is odd, the last pair is incomplete
+                return {{ra, pra, rb-ra}};
+            }
+            const std::int64_t chunk {(cmd.numel + tc - 1)/tc};
+            const std::int64_t ra {chunk*ti};
+            const std::int64_t rb {std::min(ra + chunk, cmd.numel)};
+            if (ra >= rb) [[unlikely]] return {};
+            return {{ra, ra, rb-ra}};
+        }};
+        const auto dispatch_quant {[=, this](const std::int64_t oa, const std::int64_t ob, const std::int64_t range, const context::quant_descriptor& cmd) noexcept -> void {
+            #ifdef __x86_64__
+                const auto level {static_cast<std::size_t>(pimpl->cpu_caps)};
+                piquant_assert2(level < quant_routines.size());
+                auto* const kernel {quant_routines[level]};
+                piquant_assert2(kernel != nullptr);
+                const auto si {dtype_info_of(cmd.dt_in).stride}, so {dtype_info_of(cmd.dt_out).stride};
+                (*kernel)(
+                    cmd.in + si*oa,
+                    cmd.out + so*ob,
+                    range,
+                    cmd,
+                    pl.prng
+                );
+            #else
+                auto* const kernel {is_i8 ? &f32_quant8_generic : &f32_quant4_generic};
+                piquant_assert2(kernel != nullptr);
+                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
+            #endif
+        }};
+
+        if (const auto partition {partition_row()}; partition) [[likely]] {
+            const auto [oa, ob, n] {*partition};
+            dispatch_quant(oa, ob, n, cmd);
+        }
+
+        if (1+pimpl->m_num_completed.fetch_add(1, std::memory_order::relaxed) == pimpl->m_workers.size()) { // Last worker
+            std::unique_lock lock {pimpl->m_mtx};
+            pimpl->m_cv.notify_all();
+        }
+    }
 
     context::pimpl::pimpl(std::size_t num_threads) {
         num_threads = std::max<std::size_t>(1, num_threads);
@@ -316,7 +318,7 @@ namespace piquant {
         piquant_assert(!dtype_info_of(dtype_in).is_quant, "input dtype must be a dequantized type");
         piquant_assert(dtype_info_of(dtype_out).is_quant, "output dtype must be a quantized type");
         if (dtype_info_of(dtype_out).bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
-            piquant_assert(out.size() == in.size()+1>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
+            piquant_assert(out.size() == (in.size()+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
         } else {
             piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
         }

@@ -266,7 +266,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         const auto* __restrict__ const x {static_cast<const IN*>(in)};
         auto* __restrict__ const o {static_cast<OUT*>(out)};
         const double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
-        if constexpr (is_int4<OUT>) numel = numel+1>>1;
+        if constexpr (is_int4<OUT>) numel = (numel+1)>>1;
         if constexpr (RND == round_mode::stochastic) {
             const auto Q{[&](const IN x) noexcept -> OUT {
                 double rnd {x * inv_scale};

@@ -27,7 +27,7 @@ using namespace piquant;
             ti scale {std::uniform_real_distribution<ti>{0.1, 1.0}(gen)}; \
             std::int32_t zero_point {std::uniform_int_distribution<std::int32_t>{-128, 127}(gen)}; \
             std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
-            std::size_t numel_out {is_int4<to> ? numel+1>>1 : numel}; \
+            std::size_t numel_out {is_int4<to> ? (numel+1)>>1 : numel}; \
             \
             std::vector<ti> data_in {}; \
             std::vector<to> data_out_naive {}; \
