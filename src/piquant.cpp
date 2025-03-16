@@ -90,8 +90,8 @@ prng_state& prng \
     [[nodiscard]] static auto compute_quant_config_from_data(const std::span<const T> x, std::int64_t tmax) -> std::pair<T, std::int64_t> {
         if (x.empty()) [[unlikely]] return {0.0, 0.0};
         //tmax &= (1ull<<52)-1; // Remove superfluous precision bit for float64
-        T mean {std::accumulate(x.begin(), x.end(), 0.0f) / static_cast<T>(x.size())};
-        T sq_delta {std::transform_reduce(
+        auto mean {static_cast<T>(std::accumulate(x.begin(), x.end(), 0.0) / static_cast<T>(x.size()))};
+        auto sq_delta {static_cast<T>(std::transform_reduce(
             x.begin(), x.end(),
             0.0,
             std::plus{},
@@ -99,9 +99,9 @@ prng_state& prng \
                 const T delta {value - mean};
                 return delta * delta;
             }
-        )};
-        const T std {std::sqrt(sq_delta / static_cast<T>(x.size()-1))};
-        const T scale {12.0*std/static_cast<T>(tmax)};
+        ))};
+        const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(x.size()-1)))};
+        const auto scale {static_cast<T>(12.0*std/static_cast<T>(tmax))};
         const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
         return {scale, zp};
     }
