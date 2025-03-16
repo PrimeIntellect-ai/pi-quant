@@ -1,18 +1,13 @@
-#ifndef QUANT8_KERNEL_IMPL
-#error "Q8 impl is not defined"
-#endif
-#ifndef QUANT4_KERNEL_IMPL
-#error "Q4 impl is not defined"
+#ifndef QUANT_KERNEL_IMPL
+#error "Kernel impl is not defined"
 #endif
 
 #include <piquant.hpp>
-
 
 #include <algorithm>
 #include <cstring>
 #include <cmath>
 #include <cstdint>
-#include <iostream>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
@@ -52,8 +47,8 @@ namespace piquant {
 #define concat(a, b) a ## b
 #define impl_namespace(a, b) piquant::concat(a, _impl)
 
-namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
-    static auto __attribute__((hot)) nearest(
+namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
+    static auto __attribute__((hot)) quant_f32_to_uint8_nearest(
         const float* const __restrict__ x,
         std::uint8_t* const __restrict__ o,
         const std::int64_t numel,
@@ -233,221 +228,189 @@ namespace impl_namespace(QUANT8_KERNEL_IMPL, _) {
         }
     }
 
-    static auto __attribute__((hot)) stochastic(
-        const float* const __restrict__ x,
-        std::uint8_t* const __restrict__ o,
-        const std::int64_t numel,
-        float scale,
-        const std::int32_t zp,
-        prng_state& prng
-    ) noexcept -> void {
-        scale = 1.0f / scale; /* We multiply by reciprocal */
-        std::int64_t i {};
-        for (; i < numel; ++i) {
-            float rnd {x[i] * scale};
-            const float dec {std::abs(rnd - std::trunc(rnd))};
-            const float xi {prng_canonical(prng)};
-            float adj {xi < dec ? 1.0f : 0.0f};
-            if (rnd < 0.0f) adj = -1.0f * adj;
-            rnd = std::trunc(rnd) + adj;
-            const std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
-            o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
-        }
-    }
+    template <typename T>
+    struct dtype_limits final {
+        static constexpr T min {std::numeric_limits<T>::min()};
+        static constexpr T max {std::numeric_limits<T>::max()};
+    };
 
-    template <const reduce_op op>
-    static auto __attribute__((hot)) dequant(
-       const std::uint8_t* const __restrict__ x,
-       float* const __restrict__ o,
-       const std::int64_t numel,
-       const float scale,
-       const std::int32_t zp
-    ) noexcept -> void {
-        std::int64_t i {};
-        #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
+    template<>
+    struct dtype_limits<uint4_t> final {
+        static constexpr std::uint8_t min {0};
+        static constexpr std::uint8_t max {0xf};
+    };
 
-        #elif defined(__AVX2__) && 0
+    template<>
+    struct dtype_limits<int4_t> final {
+        static constexpr std::int8_t min {-0x8};
+        static constexpr std::int8_t max {0x7};
+    };
 
-        #elif defined(__SSE4_2__)
+    template <typename T>
+    concept is_int4 = std::is_same_v<T, uint4_t> || std::is_same_v<T, int4_t>;
 
-        #elif defined(__aarch64__) && defined(__ARM_NEON__)
-
-        #endif
-        if constexpr (op == piquant::reduce_op::set) {
-            for (; i < numel; ++i) {
-                o[i] = static_cast<float>(x[i] - zp) * scale;
-            }
-        } else if constexpr (op == piquant::reduce_op::add) {
-            for (; i < numel; ++i) {
-                o[i] += static_cast<float>(x[i] - zp) * scale;
-            }
-        } else {
-            piquant::panic("Invalid reduce operation");
-        }
-    }
-};
-
-namespace impl_namespace(QUANT4_KERNEL_IMPL, _) {
-    static auto __attribute__((hot)) nearest(
-        const float* const __restrict__ x,
-        std::uint8_t* const __restrict__ o,
+    template <typename IN, typename OUT, const round_mode RND>
+        requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>))
+    static auto __attribute__((hot)) quant_generic(
+        const void* const in,
+        void* const out,
         std::int64_t numel,
         float scale,
-        const std::int32_t zp
-    ) noexcept -> void {
-        scale = 1.0f / scale; /* We multiply by reciprocal */
-        numel = (numel + 1) / 2;
-        const auto f = [=](float x) noexcept -> std::uint8_t {
-            return std::clamp<int>(std::round(x * scale) + zp, 0, 0xf);
-        };
-        for (std::size_t i{0}; i < numel; ++i) {
-            auto hi {f(x[(i<<1)])     & 0b0000'1111};
-            auto lo {f(x[(i<<1) + 1]) & 0b0000'1111};
-            o[i] = (hi << 4) | lo;
-        }
-    }
-
-    static auto __attribute__((hot)) stochastic(
-        const float* const __restrict__ x,
-        std::uint8_t* const __restrict__ o,
-        const std::int64_t numel,
-        float scale,
         const std::int32_t zp,
         prng_state& prng
     ) noexcept -> void {
-        scale = 1.0f / scale; /* We multiply by reciprocal */
-        std::int64_t i {};
-        for (; i < numel; ++i) {
-            float rnd {x[i] * scale};
-            const float dec {std::abs(rnd - std::trunc(rnd))};
-            const float xi {prng_canonical(prng)};
-            float adj {xi < dec ? 1.0f : 0.0f};
-            if (rnd < 0.0f) adj = -1.0f * adj;
-            rnd = std::trunc(rnd) + adj;
-            const std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
-            o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
+        if constexpr(std::is_same_v<IN, float> && std::is_same_v<OUT, std::uint8_t> && RND == round_mode::nearest) { // Use SIMD optimized kernels for some dtype permutations
+            quant_f32_to_uint8_nearest(static_cast<const float*>(in), static_cast<std::uint8_t*>(out), numel, scale, zp);
+            return;
+        }
+        const auto* __restrict__ const x {static_cast<const IN*>(in)};
+        auto* __restrict__ const o {static_cast<OUT*>(out)};
+        const double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
+        if constexpr (is_int4<OUT>) numel = numel+1>>1;
+        if constexpr (RND == round_mode::stochastic) {
+            const auto Q{[&](const IN x) noexcept -> OUT {
+                double rnd {x * inv_scale};
+                const double dec {std::abs(rnd - std::trunc(rnd))};
+                const double xi {prng_canonical(prng)};
+                double adj {xi < dec ? 1.0f : 0.0f};
+                if (rnd < 0.0f) adj = -1.0f * adj;
+                rnd = std::trunc(rnd) + adj;
+                const auto integral {static_cast<std::int64_t>(rnd) + zp};
+                return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
+            }};
+            if constexpr (is_int4<OUT>)
+                for (std::size_t i {}; i < numel; ++i)
+                    o[i] = static_cast<OUT>((static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)]))&15)<<4|static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)+1]))&15);
+            else
+                for (std::int64_t i {}; i < numel; ++i)
+                    o[i] = Q(x[i]);
+        } else {
+            const auto Q{[&](const IN x) noexcept -> OUT {
+                const double rnd {std::round(static_cast<double>(x) * inv_scale)};
+                const auto integral {static_cast<std::int64_t>(rnd) + zp};
+                return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
+            }};
+            if constexpr (is_int4<OUT>)
+                for (std::size_t i {}; i < numel; ++i)
+                    o[i] = static_cast<OUT>((static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)]))&15)<<4|static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)+1]))&15);
+            else
+                for (std::int64_t i {}; i < numel; ++i)
+                    o[i] = Q(x[i]);
         }
     }
 
-    template <const reduce_op op>
-    static auto __attribute__((hot)) dequant(
-       const std::uint8_t* const __restrict__ x,
-       float* const __restrict__ o,
-       const std::int64_t numel,
-       const float scale,
-       const std::int32_t zp
+    template <typename IN, typename OUT, const reduce_op RDO>
+            requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
+    static auto __attribute__((hot)) dequant_generic(
+        const void* const in,
+        void* const out,
+        const std::int64_t numel,
+        double scale,
+        const std::int64_t zp
     ) noexcept -> void {
-        std::int64_t i {};
-        #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
-
-        #elif defined(__AVX2__) && 0
-            const __m256 vscale = _mm256_set1_ps(scale);
-            const __m256i vzp16 = _mm256_set1_epi16(static_cast<short>(zp));
-            constexpr std::size_t step = 32;
-            for (; i+step <= numel; i += step) {
-                __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i));
-                __m128i v_low = _mm256_castsi256_si128(v);
-                __m128i v_high = _mm256_extracti128_si256(v, 1);
-                __m256i v_low_16 = _mm256_cvtepu8_epi16(v_low);
-                __m256i v_high_16 = _mm256_cvtepu8_epi16(v_high);
-                v_low_16 = _mm256_sub_epi16(v_low_16, vzp16);
-                v_high_16 = _mm256_sub_epi16(v_high_16, vzp16);
-                __m256i v_low_32_0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(v_low_16));
-                __m256i v_low_32_1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(v_low_16, 1));
-                __m256i v_high_32_0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(v_high_16));
-                __m256i v_high_32_1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(v_high_16, 1));
-                __m256 f_low_0 = _mm256_cvtepi32_ps(v_low_32_0);
-                __m256 f_low_1 = _mm256_cvtepi32_ps(v_low_32_1);
-                __m256 f_high_0 = _mm256_cvtepi32_ps(v_high_32_0);
-                __m256 f_high_1 = _mm256_cvtepi32_ps(v_high_32_1);
-                f_low_0 = _mm256_mul_ps(f_low_0, vscale);
-                f_low_1 = _mm256_mul_ps(f_low_1, vscale);
-                f_high_0 = _mm256_mul_ps(f_high_0, vscale);
-                f_high_1 = _mm256_mul_ps(f_high_1, vscale);
-                _mm256_storeu_ps(o+i, f_low_0);
-                _mm256_storeu_ps(o+i+8, f_low_1);
-                _mm256_storeu_ps(o+i+16, f_high_0);
-                _mm256_storeu_ps(o+i+24, f_high_1);
-            }
-        #elif defined(__SSE4_2__)
-
-        #elif defined(__aarch64__) && defined(__ARM_NEON__)
-
-        #endif
-        if constexpr (op == piquant::reduce_op::set) {
-            for (; i < numel; ++i) {
-                o[i] = static_cast<float>(x[i] - zp) * scale;
-            }
-        } else if constexpr (op == piquant::reduce_op::add) {
-            for (; i < numel; ++i) {
-                o[i] += static_cast<float>(x[i] - zp) * scale;
-            }
-        } else {
-            piquant::panic("Invalid reduce operation");
-        }
+        const auto* __restrict__ const x {static_cast<const IN*>(in)};
+        auto* __restrict__ const o {static_cast<OUT*>(out)};
+        if constexpr (RDO == reduce_op::set) {
+            for (std::int64_t i {}; i < numel; ++i)
+                o[i] = static_cast<OUT>(static_cast<std::int64_t>(x[i]) - zp)*scale;
+        } else if constexpr (RDO == reduce_op::add) {
+            for (std::int64_t i {}; i < numel; ++i)
+                o[i] += static_cast<OUT>(static_cast<std::int64_t>(x[i]) - zp)*scale;
+        } else
+            panic("Invalid reduce operation");
     }
 };
 
 namespace piquant {
-    auto __attribute__((hot)) QUANT8_KERNEL_IMPL(
-      const void* const __restrict__ x,
-      void* const __restrict__ o,
-      const std::int64_t numel,
-      const float scale,
-      const std::int32_t zp,
-      const bool sto_rnd,
-      prng_state& prng
-    ) noexcept -> void {
-        if (sto_rnd) {
-            impl_namespace(QUANT8_KERNEL_IMPL, _)::stochastic(static_cast<const float*>(x), static_cast<std::uint8_t*>(o), numel, scale, zp, prng);
-        } else {
-            impl_namespace(QUANT8_KERNEL_IMPL, _)::nearest(static_cast<const float*>(x), static_cast<std::uint8_t*>(o), numel, scale, zp);
-        }
+    [[nodiscard]] constexpr auto make_pair_perm(const dtype from, const dtype to) noexcept -> std::uint16_t {
+        return (static_cast<std::uint16_t>(from) & 0xff)<<8 | (static_cast<std::uint16_t>(to) & 0xff);
     }
 
-    auto __attribute__((hot)) DEQUANT8_KERNEL_IMPL(
-      const void* const __restrict__ x,
-      void* const __restrict__ o,
-      const std::int64_t numel,
-      const float scale,
-      const std::int32_t zp,
-      const reduce_op op
+    auto QUANT_KERNEL_IMPL(
+        const void* __restrict__ x,
+        void* __restrict__ o,
+        std::int64_t range,
+        const context::quant_descriptor& desc,
+        prng_state& prng
     ) noexcept -> void {
-        switch (op) {
-            case reduce_op::set: impl_namespace(QUANT8_KERNEL_IMPL, _)::dequant<reduce_op::set>(static_cast<const std::uint8_t*>(x), static_cast<float*>(o), numel, scale, zp); break;
-            case reduce_op::add: impl_namespace(QUANT8_KERNEL_IMPL, _)::dequant<reduce_op::add>(static_cast<const std::uint8_t*>(x), static_cast<float*>(o), numel, scale, zp); break;
-            default: panic("Invalid reduce_op");
-        }
-    }
-
-    auto __attribute__((hot)) QUANT4_KERNEL_IMPL(
-      const void* const __restrict__ x,
-      void* const __restrict__ o,
-      const std::int64_t numel,
-      const float scale,
-      const std::int32_t zp,
-      const bool sto_rnd,
-      prng_state& prng
-    ) noexcept -> void {
-        if (sto_rnd) {
-            impl_namespace(QUANT4_KERNEL_IMPL, _)::stochastic(static_cast<const float*>(x), static_cast<std::uint8_t*>(o), numel, scale, zp, prng);
-        } else {
-            impl_namespace(QUANT4_KERNEL_IMPL, _)::nearest(static_cast<const float*>(x), static_cast<std::uint8_t*>(o), numel, scale, zp);
-        }
-    }
-
-    auto __attribute__((hot)) DEQUANT4_KERNEL_IMPL(
-        const void* const __restrict__ x,
-        void* const __restrict__ o,
-        const std::int64_t numel,
-        const float scale,
-        const std::int32_t zp,
-        const reduce_op op
-    ) noexcept -> void {
-        switch (op) {
-            case reduce_op::set: impl_namespace(QUANT4_KERNEL_IMPL, _)::dequant<reduce_op::set>(static_cast<const std::uint8_t*>(x), static_cast<float*>(o), numel, scale, zp); break;
-            case reduce_op::add: impl_namespace(QUANT4_KERNEL_IMPL, _)::dequant<reduce_op::add>(static_cast<const std::uint8_t*>(x), static_cast<float*>(o), numel, scale, zp); break;
-            default: panic("Invalid reduce_op");
+        using enum dtype;
+        const dtype_info& dt_in {dtype_info_of(desc.dt_in)};
+        const dtype_info& dt_out {dtype_info_of(desc.dt_out)};
+        switch (desc.type) {
+            case context::command_type::quant:
+                piquant_assert2(!dt_in.is_quant);
+                piquant_assert2(dt_out.is_quant);
+                #define impl_quant_perm(dti, dto, ti, to) \
+                    case make_pair_perm(dti, dto): \
+                        if (desc.rnd_mode == round_mode::stochastic) \
+                            impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<ti, to, round_mode::stochastic>(x, o, range, desc.scale, desc.zero_point, prng); \
+                        else \
+                            impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<ti, to, round_mode::nearest>(x, o, range, desc.scale, desc.zero_point, prng); \
+                    return
+                switch (make_pair_perm(desc.dt_in, desc.dt_out)) {
+                    impl_quant_perm(f32, uint4, float, uint4_t);
+                    impl_quant_perm(f32, int4, float, int4_t);
+                    impl_quant_perm(f32, uint8, float, uint8_t);
+                    impl_quant_perm(f32, int8, float, int8_t);
+                    impl_quant_perm(f32, uint16, float, uint16_t);
+                    impl_quant_perm(f32, int16, float, int16_t);
+                    impl_quant_perm(f32, uint32, float, uint32_t);
+                    impl_quant_perm(f32, int32, float, int32_t);
+                    impl_quant_perm(f32, uint64, float, uint64_t);
+                    impl_quant_perm(f32, int64, float, int64_t);
+                    impl_quant_perm(f64, uint4, double, uint4_t);
+                    impl_quant_perm(f64, int4, double, int4_t);
+                    impl_quant_perm(f64, uint8, double, uint8_t);
+                    impl_quant_perm(f64, int8, double, int8_t);
+                    impl_quant_perm(f64, uint16, double, uint16_t);
+                    impl_quant_perm(f64, int16, double, int16_t);
+                    impl_quant_perm(f64, uint32, double, uint32_t);
+                    impl_quant_perm(f64, int32, double, int32_t);
+                    impl_quant_perm(f64, uint64, double, uint64_t);
+                    impl_quant_perm(f64, int64, double, int64_t);
+                    default: panic("Invalid quantization pair");
+                }
+            #undef impl_quant_perm
+            return;
+            case context::command_type::dequant:
+                piquant_assert2(dt_in.is_quant);
+                piquant_assert2(!dt_out.is_quant);
+                #define impl_dequant_perm(dti, dto, ti, to) \
+                    case make_pair_perm(dti, dto): \
+                        switch (desc.reduce) { \
+                            case reduce_op::set: impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<ti, to, reduce_op::set>(x, o, range, desc.scale, desc.zero_point); return; \
+                            case reduce_op::add: impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<ti, to, reduce_op::add>(x, o, range, desc.scale, desc.zero_point); return; \
+                            default: panic("Invalid reduce operation"); \
+                        }  \
+                    return
+                switch (make_pair_perm(desc.dt_in, desc.dt_out)) {
+                    impl_dequant_perm(uint4, f32, uint4_t, float);
+                    impl_dequant_perm(int4, f32, int4_t, float);
+                    impl_dequant_perm(uint8, f32, uint8_t, float);
+                    impl_dequant_perm(int8, f32, int8_t, float);
+                    impl_dequant_perm(uint16, f32, uint16_t, float);
+                    impl_dequant_perm(int16, f32, int16_t, float);
+                    impl_dequant_perm(uint32, f32, uint32_t, float);
+                    impl_dequant_perm(int32, f32, int32_t, float);
+                    impl_dequant_perm(uint64, f32, uint64_t, float);
+                    impl_dequant_perm(int64, f32, int64_t, float);
+                    impl_dequant_perm(uint4, f64, uint4_t, double);
+                    impl_dequant_perm(int4, f64, int4_t, double);
+                    impl_dequant_perm(uint8, f64, uint8_t, double);
+                    impl_dequant_perm(int8, f64, int8_t, double);
+                    impl_dequant_perm(uint16, f64, uint16_t, double);
+                    impl_dequant_perm(int16, f64, int16_t, double);
+                    impl_dequant_perm(uint32, f64, uint32_t, double);
+                    impl_dequant_perm(int32, f64, int32_t, double);
+                    impl_dequant_perm(uint64, f64, uint64_t, double);
+                    impl_dequant_perm(int64, f64, int64_t, double);
+                    default: panic("Invalid dequantization pair");
+                }
+            return;
+            case context::command_type::quant_dequant:
+                piquant_assert2(!dt_in.is_quant);
+                piquant_assert2(!dt_out.is_quant);
+            return;
         }
     }
 }

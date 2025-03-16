@@ -25,9 +25,18 @@ typedef enum piquant_reduce_op_t {
 } piquant_reduce_op_t;
 
 typedef enum piquant_dtype_t {
-    PIQUANT_DTYPE_F32,
+    PIQUANT_DTYPE_UINT4,
+    PIQUANT_DTYPE_INT4,
     PIQUANT_DTYPE_UINT8,
-    PIQUANT_DTYPE_UINT4
+    PIQUANT_DTYPE_INT8,
+    PIQUANT_DTYPE_UINT16,
+    PIQUANT_DTYPE_INT16,
+    PIQUANT_DTYPE_UINT32,
+    PIQUANT_DTYPE_INT32,
+    PIQUANT_DTYPE_UINT64,
+    PIQUANT_DTYPE_INT64,
+    PIQUANT_DTYPE_F32,
+    PIQUANT_DTYPE_F64
 } piquant_dtype_t;
 
 extern  piquant_context_t* piquant_context_create(size_t num_threads);

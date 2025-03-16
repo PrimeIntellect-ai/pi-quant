@@ -15,8 +15,8 @@
 auto main() -> int {
     const std::size_t nt {std::max(1u, std::thread::hardware_concurrency())};
     volatile std::size_t numel {1024*1024*1024/4};
-    std::vector<piquant::f32> data_in {};
-    std::vector<piquant::quint8> data_out {};
+    std::vector<float> data_in {};
+    std::vector<std::uint8_t> data_out {};
     data_in.resize(numel);
     data_out.resize(numel);
     std::random_device rd {};
@@ -29,7 +29,7 @@ auto main() -> int {
     piquant::context ctx {nt};
 
     bench.run("OPTIMIZED", [&] {
-        ctx.quantize_generic<piquant::f32, piquant::quint8>(data_in, data_out, 1.0, 0, piquant::round_mode::nearest);
+        ctx.quantize_generic<float, std::uint8_t>(data_in, data_out, 1.0, 0, piquant::round_mode::nearest);
     });
 
     ankerl::nanobench::doNotOptimizeAway(data_in.data());

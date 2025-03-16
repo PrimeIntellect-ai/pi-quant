@@ -1,5 +1,5 @@
 import importlib
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING, Tuple, Dict
 from piquant._quant import *
 
 if TYPE_CHECKING:
@@ -20,15 +20,24 @@ def compute_quant_config_torch_f32(tensor: 'torch.Tensor') -> Tuple[float, int]:
     assert tensor.dtype == torch.float32
     return compute_quant_config_f32_raw_ptr(tensor.data_ptr(), tensor.numel())
 
+__torch_dtype_map: Dict['torch.dtype', QuantDtype] = {
+    torch.uint8: QuantDtype.UINT8,
+    torch.int8: QuantDtype.INT8,
+    torch.uint16: QuantDtype.UINT16,
+    torch.int16: QuantDtype.INT16,
+    torch.uint32: QuantDtype.UINT32,
+    torch.int32: QuantDtype.INT32,
+    torch.uint64: QuantDtype.UINT64,
+    torch.int64: QuantDtype.INT64,
+    torch.float32: QuantDtype.F32,
+    torch.float64: QuantDtype.F64
+}
+
 def torch_to_piquant_dtype(dtype: 'torch.dtype') -> QuantDtype:
     if torch is None:
         raise ImportError('torch is not installed')
-    type_map = {
-        torch.uint8: QuantDtype.UINT8,
-        torch.float32: QuantDtype.F32,
-    }
-    assert dtype in type_map, f'Unsupported dtype: {dtype}'
-    return type_map[dtype]
+    assert dtype in __torch_dtype_map, f'Unsupported dtype: {dtype}'
+    return __torch_dtype_map[dtype]
 
 def quantize_torch(
     in_tensor: 'torch.Tensor',
