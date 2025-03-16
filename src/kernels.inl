@@ -312,10 +312,10 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         auto* __restrict__ const o {static_cast<OUT*>(out)};
         if constexpr (RDO == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
-                o[i] = static_cast<OUT>(static_cast<std::int64_t>(x[i]) - zp)*scale;
+                o[i] = static_cast<OUT>(static_cast<std::make_signed_t<IN>>(x[i]) - zp)*scale;
         } else if constexpr (RDO == reduce_op::add) {
             for (std::int64_t i {}; i < numel; ++i)
-                o[i] += static_cast<OUT>(static_cast<std::int64_t>(x[i]) - zp)*scale;
+                o[i] += static_cast<OUT>(static_cast<std::make_signed_t<IN>>(x[i]) - zp)*scale;
         } else
             panic("Invalid reduce operation");
     }

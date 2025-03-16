@@ -12,14 +12,14 @@
 #include <condition_variable>
 
 namespace piquant {
-    #define decl_quant_kernel_fn(impl) \
-        extern __attribute__((hot)) auto impl( \
-            const void* x, \
-            void* o, \
-            std::int64_t range, \
-            const context::quant_descriptor& desc, \
-            prng_state& prng \
-        ) noexcept -> void
+#define decl_quant_kernel_fn(impl) \
+extern __attribute__((hot)) auto impl( \
+const void* x, \
+void* o, \
+std::int64_t range, \
+const context::quant_descriptor& desc, \
+prng_state& prng \
+) noexcept -> void
 
     decl_quant_kernel_fn(quant_generic);
 
@@ -31,77 +31,87 @@ namespace piquant {
         prng_state& prng
     ) noexcept -> void;
 
-    #ifdef __x86_64__
-        #include <cpuid.h>
+#ifdef __x86_64__
+#include <cpuid.h>
 
-        [[nodiscard]] static auto check_sse42_support() noexcept -> bool {
-            int info[4] = {-1};
-            __cpuid(0, info[0], info[1], info[2], info[3]);
-            if (info[0] < 1) return false;
-            __cpuid(1, info[0], info[1], info[2], info[3]);
-            return (info[2] & (1<<20)) != 0;
-        }
+    [[nodiscard]] static auto check_sse42_support() noexcept -> bool {
+        int info[4] = {-1};
+        __cpuid(0, info[0], info[1], info[2], info[3]);
+        if (info[0] < 1) return false;
+        __cpuid(1, info[0], info[1], info[2], info[3]);
+        return (info[2] & (1<<20)) != 0;
+    }
 
-        [[nodiscard]] static auto check_avx2_support() noexcept -> bool {
-            int info[4] = {-1};
-            __cpuid(0, info[0], info[1], info[2], info[3]);
-            if (info[0] < 7) return false;
-            __cpuid(1, info[0], info[1], info[2], info[3]);
-            if ((info[2] & 0x38081001) != 0x38081001) return false;
-            __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
-            if ((info[1] & 0x20) != 0x20) return false;
-            std::uint32_t lo, hi;
-            asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
-            return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 6) == 6;
-        }
+    [[nodiscard]] static auto check_avx2_support() noexcept -> bool {
+        int info[4] = {-1};
+        __cpuid(0, info[0], info[1], info[2], info[3]);
+        if (info[0] < 7) return false;
+        __cpuid(1, info[0], info[1], info[2], info[3]);
+        if ((info[2] & 0x38081001) != 0x38081001) return false;
+        __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
+        if ((info[1] & 0x20) != 0x20) return false;
+        std::uint32_t lo, hi;
+        asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
+        return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 6) == 6;
+    }
 
-        [[nodiscard]] static auto check_avx512f_support() noexcept -> bool {
-            int info[4] = {-1};
-           __cpuid(0, info[0], info[1], info[2], info[3]);
-            if (info[0] < 7) return false;
-            __cpuid(1, info[0], info[1], info[2], info[3]);
-            if ((info[2] & 0x8000000) == 0 || (info[2] & 0x10000000) == 0) return false;
-            __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
-            if ((info[1] & 0x10000) == 0) return false;
-            std::uint32_t lo, hi;
-            asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
-            return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 0xe0) == 0xe0;
-        }
+    [[nodiscard]] static auto check_avx512f_support() noexcept -> bool {
+        int info[4] = {-1};
+        __cpuid(0, info[0], info[1], info[2], info[3]);
+        if (info[0] < 7) return false;
+        __cpuid(1, info[0], info[1], info[2], info[3]);
+        if ((info[2] & 0x8000000) == 0 || (info[2] & 0x10000000) == 0) return false;
+        __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
+        if ((info[1] & 0x10000) == 0) return false;
+        std::uint32_t lo, hi;
+        asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
+        return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 0xe0) == 0xe0;
+    }
 
-        decl_quant_kernel_fn(quant_amd64_sse42);
-        decl_quant_kernel_fn(quant_amd64_avx2);
-        decl_quant_kernel_fn(quant_amd64_avx512f);
+    decl_quant_kernel_fn(quant_amd64_sse42);
+    decl_quant_kernel_fn(quant_amd64_avx2);
+    decl_quant_kernel_fn(quant_amd64_avx512f);
 
-        static constexpr std::array<quant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> quant_routines = {
-            &quant_generic,
-            &quant_amd64_sse42,
-            &quant_amd64_avx2,
-            &quant_amd64_avx512f
-        };
+    static constexpr std::array<quant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> quant_routines = {
+        &quant_generic,
+        &quant_amd64_sse42,
+        &quant_amd64_avx2,
+        &quant_amd64_avx512f
+    };
 
-    #endif
+#endif
 
-    #undef decl_kernel_pair
+#undef decl_kernel_pair
 
     template <class... T>
     struct overloads final : T... { using T::operator()...; };
 
-    auto compute_quant_config_from_data(const std::span<const float> x) -> std::pair<float, std::int32_t> {
-        if (x.empty()) [[unlikely]] return {0.0f, 0.0f};
-        float mean {std::accumulate(x.begin(), x.end(), 0.0f) / static_cast<float>(x.size())};
-        float sq_delta {std::transform_reduce(
+    template <typename T> requires std::is_floating_point_v<T>
+    [[nodiscard]] static auto compute_quant_config_from_data(const std::span<const T> x, std::int64_t tmax) -> std::pair<T, std::int64_t> {
+        if (x.empty()) [[unlikely]] return {0.0, 0.0};
+        //tmax &= (1ull<<52)-1; // Remove superfluous precision bit for float64
+        T mean {std::accumulate(x.begin(), x.end(), 0.0f) / static_cast<T>(x.size())};
+        T sq_delta {std::transform_reduce(
             x.begin(), x.end(),
-            0.0f,
+            0.0,
             std::plus{},
-            [mean](const float value) noexcept -> float {
-                const float delta {value - mean};
+            [mean](const T value) noexcept -> T {
+                const T delta {value - mean};
                 return delta * delta;
             }
         )};
-        const float std {std::sqrt(sq_delta / static_cast<float>((x.size()-1)))};
-        const float scale {12.0f*std/255.0f};
-        const std::int32_t zp {127 - static_cast<std::int32_t>(std::round(mean/scale))};
+        const T std {std::sqrt(sq_delta / static_cast<T>(x.size()-1))};
+        const T scale {12.0*std/static_cast<T>(tmax)};
+        const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
         return {scale, zp};
+    }
+
+    auto compute_quant_config_from_data(const std::span<const float> x, const std::int64_t tmax) -> std::pair<float, std::int64_t> {
+        return compute_quant_config_from_data<float>(x, tmax);
+    }
+
+    auto compute_quant_config_from_data(const std::span<const double> x, const std::int64_t tmax) -> std::pair<double, std::int64_t> {
+        return compute_quant_config_from_data<double>(x, tmax);
     }
 
     auto panic(const char* msg, ...) -> void {
@@ -347,7 +357,11 @@ namespace piquant {
     ) const -> void {
         piquant_assert(dtype_info_of(dtype_in).is_quant, "input dtype must be a quantized type");
         piquant_assert(!dtype_info_of(dtype_out).is_quant, "output dtype must be a dequantized type");
-        piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
+        if (dtype_info_of(dtype_in).bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
+            piquant_assert(in.size() == (out.size()+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
+        } else {
+            piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
+        }
         quant_descriptor info {
             .type = command_type::dequant,
             .in = in.data(),

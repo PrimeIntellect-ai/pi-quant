@@ -13,7 +13,8 @@
 
 namespace piquant {
     // computes and returns {scale, zero_point} derived from the data's mean and stddev.
-    [[nodiscard]] extern auto compute_quant_config_from_data(std::span<const float> x) -> std::pair<float, std::int32_t>;
+    [[nodiscard]] extern auto compute_quant_config_from_data(std::span<const float> x, std::int64_t tmax) -> std::pair<float, std::int64_t>;
+    [[nodiscard]] extern auto compute_quant_config_from_data(std::span<const double> x, std::int64_t tmax) -> std::pair<double, std::int64_t>;
 
     /* Aborts with a formatted message. Because not all tested C++ compilers support std::format, C-style formatting is used for now. Should be replaced later. Pulling in fmt::format just for abort seems a bit too much... */
     [[noreturn]] extern auto panic(const char* msg, ...) -> void;
