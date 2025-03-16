@@ -248,9 +248,17 @@ prng_state& prng \
                     pl.prng
                 );
             #else
-                auto* const kernel {is_i8 ? &f32_quant8_generic : &f32_quant4_generic};
+                auto* const kernel {&quant_generic};
                 piquant_assert2(kernel != nullptr);
-                (*kernel)(cmd.in+oa, cmd.out+ob, n, cmd.scale, cmd.zero_point, cmd.rnd_mode == round_mode::stochastic, pl.prng);
+                const auto si {dtype_info_of(cmd.dt_in).stride};
+                const auto so {cmd.type == context::command_type::quant_dequant ? si : dtype_info_of(cmd.dt_out).stride};
+                (*kernel)(
+                    cmd.in + si*oa,
+                    cmd.out + so*ob,
+                    range,
+                    cmd,
+                    pl.prng
+                );
             #endif
         }};
 
