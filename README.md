@@ -1,70 +1,62 @@
-# Quantization Kernels
+# Prime Fast Quantization Library
 
-This project provides multithreaded SIMD int8 and int4 quantization kernels with various rounding modes.<br>
-The kernels are optimized for different CPU architectures, including AMD64 (SSE 4.2, AVX2, AVX512F) and ARM64 (Neon).<br>
-The most optimal kernel is selected at runtime.
+## Overview
+
+This project provides **multithreaded CPU SIMD int8 and int4 quantization kernels** with various rounding modes. The kernels are optimized for different CPU architectures, including **AMD64** (SSE4.2, AVX2, AVX512F) and **ARM64**(Neon). The most optimal kernel is selected at runtime.
+
+## What is Quantization?
+
+Quantization is the process of mapping continuous values into a finite, discrete set of values. In machine learning and signal processing, it is commonly used to **reduce the precision of numerical data**, lowering memory usage and improving computational efficiency while maintaining acceptable accuracy.
 
 ## Features
 
-- **Parallel Quantization**: Efficiently quantizes data using multiple threads.
-- **Architecture-Specific Optimizations**: Includes optimizations for AMD64 with SSE4.2, AVX2, and AVX512 instruction sets and ARM64 with NEON.
-- **Thread Pool**: Reuses threads for minimum overhead.
-- **Flexible Rounding Modes**: Supports both nearest and stochastic rounding modes.
-- **C99 API**: Provides a C99 API for easy integration with plain C (see capi.h).
+✅ **Parallel De/Quantization**: Efficiently quantizes and dequantizes data using multiple threads.
 
-## Building the Project
+✅ **Multiple Datatypes:**  Support for f32 ↔ uint8 and f32 ↔ uint4 quantization. **(uint4 is still WIP)**
 
-### Prerequisites
+✅ **Modern Python API:** Use the library from Python with PyTorch, numpy or standalone.
 
-- **CMake**: Version 3.20 or higher is required.
-- **C++ Compiler**: A compiler that supports C++20 is necessary.
+✅ **Architecture-Specific Optimizations**: Includes optimizations for AMD64 with SSE4.2, AVX2, and AVX512 instruction sets and ARM64 with NEON.
 
-### Build Instructions
+✅ **Thread Pool**: Reuses threads for minimal overhead.
 
-1. **Clone the Repository**:
-   ```bash
-   git clone <repository-url>
-   cd quantization-kernels
-   ```
+✅ **Flexible Rounding Modes**: Supports both **nearest** and **stochastic** rounding modes.
 
-2. **Create a Build Directory**:
-   ```bash
-   mkdir build
-   cd build
-   ```
+✅ **C99 API**: Provides a C99 API for C projects or foreign language bindings (see `quant.h`).
 
-3. **Run CMake**:
-   ```bash
-   cmake ..
-   ```
+✅ **Store Operators:** Multiple store operators for dequantization, useful for ring reduces.
 
-4. **Build the Project**:
-   ```bash
-   cmake --build .
-   ```
+## Benchmark
 
-### Running Benchmarks and Tests
+The benchmarks were run on a variety of hardware. We benchmark against torch quint8 quantize_per_tensor and also against the torch.fx quantize_per_tensor. Benchmarked was float32 to uint8 quantization with 1000 runs. The numel and other properties can be see in the [benchmark code](https://github.com/PrimeIntellect-ai/quantization-kernels/blob/main/python/benchmark/benchmark.py).
 
-- **Benchmarks**: After building, you can run the benchmark executable to evaluate performance.
-  ```bash
-  ./bench
-  ```
+In the charts, “Torch FX Quant” refers to **torch.ao.quantization.fx._decomposed.quantize_per_tensor**.
 
-- **Tests**: Run the test executable to verify functionality.
-  ```bash
-  ./test
-  ```
+“Torch Builtin Quant” referes to **torch.quantize_per_tensor** and Fast Quant to our own library **quant.quant_torch.**
 
-## Code Structure
+### Benchmark 1 (Threadripper 3970X 32-Core Processor, 64 CPUs)
 
-- **src/**: Contains the source code for the quantization kernels.
-- **benchmark/**: Contains benchmarking code.
-- **test/**: Contains test code.
+* 1000 runs with numel 27264000
+* CPU:  AMD Ryzen Threadripper 3970X 32-Core Processor, Runtime: AVX2
+* Memory: 128 GB
+* Linux: 6.1.0-30-amd64
 
-## Usage
+![image.png](https://i.imgur.com/rjurbfB.png)
 
-The main interface is provided through the `piquant::context` class, which allows for quantization of data using the `quantize_uint8` and `quantize_uint4` methods. These methods require input data, output buffers, a scale factor, a zero point, and a rounding mode.
+### Benchmark 2 (Apple M3 Pro, 11 CPUs)
 
-## License
+* 1000 runs with numel 27264000
+* CPU: Apple M3 Pro, 11 CPUs, Runtime: ARM Neon
+* Memory: 18GB
+* OSX: 15.3.1 (24D70
 
-This project is licensed under the MIT License. See the LICENSE file for more details.
+![image.png](https://i.imgur.com/aMCvInY.png)
+
+### Benchmark 3 (Xeon Platinum 8470, 104 vCPUs)
+
+* 1000 runs with numel 27264000
+* CPU:  Intel(R) Xeon(R) Platinum 8470, 104 vCPUs, Runtime: AVX512-F
+* Memory: 752 GB
+* Linux: 5.15.0-112-generic
+
+![image.png](https://i.imgur.com/GreULz2.png)
