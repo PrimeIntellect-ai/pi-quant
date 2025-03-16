@@ -249,24 +249,18 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     template <typename T>
     concept is_int4 = std::is_same_v<T, uint4_t> || std::is_same_v<T, int4_t>;
 
-    template <typename IN, typename OUT, const round_mode RND>
-        requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>))
-    static auto __attribute__((hot)) quant_generic(
-        const void* const in,
-        void* const out,
-        std::int64_t numel,
-        float scale,
-        const std::int32_t zp,
-        prng_state& prng
-    ) noexcept -> void {
-        if constexpr(std::is_same_v<IN, float> && std::is_same_v<OUT, std::uint8_t> && RND == round_mode::nearest) { // Use SIMD optimized kernels for some dtype permutations
-            quant_f32_to_uint8_nearest(static_cast<const float*>(in), static_cast<std::uint8_t*>(out), numel, scale, zp);
-            return;
-        }
-        const auto* __restrict__ const x {static_cast<const IN*>(in)};
-        auto* __restrict__ const o {static_cast<OUT*>(out)};
-        const double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
-        if constexpr (is_int4<OUT>) numel = (numel+1)>>1;
+    template <typename OUT> requires is_int4<OUT>
+    [[nodiscard]] static constexpr auto __attribute__((always_inline)) pack_nibbles(const OUT x, const OUT y) -> OUT {
+        const auto xi {static_cast<std::uint8_t>(x)};
+        const auto yi {static_cast<std::uint8_t>(y)};
+        constexpr auto m {dtype_limits<uint4_t>::max};
+        const auto pa {static_cast<std::uint8_t>((m&xi)<<4|m&yi)};
+        return static_cast<OUT>(pa);
+    }
+
+    template <const round_mode RND, typename IN, typename OUT, typename... Args>
+         requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>) && std::is_same_v<std::common_type_t<Args...>, IN> && sizeof...(Args) != 0)
+    static auto __attribute__((always_inline)) quant_step(const double inv_scale, const std::int32_t zp, prng_state& prng, const Args... args) noexcept -> OUT {
         if constexpr (RND == round_mode::stochastic) {
             const auto Q{[&](const IN x) noexcept -> OUT {
                 double rnd {x * inv_scale};
@@ -278,25 +272,48 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 const auto integral {static_cast<std::int64_t>(rnd) + zp};
                 return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
             }};
-            if constexpr (is_int4<OUT>)
-                for (std::size_t i {}; i < numel; ++i)
-                    o[i] = static_cast<OUT>((static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)]))&15)<<4|static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)+1]))&15);
-            else
-                for (std::int64_t i {}; i < numel; ++i)
-                    o[i] = Q(x[i]);
+            if constexpr (sizeof...(Args) == 1) return Q(args...);
+            else return pack_nibbles(Q(args)...);
         } else {
-            const auto Q{[&](const IN x) noexcept -> OUT {
+            const auto Q {[=](const IN x) noexcept -> OUT {
                 const double rnd {std::round(static_cast<double>(x) * inv_scale)};
                 const auto integral {static_cast<std::int64_t>(rnd) + zp};
                 return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
             }};
-            if constexpr (is_int4<OUT>)
-                for (std::size_t i {}; i < numel; ++i)
-                    o[i] = static_cast<OUT>((static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)]))&15)<<4|static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)+1]))&15);
-            else
-                for (std::int64_t i {}; i < numel; ++i)
-                    o[i] = Q(x[i]);
+            if constexpr (sizeof...(Args) == 1) return Q(args...);
+            else return pack_nibbles(Q(args)...);
         }
+    }
+
+    template <typename IN, typename OUT, const round_mode RND>
+        requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>))
+    static auto __attribute__((hot)) quant_generic(
+        const void* const in,
+        void* const out,
+        std::int64_t numel,
+        float scale,
+        const std::int64_t zp,
+        prng_state& prng
+    ) noexcept -> void {
+        if constexpr(std::is_same_v<IN, float> && std::is_same_v<OUT, std::uint8_t> && RND == round_mode::nearest) { // Use SIMD optimized kernels for some dtype permutations
+            quant_f32_to_uint8_nearest(static_cast<const float*>(in), static_cast<std::uint8_t*>(out), numel, scale, zp);
+            return;
+        }
+        const auto* __restrict__ const x {static_cast<const IN*>(in)};
+        auto* __restrict__ const o {static_cast<OUT*>(out)};
+        const double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
+        if constexpr (is_int4<OUT>) numel = (numel+1)>>1;
+        for (std::int64_t i {}; i < numel; ++i)
+            if constexpr (is_int4<OUT>)
+                o[i] = quant_step<RND, IN, OUT>(inv_scale, zp, prng, x[i], x[i+1]);
+            else
+                o[i] = quant_step<RND, IN, OUT>(inv_scale, zp, prng, x[i]);
+    }
+
+    template <typename IN, typename OUT>
+          requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
+    static auto __attribute__((always_inline)) dequant_step(const double scale, const std::int32_t zp, const IN x) noexcept -> OUT {
+        return static_cast<OUT>(static_cast<std::make_signed_t<IN>>(x) - zp)*scale;
     }
 
     template <typename IN, typename OUT, const reduce_op RDO>
@@ -312,10 +329,33 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         auto* __restrict__ const o {static_cast<OUT*>(out)};
         if constexpr (RDO == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
-                o[i] = static_cast<OUT>(static_cast<std::make_signed_t<IN>>(x[i]) - zp)*scale;
+                o[i] = dequant_step<IN, OUT>(scale, zp, x[i]);
         } else if constexpr (RDO == reduce_op::add) {
             for (std::int64_t i {}; i < numel; ++i)
-                o[i] += static_cast<OUT>(static_cast<std::make_signed_t<IN>>(x[i]) - zp)*scale;
+                o[i] += dequant_step<IN, OUT>(scale, zp, x[i]);
+        } else
+            panic("Invalid reduce operation");
+    }
+
+    template <typename IN, typename QUANT, const round_mode RND, const reduce_op RDO>
+      requires (std::is_floating_point_v<IN> && (std::is_integral_v<QUANT> || is_int4<QUANT>))
+    static auto __attribute__((hot)) quant_dequant_generic(
+      const void* const in,
+      void* const out,
+      const std::int64_t numel,
+      double scale,
+      const std::int64_t zp,
+      prng_state& prng
+    ) noexcept -> void {
+        const auto* __restrict__ const x {static_cast<const IN*>(in)};
+        auto* __restrict__ const o {static_cast<IN*>(out)};
+        const double inv_scale {1.0 / scale};
+        if constexpr (RDO == reduce_op::set) {
+            for (std::int64_t i {}; i < numel; ++i)
+                o[i] = dequant_step<QUANT, IN>(scale, zp, quant_step<RND, IN, QUANT>(inv_scale, zp, prng, x[i]));
+        } else if constexpr (RDO == reduce_op::add) {
+            for (std::int64_t i {}; i < numel; ++i)
+                o[i] += dequant_step<QUANT, IN>(scale, zp, quant_step<RND, IN, QUANT>(inv_scale, zp, prng, x[i]));
         } else
             panic("Invalid reduce operation");
     }
@@ -337,7 +377,7 @@ namespace piquant {
         const dtype_info& dt_in {dtype_info_of(desc.dt_in)};
         const dtype_info& dt_out {dtype_info_of(desc.dt_out)};
         switch (desc.type) {
-            case context::command_type::quant:
+            case context::command_type::quant:  // out[i] = quantize(in[i])
                 piquant_assert2(!dt_in.is_quant);
                 piquant_assert2(dt_out.is_quant);
                 #define impl_quant_perm(dti, dto, ti, to) \
@@ -372,7 +412,7 @@ namespace piquant {
                 }
             #undef impl_quant_perm
             return;
-            case context::command_type::dequant:
+            case context::command_type::dequant:    // out[i] = dequantize(in[i])
                 piquant_assert2(dt_in.is_quant);
                 piquant_assert2(!dt_out.is_quant);
                 #define impl_dequant_perm(dti, dto, ti, to) \
@@ -407,9 +447,45 @@ namespace piquant {
                     default: panic("Invalid dequantization pair");
                 }
             return;
-            case context::command_type::quant_dequant:
+            case context::command_type::quant_dequant:  // out[i] = dequantize(quantize(in[i])))
                 piquant_assert2(!dt_in.is_quant);
-                piquant_assert2(!dt_out.is_quant);
+                piquant_assert2(dt_out.is_quant); // dt_out acts as the quantized type, but dtype in == dtype out
+               #define impl_quant_perm(dti, dto, ti, to) \
+                    case make_pair_perm(dti, dto): \
+                        if (desc.reduce == reduce_op::set) \
+                            if (desc.rnd_mode == round_mode::stochastic) \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::set>(x, o, range, desc.scale, desc.zero_point, prng); \
+                            else \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::set>(x, o, range, desc.scale, desc.zero_point, prng); \
+                        else \
+                            if (desc.rnd_mode == round_mode::stochastic) \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::add>(x, o, range, desc.scale, desc.zero_point, prng); \
+                            else \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::add>(x, o, range, desc.scale, desc.zero_point, prng); \
+                    return
+                switch (make_pair_perm(desc.dt_in, desc.dt_out)) {
+                    impl_quant_perm(f32, uint4, float, uint4_t);
+                    impl_quant_perm(f32, int4, float, int4_t);
+                    impl_quant_perm(f32, uint8, float, uint8_t);
+                    impl_quant_perm(f32, int8, float, int8_t);
+                    impl_quant_perm(f32, uint16, float, uint16_t);
+                    impl_quant_perm(f32, int16, float, int16_t);
+                    impl_quant_perm(f32, uint32, float, uint32_t);
+                    impl_quant_perm(f32, int32, float, int32_t);
+                    impl_quant_perm(f32, uint64, float, uint64_t);
+                    impl_quant_perm(f32, int64, float, int64_t);
+                    impl_quant_perm(f64, uint4, double, uint4_t);
+                    impl_quant_perm(f64, int4, double, int4_t);
+                    impl_quant_perm(f64, uint8, double, uint8_t);
+                    impl_quant_perm(f64, int8, double, int8_t);
+                    impl_quant_perm(f64, uint16, double, uint16_t);
+                    impl_quant_perm(f64, int16, double, int16_t);
+                    impl_quant_perm(f64, uint32, double, uint32_t);
+                    impl_quant_perm(f64, int32, double, int32_t);
+                    impl_quant_perm(f64, uint64, double, uint64_t);
+                    impl_quant_perm(f64, int64, double, int64_t);
+                    default: panic("Invalid quantization pair");
+                }
             return;
         }
     }

@@ -1,6 +1,6 @@
 enable_testing()
 add_subdirectory(googletest)
-add_executable(quant_test quant.cpp dequant.cpp)
+add_executable(quant_test quant.cpp dequant.cpp requant.cpp)
 target_include_directories(quant_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(quant_test PRIVATE piquant GTest::gtest_main)
 add_test(NAME quant_test COMMAND quant_test)

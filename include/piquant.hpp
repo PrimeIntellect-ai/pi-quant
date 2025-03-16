@@ -226,14 +226,50 @@ namespace piquant {
             );
         }
 
+        auto quantize_dequantize_fused(
+            std::span<const std::byte> in,
+            dtype dtype_in_out,
+            std::span<std::byte> out,
+            dtype quant_type,
+            float scale,
+            std::int32_t zero_point,
+            round_mode mode,
+            reduce_op op
+        ) const -> void;
+
+        template <typename INOUT, typename QUANT> requires requires {
+            requires is_dtype<INOUT>;
+            dtype_info_of(dtype_traits<INOUT>::ty).is_quant == false;
+            dtype_info_of(dtype_traits<QUANT>::ty).is_quant == true;
+        }
+        auto quantize_dequantize_fused_generic(
+            std::span<const INOUT> in,
+            std::span<INOUT> out,
+            float scale,
+            std::int32_t zero_point,
+            round_mode mode,
+            reduce_op op
+        ) {
+            quantize_dequantize_fused(
+                {reinterpret_cast<const std::byte*>(in.data()), in.size()},
+                dtype_traits<INOUT>::ty,
+                {reinterpret_cast<std::byte*>(out.data()), out.size()},
+                dtype_traits<QUANT>::ty,
+                scale,
+                zero_point,
+                mode,
+                op
+            );
+        }
+
         auto reseed_thread_local_rng(std::uint32_t seed) const -> void;
 
         class pimpl;
 
         enum class command_type {
-            quant,
-            dequant,
-            quant_dequant
+            quant,              // out[i] = quantize(in[i])
+            dequant,            // out[i] = dequantize(in[i])
+            quant_dequant       // out[i] = dequantize(quantize(in[i])))
         };
 
         struct quant_descriptor final {

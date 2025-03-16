@@ -238,7 +238,8 @@ prng_state& prng \
                 piquant_assert2(level < quant_routines.size());
                 auto* const kernel {quant_routines[level]};
                 piquant_assert2(kernel != nullptr);
-                const auto si {dtype_info_of(cmd.dt_in).stride}, so {dtype_info_of(cmd.dt_out).stride};
+                const auto si {dtype_info_of(cmd.dt_in).stride};
+                const auto so {cmd.type == context::command_type::quant_dequant ? si : dtype_info_of(cmd.dt_out).stride};
                 (*kernel)(
                     cmd.in + si*oa,
                     cmd.out + so*ob,
@@ -371,6 +372,34 @@ prng_state& prng \
             .zero_point = zero_point,
             .dt_in = dtype_in,
             .dt_out = dtype_out,
+            .reduce = op
+        };
+        (*this->m_pimpl)(std::move(info));
+    }
+
+    auto context::quantize_dequantize_fused(
+        const std::span<const std::byte> in,
+        const dtype dtype_in_out,
+        const std::span<std::byte> out,
+        const dtype quant_type,
+        const float scale,
+        const std::int32_t zero_point,
+        const round_mode mode,
+        const reduce_op op
+    ) const -> void {
+        piquant_assert(!dtype_info_of(dtype_in_out).is_quant, "input dtype must be a dequantized type");
+        piquant_assert(dtype_info_of(quant_type).is_quant, "quant dtype must be a quantized type");
+        piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
+        quant_descriptor info {
+            .type = command_type::quant_dequant,
+            .in = in.data(),
+            .out = out.data(),
+            .numel = static_cast<std::int64_t>(in.size()),
+            .scale = scale,
+            .zero_point = zero_point,
+            .dt_in = dtype_in_out,
+            .dt_out = quant_type,
+            .rnd_mode = mode,
             .reduce = op
         };
         (*this->m_pimpl)(std::move(info));
