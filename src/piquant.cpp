@@ -13,13 +13,13 @@
 
 namespace piquant {
 #define decl_quant_kernel_fn(impl) \
-extern __attribute__((hot)) auto impl( \
-const void* x, \
-void* o, \
-std::int64_t range, \
-const context::quant_descriptor& desc, \
-prng_state& prng \
-) noexcept -> void
+    extern auto impl( \
+        const void* x, \
+        void* o, \
+        std::int64_t range, \
+        const context::quant_descriptor& desc, \
+        prng_state& prng \
+    ) noexcept -> void
 
     decl_quant_kernel_fn(quant_generic);
 
@@ -105,6 +105,7 @@ prng_state& prng \
         const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
         return {scale, zp};
     }
+
 
     auto compute_quant_config_from_data(const std::span<const float> x, const std::int64_t tmax) -> std::pair<float, std::int64_t> {
         return compute_quant_config_from_data<float>(x, tmax);

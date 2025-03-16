@@ -1,5 +1,7 @@
+#ifndef _MSC_VER
 #ifndef __SSE4_2__
 #error "Spec flag not enabled"
+#endif
 #endif
 #ifdef __AVX__
 #error "Spec level too high"

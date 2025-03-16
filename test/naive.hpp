@@ -11,24 +11,6 @@
 
 #include "piquant.hpp"
 
-template <typename T>
-    struct dtype_limits final {
-    static constexpr T min {std::numeric_limits<T>::min()};
-    static constexpr T max {std::numeric_limits<T>::max()};
-};
-
-template<>
-struct dtype_limits<piquant::uint4_t> final {
-    static constexpr std::uint8_t min {0};
-    static constexpr std::uint8_t max {0xf};
-};
-
-template<>
-struct dtype_limits<piquant::int4_t> final {
-    static constexpr std::int8_t min {-0x8};
-    static constexpr std::int8_t max {0x7};
-};
-
 [[nodiscard]] static constexpr auto prng_canonical(piquant::prng_state& p) -> float { // returns ξ ∈ [0, 1)
     auto& remaining {p.remaining};
     auto& next {p.next};
@@ -71,7 +53,7 @@ auto quantize_naive(
         const auto Q{[&](const IN x) noexcept -> OUT {
             const double rnd {std::round(static_cast<double>(x) * inv_scale)};
             const auto integral {static_cast<std::int64_t>(rnd) + zero_point};
-            return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
+            return static_cast<OUT>(std::clamp<decltype(integral)>(integral, piquant::dtype_limits<OUT>::min, piquant::dtype_limits<OUT>::max));
         }};
         if constexpr (piquant::is_int4<OUT>)
             for (std::size_t i {}; i < x.size()+1>>1; ++i)
@@ -89,7 +71,7 @@ auto quantize_naive(
             if (rnd < 0.0f) adj = -1.0f * adj;
             rnd = std::trunc(rnd) + adj;
             const auto integral {static_cast<std::int64_t>(rnd) + zero_point};
-            return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
+            return static_cast<OUT>(std::clamp<decltype(integral)>(integral, piquant::dtype_limits<OUT>::min, piquant::dtype_limits<OUT>::max));
         }};
         if constexpr (piquant::is_int4<OUT>)
             for (std::size_t i {}; i < x.size()+1>>1; ++i)

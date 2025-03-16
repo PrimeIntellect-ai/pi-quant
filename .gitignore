@@ -13,3 +13,4 @@ CMakeUserPresets.json
 .idea/
 bin/
 build/
+.vs/

@@ -15,8 +15,18 @@
 #include <arm_neon.h>
 #endif
 
+#ifdef _MSC_VER
+#define PIQUANT_HOT
+#define PIQUANT_AINLINE __forceinline
+#define PIQUANT_RESTRICT __restrict
+#else
+#define PIQUANT_HOT __attribute__((hot))
+#define PIQUANT_AINLINE __attribute__((always_inline))
+#define PIQUANT_RESTRICT __restrict__
+#endif
+
 namespace piquant {
-    [[nodiscard]] static constexpr auto prng_canonical(prng_state& p) -> float { // returns ξ ∈ [0, 1)
+    [[nodiscard]] static constexpr auto PIQUANT_AINLINE prng_canonical(prng_state& p) -> float { // returns ξ ∈ [0, 1)
         auto& remaining {p.remaining};
         auto& next {p.next};
         auto& state {p.state};
@@ -48,9 +58,9 @@ namespace piquant {
 #define impl_namespace(a, b) piquant::concat(a, _impl)
 
 namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
-    static auto __attribute__((hot)) quant_f32_to_uint8_nearest(
-        const float* const __restrict__ x,
-        std::uint8_t* const __restrict__ o,
+    static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
+        const float* const PIQUANT_RESTRICT x,
+        std::uint8_t* const PIQUANT_RESTRICT o,
         const std::int64_t numel,
         float scale,
         const std::int32_t zp
@@ -250,7 +260,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     concept is_int4 = std::is_same_v<T, uint4_t> || std::is_same_v<T, int4_t>;
 
     template <typename OUT> requires is_int4<OUT>
-    [[nodiscard]] static constexpr auto __attribute__((always_inline)) pack_nibbles(const OUT x, const OUT y) -> OUT {
+    [[nodiscard]] static constexpr auto PIQUANT_AINLINE pack_nibbles(const OUT x, const OUT y) -> OUT {
         const auto xi {static_cast<std::uint8_t>(x)};
         const auto yi {static_cast<std::uint8_t>(y)};
         constexpr auto m {dtype_limits<uint4_t>::max};
@@ -260,7 +270,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     template <const round_mode RND, typename IN, typename OUT, typename... Args>
          requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>) && std::is_same_v<std::common_type_t<Args...>, IN> && sizeof...(Args) != 0)
-    static inline auto __attribute__((always_inline)) quant_step(const double inv_scale, const std::int32_t zp, prng_state& prng, const Args... args) noexcept -> OUT {
+    static inline auto PIQUANT_AINLINE quant_step(const double inv_scale, const std::int32_t zp, prng_state& prng, const Args... args) noexcept -> OUT {
         if constexpr (RND == round_mode::stochastic) {
             const auto Q{[&](const IN x) noexcept -> OUT {
                 double rnd {x * inv_scale};
@@ -287,7 +297,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     template <typename IN, typename OUT, const round_mode RND>
         requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>))
-    static auto __attribute__((hot)) quant_generic(
+    static auto PIQUANT_HOT quant_generic(
         const void* const in,
         void* const out,
         std::int64_t numel,
@@ -299,8 +309,8 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             quant_f32_to_uint8_nearest(static_cast<const float*>(in), static_cast<std::uint8_t*>(out), numel, scale, zp);
             return;
         }
-        const auto* __restrict__ const x {static_cast<const IN*>(in)};
-        auto* __restrict__ const o {static_cast<OUT*>(out)};
+        const auto* PIQUANT_RESTRICT const x {static_cast<const IN*>(in)};
+        auto* PIQUANT_RESTRICT const o {static_cast<OUT*>(out)};
         const double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
         if constexpr (is_int4<OUT>) numel = (numel+1)>>1;
         for (std::int64_t i {}; i < numel; ++i)
@@ -312,21 +322,21 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     template <typename IN, typename OUT>
           requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
-    static inline auto __attribute__((always_inline)) dequant_step(const double scale, const std::int32_t zp, const IN x) noexcept -> OUT {
+    static inline auto PIQUANT_AINLINE dequant_step(const double scale, const std::int32_t zp, const IN x) noexcept -> OUT {
         return static_cast<OUT>(static_cast<std::make_signed_t<IN>>(x) - zp)*scale;
     }
 
     template <typename IN, typename OUT, const reduce_op RDO>
             requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
-    static auto __attribute__((hot)) dequant_generic(
+    static auto PIQUANT_HOT dequant_generic(
         const void* const in,
         void* const out,
         const std::int64_t numel,
         double scale,
         const std::int64_t zp
     ) noexcept -> void {
-        const auto* __restrict__ const x {static_cast<const IN*>(in)};
-        auto* __restrict__ const o {static_cast<OUT*>(out)};
+        const auto* PIQUANT_RESTRICT const x {static_cast<const IN*>(in)};
+        auto* PIQUANT_RESTRICT const o {static_cast<OUT*>(out)};
         if constexpr (RDO == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
                 o[i] = dequant_step<IN, OUT>(scale, zp, x[i]);
@@ -339,7 +349,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     template <typename IN, typename QUANT, const round_mode RND, const reduce_op RDO>
       requires (std::is_floating_point_v<IN> && (std::is_integral_v<QUANT> || is_int4<QUANT>))
-    static auto __attribute__((hot)) quant_dequant_generic(
+    static auto PIQUANT_HOT quant_dequant_generic(
       const void* const in,
       void* const out,
       const std::int64_t numel,
@@ -347,8 +357,8 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
       const std::int64_t zp,
       prng_state& prng
     ) noexcept -> void {
-        const auto* __restrict__ const x {static_cast<const IN*>(in)};
-        auto* __restrict__ const o {static_cast<IN*>(out)};
+        const auto* PIQUANT_RESTRICT const x {static_cast<const IN*>(in)};
+        auto* PIQUANT_RESTRICT const o {static_cast<IN*>(out)};
         const double inv_scale {1.0 / scale};
         if constexpr (RDO == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
@@ -366,9 +376,9 @@ namespace piquant {
         return (static_cast<std::uint16_t>(from) & 0xff)<<8 | (static_cast<std::uint16_t>(to) & 0xff);
     }
 
-    auto QUANT_KERNEL_IMPL(
-        const void* __restrict__ x,
-        void* __restrict__ o,
+    auto PIQUANT_HOT QUANT_KERNEL_IMPL(
+        const void* x,
+        void* o,
         std::int64_t range,
         const context::quant_descriptor& desc,
         prng_state& prng
