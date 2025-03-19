@@ -56,7 +56,7 @@ auto quantize_naive(
             return static_cast<OUT>(std::clamp<decltype(integral)>(integral, piquant::dtype_limits<OUT>::min, piquant::dtype_limits<OUT>::max));
         }};
         if constexpr (piquant::is_int4<OUT>)
-            for (std::size_t i {}; i < x.size()+1>>1; ++i)
+            for (std::size_t i {}; i < (x.size()+1)>>1; ++i)
                 o[i] = static_cast<OUT>((static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)]))&15)<<4|static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)+1]))&15);
         else
             for (std::int64_t i {}; i < x.size(); ++i)
@@ -74,7 +74,7 @@ auto quantize_naive(
             return static_cast<OUT>(std::clamp<decltype(integral)>(integral, piquant::dtype_limits<OUT>::min, piquant::dtype_limits<OUT>::max));
         }};
         if constexpr (piquant::is_int4<OUT>)
-            for (std::size_t i {}; i < x.size()+1>>1; ++i)
+            for (std::size_t i {}; i < (x.size()+1)>>1; ++i)
                 o[i] = static_cast<OUT>((static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)]))&15)<<4|static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)+1]))&15);
         else
             for (std::int64_t i {}; i < x.size(); ++i)
