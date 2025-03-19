@@ -50,6 +50,7 @@ if (QUANT_COMPILE_STATIC)
     add_library(piquant STATIC ${QUANT_SOURCES})
 else()
     add_library(piquant SHARED ${QUANT_SOURCES})
+    target_compile_definitions(piquant PRIVATE QUANT_BUILD_SHARED)
 endif ()
 
 target_compile_options(piquant PRIVATE -fomit-frame-pointer -fno-rtti -fno-exceptions)

@@ -107,11 +107,11 @@ namespace piquant {
     }
 
 
-    inline auto compute_quant_config_from_data(const std::span<const float> x, const std::int64_t tmax) -> std::pair<float, std::int64_t> {
+    std::pair<float, std::int64_t> compute_quant_config_from_data(const std::span<const float> x, const std::int64_t tmax) {
         return compute_quant_config_from_data<float>(x, tmax);
     }
 
-    inline auto compute_quant_config_from_data(const std::span<const double> x, const std::int64_t tmax) -> std::pair<double, std::int64_t> {
+    std::pair<double, std::int64_t> compute_quant_config_from_data(const std::span<const double> x, const std::int64_t tmax) {
         return compute_quant_config_from_data<double>(x, tmax);
     }
 
