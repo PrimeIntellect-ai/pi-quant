@@ -45,7 +45,13 @@ if (${IS_AMD64})
     set_file_opts("kernel_amd64_avx512f.cpp" "-mtune=cannonlake -mavx -mavx2 -mfma -mf16c -mavx512f -mavx512bw" "/arch:AVX512")
 
 endif()
-add_library(piquant SHARED ${QUANT_SOURCES})
+
+if (QUANT_COMPILE_STATIC)
+    add_library(piquant STATIC ${QUANT_SOURCES})
+else()
+    add_library(piquant SHARED ${QUANT_SOURCES})
+endif ()
+
 target_compile_options(piquant PRIVATE -fomit-frame-pointer -fno-rtti -fno-exceptions)
 target_include_directories(piquant PUBLIC include)
 
