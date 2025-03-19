@@ -13,11 +13,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, ubuntu-22.04]
+        os: [ubuntu-latest, macos-latest, ubuntu-22.04, windows-latest]
         build_type: [Release]
+        # We include 'cl' only for Windows:
         c_compiler: [gcc, clang, cl]
         cpp_compiler: [g++, clang++, cl]
+
         include:
+          # Linux & macOS combinations
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
@@ -33,6 +36,7 @@ jobs:
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
+          # Windows combination (MSVC)
           - os: windows-latest
             c_compiler: cl
             cpp_compiler: cl
@@ -49,12 +53,22 @@ jobs:
           echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
       - name: Configure CMake
-        run: >
-          cmake -B ${{ steps.strings.outputs.build-output-dir }}
-          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-          -S ${{ github.workspace }}
+        run: |
+          # On Windows, use the Visual Studio generator and arch
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cmake -B "${{ steps.strings.outputs.build-output-dir }}" ^
+                  -G "Visual Studio 17 2022" ^
+                  -A x64 ^
+                  -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} ^
+                  -S "${{ github.workspace }}"
+          else
+            cmake -B "${{ steps.strings.outputs.build-output-dir }}" \
+                  -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+                  -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+                  -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                  -S "${{ github.workspace }}"
+          fi
+        shell: bash
 
       - name: Build C++ Runtime
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }} -j4
@@ -67,7 +81,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.8'
-          
+
       - name: Build Python wheel
         if: runner.os != 'windows'
         shell: bash
@@ -78,7 +92,6 @@ jobs:
       - name: Install dev dependencies
         if: runner.os != 'windows'
         shell: bash
-
         run: |
           cd ${{ github.workspace }}/python/
           pip install .[dev]
