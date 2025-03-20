@@ -101,7 +101,7 @@ jobs:
           submodules: recursive
 
       - name: Configure CMake (MSVC)
-        run: cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -G "Visual Studio 17 2022" -A x64
+        run: cmake -S ${{ github.workspace }} -B ${{ github.workspace }}\build -G "Visual Studio 17 2022" -A x64 -DQUANT_COMPILE_STATIC=ON
 
       - name: Build C++ Runtime (MSVC)
         run: cmake --build ${{ github.workspace }}\build --config Release
