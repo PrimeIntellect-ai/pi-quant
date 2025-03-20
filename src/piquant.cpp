@@ -335,18 +335,20 @@ namespace piquant {
         const std::int32_t zero_point,
         const round_mode mode
     ) const -> void {
-        piquant_assert(!dtype_info_of(dtype_in).is_quant, "input dtype must be a dequantized type");
-        piquant_assert(dtype_info_of(dtype_out).is_quant, "output dtype must be a quantized type");
-        if (dtype_info_of(dtype_out).bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
-            piquant_assert(out.size() == (in.size()+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
+        const auto& dti {dtype_info_of(dtype_in)};
+        const auto& dto {dtype_info_of(dtype_out)};
+        piquant_assert(!dti.is_quant, "input dtype must be a dequantized type");
+        piquant_assert(dto.is_quant, "output dtype must be a quantized type");
+        if (dto.bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
+            piquant_assert(out.size()/(dto.bit_size>>3) == (in.size()/(dti.bit_size>>3)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
         } else {
-            piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
+            piquant_assert(in.size()/(dti.bit_size>>3) == out.size()/(dto.bit_size>>3), "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
         }
         quant_descriptor info {
             .type = command_type::quant,
             .in = in.data(),
             .out = out.data(),
-            .numel = static_cast<std::int64_t>(in.size()),
+            .numel = static_cast<std::int64_t>(in.size()/(dti.bit_size>>3)),
             .scale = scale,
             .zero_point = zero_point,
             .dt_in = dtype_in,
@@ -365,18 +367,20 @@ namespace piquant {
         const std::int32_t zero_point,
         const reduce_op op
     ) const -> void {
-        piquant_assert(dtype_info_of(dtype_in).is_quant, "input dtype must be a quantized type");
-        piquant_assert(!dtype_info_of(dtype_out).is_quant, "output dtype must be a dequantized type");
-        if (dtype_info_of(dtype_in).bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
-            piquant_assert(in.size() == (out.size()+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
+        const auto& dti {dtype_info_of(dtype_in)};
+        const auto& dto {dtype_info_of(dtype_out)};
+        piquant_assert(dti.is_quant, "input dtype must be a quantized type");
+        piquant_assert(!dto.is_quant, "output dtype must be a dequantized type");
+        if (dti.bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
+            piquant_assert(in.size()/(dti.bit_size>>3) == (out.size()/(dto.bit_size>>3)+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
         } else {
-            piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
+            piquant_assert(in.size()/(dti.bit_size>>3) == out.size()/(dto.bit_size>>3), "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
         }
         quant_descriptor info {
             .type = command_type::dequant,
             .in = in.data(),
             .out = out.data(),
-            .numel = static_cast<std::int64_t>(in.size()),
+            .numel = static_cast<std::int64_t>(in.size()/(dti.bit_size>>3)),
             .scale = scale,
             .zero_point = zero_point,
             .dt_in = dtype_in,
@@ -396,14 +400,15 @@ namespace piquant {
         const round_mode mode,
         const reduce_op op
     ) const -> void {
-        piquant_assert(!dtype_info_of(dtype_in_out).is_quant, "input dtype must be a dequantized type");
+        const auto& dti{dtype_info_of(dtype_in_out)};
+        piquant_assert(!dti.is_quant, "input dtype must be a dequantized type");
         piquant_assert(dtype_info_of(quant_type).is_quant, "quant dtype must be a quantized type");
         piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
         quant_descriptor info {
             .type = command_type::quant_dequant,
             .in = in.data(),
             .out = out.data(),
-            .numel = static_cast<std::int64_t>(in.size()),
+            .numel = static_cast<std::int64_t>(in.size()/(dti.bit_size>>3)),
             .scale = scale,
             .zero_point = zero_point,
             .dt_in = dtype_in_out,

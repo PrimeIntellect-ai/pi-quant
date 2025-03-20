@@ -251,9 +251,9 @@ namespace piquant {
             round_mode mode
         ) -> void {
             quantize(
-                {reinterpret_cast<const std::byte *>(in.data()), in.size()},
+                {reinterpret_cast<const std::byte *>(in.data()), in.size_bytes()},
                 dtype_traits<IN>::ty,
-                {reinterpret_cast<std::byte *>(out.data()), out.size()},
+                {reinterpret_cast<std::byte *>(out.data()), out.size_bytes()},
                 dtype_traits<OUT>::ty,
                 scale,
                 zero_point,
@@ -286,9 +286,9 @@ namespace piquant {
             reduce_op op
         ) {
             dequantize(
-                {reinterpret_cast<const std::byte *>(in.data()), in.size()},
+                {reinterpret_cast<const std::byte *>(in.data()), in.size_bytes()},
                 dtype_traits<IN>::ty,
-                {reinterpret_cast<std::byte *>(out.data()), out.size()},
+                {reinterpret_cast<std::byte *>(out.data()), out.size_bytes()},
                 dtype_traits<OUT>::ty,
                 scale,
                 zero_point,
@@ -322,9 +322,9 @@ namespace piquant {
             reduce_op op
         ) {
             quantize_dequantize_fused(
-                {reinterpret_cast<const std::byte *>(in.data()), in.size()},
+                {reinterpret_cast<const std::byte *>(in.data()), in.size_bytes()},
                 dtype_traits<INOUT>::ty,
-                {reinterpret_cast<std::byte *>(out.data()), out.size()},
+                {reinterpret_cast<std::byte *>(out.data()), out.size_bytes()},
                 dtype_traits<QUANT>::ty,
                 scale,
                 zero_point,
