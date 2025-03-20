@@ -34,8 +34,8 @@ extern "C" auto piquant_quantize(
     int32_t zero_point,
     piquant_round_mode_t mode
 ) -> void {
-    std::span in_span {static_cast<const std::byte*>(in), numel};
-    std::span out_span {static_cast<std::byte*>(out), numel};
+    std::span in_span {static_cast<const std::byte*>(in), numel*(dtype_info_of(static_cast<dtype>(dtype_in)).bit_size>>3)};
+    std::span out_span {static_cast<std::byte*>(out), numel*(dtype_info_of(static_cast<dtype>(dtype_out)).bit_size>>3)};
     std::bit_cast<context*>(ctx)->quantize(
         in_span,
         static_cast<dtype>(dtype_in),
@@ -58,8 +58,8 @@ extern "C" auto piquant_dequantize(
     int32_t zero_point,
     piquant_reduce_op_t op
 ) -> void {
-    std::span in_span {static_cast<const std::byte*>(in), numel};
-    std::span out_span {static_cast<std::byte*>(out), numel};
+    std::span in_span {static_cast<const std::byte*>(in), numel*(dtype_info_of(static_cast<dtype>(dtype_in)).bit_size>>3)};
+    std::span out_span {static_cast<std::byte*>(out), numel*(dtype_info_of(static_cast<dtype>(dtype_out)).bit_size>>3)};
     std::bit_cast<context*>(ctx)->dequantize(
         in_span,
         static_cast<dtype>(dtype_in),
