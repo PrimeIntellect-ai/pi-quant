@@ -11,6 +11,8 @@
 #include <numeric>
 #include <condition_variable>
 
+#include <pithreadpool/threadpool.hpp>
+
 namespace piquant {
 #define decl_quant_kernel_fn(impl) \
     extern auto impl( \
@@ -154,7 +156,7 @@ namespace piquant {
         ~pimpl();
         pi::threadpool::ThreadPool m_pool;
         std::size_t m_num_threads {};
-        [[nodiscard]] auto operator ()(const quant_descriptor& desc) -> quant_task_future;
+        auto operator ()(const quant_descriptor& desc) -> void;
         static auto job_entry(payload& pl, const quant_descriptor& cmd) -> void;
 #ifdef __x86_64__
         amd64_cpu_caps cpu_caps {};
@@ -225,20 +227,19 @@ namespace piquant {
         m_pool.shutdown();
     }
 
-    auto context::pimpl::operator()(const quant_descriptor& desc) -> quant_task_future {
+    auto context::pimpl::operator()(const quant_descriptor& desc) -> void {
         std::size_t num_threads {m_num_threads};
-        return m_pool.scheduleTask([=, this]() {
-            std::vector<std::pair<payload, quant_task_future>> jobs {};
-            jobs.reserve(num_threads);
-            for (std::size_t i {}; i < num_threads; ++i) {
-                auto& job {jobs.emplace_back(std::make_pair(payload{static_cast<std::uint32_t>(i)}, m_pool.scheduleTask([=, &jobs] {
-                    job_entry(jobs[i].first, desc);
-                })))};
-                job.first.ti = static_cast<std::int64_t>(i);
-                job.first.tc = static_cast<std::int64_t>(num_threads);
-            }
-            for (auto& [_, task] : jobs) task.join();
-        });
+        std::vector<std::pair<payload, std::optional<pi::threadpool::TaskFuture<pi::threadpool::void_t>>>> jobs {};
+        jobs.reserve(num_threads);
+        for (std::size_t i {}; i < num_threads; ++i) {
+            auto& job {jobs.emplace_back(std::make_pair(payload{static_cast<std::uint32_t>(i)}, std::nullopt))};
+            job.first.ti = static_cast<std::int64_t>(i);
+            job.first.tc = static_cast<std::int64_t>(num_threads);
+            job.second = m_pool.scheduleTask([=, &jobs] {
+                job_entry(jobs[i].first, desc);
+            });
+        }
+        for (auto& [_, task] : jobs) task->join();
     }
 
     context::context(std::size_t num_threads, std::size_t task_queue_size) {
@@ -255,7 +256,7 @@ namespace piquant {
         const float scale,
         const std::int32_t zero_point,
         const round_mode mode
-    ) const -> quant_task_future {
+    ) const -> void {
         const auto& dti {dtype_info_of(dtype_in)};
         const auto& dto {dtype_info_of(dtype_out)};
         piquant_assert(!dti.is_quant, "input dtype must be a dequantized type");
@@ -276,7 +277,7 @@ namespace piquant {
             .dt_out = dtype_out,
             .rnd_mode = mode
         };
-        return (*this->m_pimpl)(info);
+        (*this->m_pimpl)(info);
     }
 
     auto context::dequantize(
@@ -287,7 +288,7 @@ namespace piquant {
         const float scale,
         const std::int32_t zero_point,
         const reduce_op op
-    ) const -> quant_task_future {
+    ) const -> void {
         const auto& dti {dtype_info_of(dtype_in)};
         const auto& dto {dtype_info_of(dtype_out)};
         piquant_assert(dti.is_quant, "input dtype must be a quantized type");
@@ -308,7 +309,7 @@ namespace piquant {
             .dt_out = dtype_out,
             .reduce = op
         };
-        return (*this->m_pimpl)(info);
+        (*this->m_pimpl)(info);
     }
 
     auto context::quantize_dequantize_fused(
@@ -320,7 +321,7 @@ namespace piquant {
         const std::int32_t zero_point,
         const round_mode mode,
         const reduce_op op
-    ) const -> quant_task_future {
+    ) const -> void {
         const auto& dti{dtype_info_of(dtype_in_out)};
         piquant_assert(!dti.is_quant, "input dtype must be a dequantized type");
         piquant_assert(dtype_info_of(quant_type).is_quant, "quant dtype must be a quantized type");
@@ -337,6 +338,6 @@ namespace piquant {
             .rnd_mode = mode,
             .reduce = op
         };
-        return (*this->m_pimpl)(info);
+        (*this->m_pimpl)(info);
     }
 }

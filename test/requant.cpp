@@ -35,7 +35,7 @@ using namespace piquant;
         requantized.resize(numel); \
         ti prev {piquant::reduce_op::reduce == piquant::reduce_op::add ? dist(gen) : 0.0f}; \
         std::ranges::fill(requantized, prev); \
-        ctx.quantize_dequantize_fused_generic<ti, to>(data_in, requantized, scale, zero_point, piquant::round_mode::rnd, piquant::reduce_op::reduce).join(); \
+        ctx.quantize_dequantize_fused_generic<ti, to>(data_in, requantized, scale, zero_point, piquant::round_mode::rnd, piquant::reduce_op::reduce); \
         for (std::size_t i {}; i < numel; ++i) { \
             ASSERT_NEAR(data_in[i], requantized[i]-prev, epsilon); \
         } \

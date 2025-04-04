@@ -14,14 +14,10 @@
 #define QUANT_EXPORT __attribute__((visibility("default")))
 #endif
 
-#include <pithreadpool/threadpool.hpp>
-
 namespace piquant {
     // computes and returns {scale, zero_point} derived from the data's mean and stddev.
     [[nodiscard]] QUANT_EXPORT std::pair<float, std::int64_t> compute_quant_config_from_data(std::span<const float> x, std::int64_t tmax);
     [[nodiscard]] QUANT_EXPORT std::pair<double, std::int64_t> compute_quant_config_from_data(std::span<const double> x, std::int64_t tmax);
-
-    using quant_task_future = pi::threadpool::TaskFuture<pi::threadpool::void_t>;
 
     enum class round_mode {
         nearest,
@@ -115,7 +111,7 @@ namespace piquant {
         auto operator=(context&&) -> context& = delete;
         ~context();
 
-        [[nodiscard]] auto quantize(
+        auto quantize(
             std::span<const std::byte> in,
             dtype dtype_in,
             std::span<std::byte> out,
@@ -123,7 +119,7 @@ namespace piquant {
             float scale,
             std::int32_t zero_point,
             round_mode mode
-        ) const -> quant_task_future;
+        ) const -> void;
 
         template<typename IN, typename OUT> requires requires {
             requires is_dtype<IN>;
@@ -131,14 +127,14 @@ namespace piquant {
             dtype_info_of(dtype_traits<IN>::ty).is_quant == true;
             dtype_info_of(dtype_traits<OUT>::ty).is_quant == false;
         }
-        [[nodiscard]] auto quantize_generic(
+        auto quantize_generic(
             std::span<const IN> in,
             std::span<OUT> out,
             float scale,
             std::int32_t zero_point,
             round_mode mode
-        ) -> quant_task_future {
-            return quantize(
+        ) -> void {
+            quantize(
                 {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
                 dtype_traits<IN>::ty,
                 {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},
@@ -149,7 +145,7 @@ namespace piquant {
             );
         }
 
-        [[nodiscard]] auto dequantize(
+        auto dequantize(
             std::span<const std::byte> in,
             dtype dtype_in,
             std::span<std::byte> out,
@@ -157,7 +153,7 @@ namespace piquant {
             float scale,
             std::int32_t zero_point,
             reduce_op op
-        ) const -> quant_task_future;
+        ) const -> void;
 
         template<typename IN, typename OUT> requires requires {
             requires is_dtype<IN>;
@@ -165,14 +161,14 @@ namespace piquant {
             dtype_info_of(dtype_traits<IN>::ty).is_quant == false;
             dtype_info_of(dtype_traits<OUT>::ty).is_quant == true;
         }
-        [[nodiscard]] auto dequantize_generic(
+        auto dequantize_generic(
             std::span<const IN> in,
             std::span<OUT> out,
             float scale,
             std::int32_t zero_point,
             reduce_op op
-        ) -> quant_task_future {
-            return dequantize(
+        ) -> void {
+            dequantize(
                 {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
                 dtype_traits<IN>::ty,
                 {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},
@@ -183,7 +179,7 @@ namespace piquant {
             );
         }
 
-        [[nodiscard]] auto quantize_dequantize_fused(
+        auto quantize_dequantize_fused(
             std::span<const std::byte> in,
             dtype dtype_in_out,
             std::span<std::byte> out,
@@ -192,22 +188,22 @@ namespace piquant {
             std::int32_t zero_point,
             round_mode mode,
             reduce_op op
-        ) const -> quant_task_future;
+        ) const -> void;
 
         template<typename INOUT, typename QUANT> requires requires {
             requires is_dtype<INOUT>;
             dtype_info_of(dtype_traits<INOUT>::ty).is_quant == false;
             dtype_info_of(dtype_traits<QUANT>::ty).is_quant == true;
         }
-        [[nodiscard]] auto quantize_dequantize_fused_generic(
+        auto quantize_dequantize_fused_generic(
             std::span<const INOUT> in,
             std::span<INOUT> out,
             float scale,
             std::int32_t zero_point,
             round_mode mode,
             reduce_op op
-        ) {
-            return quantize_dequantize_fused(
+        ) -> void {
+            quantize_dequantize_fused(
                 {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
                 dtype_traits<INOUT>::ty,
                 {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},

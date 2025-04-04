@@ -66,7 +66,6 @@ def test_custom_quant_vs_torch_decomposed_uint8():
     for i in range(tensor.numel()):
         assert torch_quant[i].item() == fast_quant[i].item()
 
-"""
 def test_custom_dequant_vs_torch_uint8_reduce_set():
     tensor = torch.rand(8192)
     scale, zero_point = compute_quant_config_torch_f32(tensor)
@@ -95,4 +94,3 @@ def test_custom_dequant_vs_torch_uint8_reduce_add():
     assert fast_dequant.dtype == fast_dequant.dtype
     for i in range(tensor.numel()):
         assert torch_dequant[i].item() == fast_dequant[i].item()
-"""
