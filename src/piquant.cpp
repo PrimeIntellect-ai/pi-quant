@@ -90,8 +90,8 @@ namespace piquant {
 
     template <typename T> requires std::is_floating_point_v<T>
     [[nodiscard]] static auto compute_quant_config_from_data(const std::span<const T> x, std::int64_t tmax) -> std::pair<T, std::int64_t> {
+        static constexpr  T std_scale {T{12.0}};
         if (x.empty()) [[unlikely]] return {0.0, 0.0};
-        //tmax &= (1ull<<52)-1; // Remove superfluous precision bit for float64
         auto mean {static_cast<T>(std::accumulate(x.begin(), x.end(), 0.0) / static_cast<T>(x.size()))};
         auto sq_delta {static_cast<T>(std::transform_reduce(
             x.begin(), x.end(),
@@ -103,7 +103,7 @@ namespace piquant {
             }
         ))};
         const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(x.size()-1)))};
-        const auto scale {static_cast<T>(12.0*std/static_cast<T>(tmax))};
+        const auto scale {static_cast<T>(std_scale*std/static_cast<T>(tmax))};
         const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
         return {scale, zp};
     }

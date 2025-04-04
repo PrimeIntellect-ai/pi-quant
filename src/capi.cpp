@@ -8,8 +8,8 @@ struct piquant_context_t final {
     context* ctx {};
 };
 
-extern "C" auto piquant_compute_quant_config_from_data(const float* const x, const std::size_t n, float* const out_scale, int32_t* const out_zero_point) -> void {
-    const auto [scale, zero_point] {compute_quant_config_from_data(std::span{x, n}, 255)};
+extern "C" auto piquant_compute_quant_config_from_data(const float* const x, const std::size_t n, const std::int64_t tmax, float* const out_scale, int64_t* const out_zero_point) -> void {
+    const auto [scale, zero_point] {compute_quant_config_from_data(std::span{x, n}, tmax)};
     *out_scale = scale;
     *out_zero_point = zero_point;
 }

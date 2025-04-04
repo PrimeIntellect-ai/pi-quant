@@ -17,7 +17,7 @@ extern "C" {
 #endif
 
 /* computes and returns {scale, zero_point} derived from the data's mean and stddev. */
-extern PIQUANT_EXPORT void piquant_compute_quant_config_from_data(const float* x, size_t n, float* out_scale, int32_t* out_zero_point);
+extern PIQUANT_EXPORT void piquant_compute_quant_config_from_data(const float* x, size_t n, int64_t tmax, float* out_scale, int64_t* out_zero_point);
 
 typedef struct piquant_context_t piquant_context_t; /* Opaque context ptr */
 

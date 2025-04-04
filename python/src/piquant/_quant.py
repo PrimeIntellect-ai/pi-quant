@@ -33,6 +33,23 @@ class QuantDtype(Enum):
     F32 = C.PIQUANT_DTYPE_F32
     F64 = C.PIQUANT_DTYPE_F64
 
+    def bit_size(self) -> int:
+        if self in (QuantDtype.UINT4, QuantDtype.INT4):
+            return 4
+        elif self in (QuantDtype.UINT8, QuantDtype.INT8):
+            return 8
+        elif self in (QuantDtype.UINT16, QuantDtype.INT16):
+            return 16
+        elif self in (QuantDtype.UINT32, QuantDtype.INT32, QuantDtype.F32):
+            return 32
+        elif self in (QuantDtype.UINT64, QuantDtype.INT64, QuantDtype.F64):
+            return 64
+        else:
+            raise ValueError(f"Unsupported dtype: {self}")
+
+    def byte_size(self) -> int:
+        return min(8, self.bit_size())>>3
+
 @dataclass
 class QuantConfig:
     scale: float = 1.0
@@ -46,7 +63,7 @@ class DequantConfig:
     zero_point: int = 0
     reduce_op: ReduceOp = ReduceOp.SET
 
-def compute_quant_config_f32_raw_ptr(ptr: int, numel: int) -> Tuple[float, int]:
+def compute_quant_config_raw_ptr(ptr: int, target_quant_dtype: QuantDtype, numel: int) -> Tuple[float, int]:
     """
         Compute the scale and zero point of a tensor.
         :param ptr: p input tensor data pointer (must point to a valid, contiguous memory region of type float (in C float*))
@@ -54,8 +71,10 @@ def compute_quant_config_f32_raw_ptr(ptr: int, numel: int) -> Tuple[float, int]:
     """
     ptr: ffi.CData = ffi.cast('float*', ptr)
     scale: ffi.CData = ffi.new('float*')
-    zero_point: ffi.CData = ffi.new('int32_t*')
-    C.piquant_compute_quant_config_from_data(ptr, numel, scale, zero_point)
+    zero_point: ffi.CData = ffi.new('int64_t*')
+    bs: int = target_quant_dtype.bit_size()
+    tmax: int = ((1<<bs)-1)>>1
+    C.piquant_compute_quant_config_from_data(ptr, numel, tmax, scale, zero_point)
     return scale[0], zero_point[0]
 
 class Context:
