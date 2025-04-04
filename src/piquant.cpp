@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <iostream>
 #include <numeric>
-#include <variant>
 #include <condition_variable>
 
 namespace piquant {
@@ -144,79 +143,27 @@ namespace piquant {
         explicit constexpr payload(const std::uint32_t seed) noexcept : prng{seed} {}
     };
 
-    struct worker final {
-        context::pimpl* pimpl;
-        alignas(cache_line) payload pl;
-        alignas(cache_line) context::quant_descriptor cmd {};
-        std::optional<std::thread> thread {};
-
-        explicit worker(context::pimpl& ctx, const std::int64_t ti, const std::int64_t tc) : pimpl{&ctx}, pl{static_cast<std::uint32_t>(ti ^ tc)} {
-            pl.ti = ti;
-            pl.tc = tc;
-            pl.phase = 0;
-            if (ti != 0) { // ti != 0 are extra worker thread, ti == 0 is main thread
-                thread.emplace(&worker::entry, this);
-            }
-        }
-
-        worker(const worker&) = delete;
-        worker(worker&&) = default;
-        auto operator = (const worker&) -> worker& = delete;
-        auto operator = (worker&&) -> worker& = default;
-
-        ~worker() {
-            if (thread && thread->joinable())
-                thread->join();
-        }
-
-        [[nodiscard]] auto await_work() -> bool;
-        auto entry() -> void;
-        auto exec_and_broadcast() -> void;
-    };
-
     class context::pimpl final {
     public:
-        explicit pimpl(std::size_t num_threads);
+        explicit pimpl(std::size_t num_threads, std::size_t task_queue_size);
         pimpl(const pimpl&) = delete;
         pimpl(pimpl&&) = delete;
         auto operator = (const pimpl&) -> pimpl& = delete;
         auto operator = (pimpl&&) -> pimpl& = delete;
         ~pimpl();
-
-        alignas(cache_line) volatile bool m_interrupt {};
-        alignas(cache_line) std::uint64_t m_phase {};
-        alignas(cache_line) std::atomic_int64_t m_num_completed {};
-        std::vector<worker> m_workers {};
-        std::condition_variable m_cv {};
-        std::mutex m_mtx {};
-        std::atomic_size_t m_workers_online {};
+        pi::threadpool::ThreadPool m_pool;
+        std::size_t m_num_threads {};
+        [[nodiscard]] auto operator ()(const quant_descriptor& desc) -> quant_task_future;
+        static auto job_entry(payload& pl, const quant_descriptor& cmd) -> void;
 #ifdef __x86_64__
         amd64_cpu_caps cpu_caps {};
 #endif
-
-        auto kickoff_workers(quant_descriptor&& cmd) -> void;
-        auto barrier() -> void;
-        auto operator()(quant_descriptor&& cmd) -> void;
     };
 
-    auto worker::await_work() -> bool {
-        std::unique_lock lock {pimpl->m_mtx};
-        pimpl->m_cv.wait(lock, [this]() noexcept -> bool { return pimpl->m_interrupt || pimpl->m_phase > pl.phase; });
-        if (pimpl->m_interrupt) [[unlikely]] return false;
-        pl.phase = pimpl->m_phase;
-        return true;
-    }
-
-    auto worker::entry() -> void {
-        pimpl->m_workers_online.fetch_add(1, std::memory_order_seq_cst);
-        while (await_work()) [[likely]]
-            exec_and_broadcast();
-    }
-
-    auto worker::exec_and_broadcast() -> void {
-        const std::int64_t tc {pl.tc};
+    auto context::pimpl::job_entry(payload& pl, const quant_descriptor& cmd) -> void {
+        const std::int64_t tc {std::max(1ll, pl.tc)};
         const std::int64_t ti {pl.ti};
-        const auto partition_row {[=, this] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
+        const auto partition_row {[&] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
             if (dtype_info_of(cmd.dt_out).bit_size < 8) {       // Subbyte granularity requires special handling to not split packed bit pairs
                 const std::int64_t pairs {(cmd.numel + 1)>>1};
                 const std::int64_t pair_chunk {(pairs + tc - 1)/tc};
@@ -233,7 +180,7 @@ namespace piquant {
             if (ra >= rb) [[unlikely]] return {};
             return {{ra, ra, rb-ra}};
         }};
-        const auto dispatch_quant {[=, this](const std::int64_t oa, const std::int64_t ob, const std::int64_t range, const context::quant_descriptor& cmd) noexcept -> void {
+        const auto dispatch_quant {[&](const std::int64_t oa, const std::int64_t ob, const std::int64_t range, const context::quant_descriptor& cmd) noexcept -> void {
             #ifdef __x86_64__
                 const auto level {static_cast<std::size_t>(pimpl->cpu_caps)};
                 piquant_assert2(level < quant_routines.size());
@@ -267,61 +214,43 @@ namespace piquant {
             const auto [oa, ob, n] {*partition};
             dispatch_quant(oa, ob, n, cmd);
         }
-
-        if (1+pimpl->m_num_completed.fetch_add(1, std::memory_order::relaxed) == pimpl->m_workers.size()) { // Last worker
-            std::unique_lock lock {pimpl->m_mtx};
-            pimpl->m_cv.notify_all();
-        }
     }
 
-    context::pimpl::pimpl(std::size_t num_threads) {
-        num_threads = std::max<std::size_t>(1, num_threads);
-        m_workers.reserve(num_threads);
-        for (std::int64_t ti {}; ti < num_threads; ++ti) { // Initialize workers (main thread is worker 0)
-            m_workers.emplace_back(*this, ti, static_cast<std::int64_t>(num_threads));
-        }
+    context::pimpl::pimpl(std::size_t num_threads, std::size_t task_queue_size)
+        : m_pool{static_cast<int>(std::max<std::size_t>(1, num_threads)),
+            static_cast<int>(std::max<std::size_t>(1, task_queue_size))},
+            m_num_threads{std::max<std::size_t>(1, num_threads)} {
         #ifdef __x86_64__
             if (check_avx512f_support()) cpu_caps = amd64_cpu_caps::avx512;
             else if (check_avx2_support()) cpu_caps = amd64_cpu_caps::avx2;
             else if (check_sse42_support()) cpu_caps = amd64_cpu_caps::sse_4_2;
             else cpu_caps = amd64_cpu_caps::none;
         #endif
-        while (m_workers_online.load(std::memory_order_seq_cst) != num_threads-1)
-            std::this_thread::yield();
+        m_pool.startup();
     }
 
     context::pimpl::~pimpl() {
-        std::unique_lock lock {m_mtx};
-        m_interrupt = true;
-        ++m_phase;
-        lock.unlock();
-        m_cv.notify_all();
-        m_workers.clear();
+        m_pool.shutdown();
     }
 
-    auto context::pimpl::kickoff_workers(quant_descriptor&& cmd) -> void {
-        std::unique_lock lock {m_mtx};
-        for (auto& worker : m_workers)
-            worker.cmd = cmd;
-        ++m_phase;
-        m_num_completed.store(0, std::memory_order::relaxed);
-        m_cv.notify_all();
+    auto context::pimpl::operator()(const quant_descriptor& desc) -> quant_task_future {
+        std::size_t num_threads {m_num_threads};
+        return m_pool.scheduleTask([=, this]() {
+            std::vector<std::pair<payload, quant_task_future>> jobs {};
+            jobs.reserve(num_threads);
+            for (std::size_t i {}; i < num_threads; ++i) {
+                auto& job {jobs.emplace_back(std::make_pair(payload{static_cast<std::uint32_t>(i)}, m_pool.scheduleTask([=, &jobs] {
+                    job_entry(jobs[i].first, desc);
+                })))};
+                job.first.ti = static_cast<std::int64_t>(i);
+                job.first.tc = static_cast<std::int64_t>(num_threads);
+            }
+            for (auto& [_, task] : jobs) task.join();
+        });
     }
 
-    auto context::pimpl::barrier() -> void {
-        std::unique_lock lock {m_mtx};
-        m_cv.wait(lock, [&]() noexcept -> bool { return m_num_completed.load(std::memory_order_relaxed) == m_workers.size(); });
-    }
-
-    auto context::pimpl::operator()(quant_descriptor&& cmd) -> void {
-        kickoff_workers(std::forward<decltype(cmd)>(cmd));
-        worker& w0 {m_workers[0]}; // Main thread does work too
-        w0.exec_and_broadcast();
-        barrier();
-    }
-
-    context::context(std::size_t num_threads) {
-        m_pimpl = std::make_shared<pimpl>(num_threads);
+    context::context(std::size_t num_threads, std::size_t task_queue_size) {
+        m_pimpl = std::make_shared<pimpl>(num_threads, task_queue_size);
     }
 
     context::~context() = default;
@@ -334,7 +263,7 @@ namespace piquant {
         const float scale,
         const std::int32_t zero_point,
         const round_mode mode
-    ) const -> void {
+    ) const -> quant_task_future {
         const auto& dti {dtype_info_of(dtype_in)};
         const auto& dto {dtype_info_of(dtype_out)};
         piquant_assert(!dti.is_quant, "input dtype must be a dequantized type");
@@ -355,7 +284,7 @@ namespace piquant {
             .dt_out = dtype_out,
             .rnd_mode = mode
         };
-        (*this->m_pimpl)(std::move(info));
+        return (*this->m_pimpl)(info);
     }
 
     auto context::dequantize(
@@ -366,7 +295,7 @@ namespace piquant {
         const float scale,
         const std::int32_t zero_point,
         const reduce_op op
-    ) const -> void {
+    ) const -> quant_task_future {
         const auto& dti {dtype_info_of(dtype_in)};
         const auto& dto {dtype_info_of(dtype_out)};
         piquant_assert(dti.is_quant, "input dtype must be a quantized type");
@@ -387,7 +316,7 @@ namespace piquant {
             .dt_out = dtype_out,
             .reduce = op
         };
-        (*this->m_pimpl)(std::move(info));
+        return (*this->m_pimpl)(info);
     }
 
     auto context::quantize_dequantize_fused(
@@ -399,7 +328,7 @@ namespace piquant {
         const std::int32_t zero_point,
         const round_mode mode,
         const reduce_op op
-    ) const -> void {
+    ) const -> quant_task_future {
         const auto& dti{dtype_info_of(dtype_in_out)};
         piquant_assert(!dti.is_quant, "input dtype must be a dequantized type");
         piquant_assert(dtype_info_of(quant_type).is_quant, "quant dtype must be a quantized type");
@@ -416,11 +345,6 @@ namespace piquant {
             .rnd_mode = mode,
             .reduce = op
         };
-        (*this->m_pimpl)(std::move(info));
-    }
-
-    auto context::reseed_thread_local_rng(const std::uint32_t seed) const -> void {
-        for (auto& worker : m_pimpl->m_workers)
-            worker.pl.prng = prng_state{seed};
+        return (*this->m_pimpl)(info);
     }
 }

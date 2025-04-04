@@ -32,13 +32,12 @@ using namespace piquant;
             std::ranges::generate(data_in, [&] { return dist(gen); }); \
             auto [scale, zero_point] {piquant::compute_quant_config_from_data(data_in, std::numeric_limits<std::make_signed_t<to>>::max())}; \
             piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())}; \
-            ctx.reseed_thread_local_rng(9'3'2002); \
-            ctx.quantize_generic<ti, to>(data_in, quantized, scale, zero_point, piquant::round_mode::rnd); \
+            ctx.quantize_generic<ti, to>(data_in, quantized, scale, zero_point, piquant::round_mode::rnd).join(); \
             std::vector<ti> dequantized {}; \
             dequantized.resize(numel); \
             ti prev {piquant::reduce_op::reduce == piquant::reduce_op::add ? dist(gen) : 0.0f}; \
             std::ranges::fill(dequantized, prev); \
-            ctx.dequantize_generic<to, ti>(quantized, dequantized, scale, zero_point, piquant::reduce_op::reduce); \
+            ctx.dequantize_generic<to, ti>(quantized, dequantized, scale, zero_point, piquant::reduce_op::reduce).join(); \
             for (std::size_t i {}; i < numel; ++i) { \
                 ASSERT_NEAR(data_in[i], dequantized[i]-prev, epsilon); \
             } \

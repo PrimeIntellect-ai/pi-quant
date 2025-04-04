@@ -15,7 +15,7 @@ extern "C" auto piquant_compute_quant_config_from_data(const float* const x, con
 }
 
 extern "C" auto piquant_context_create(const std::size_t num_threads) -> piquant_context_t* {
-    auto* ctx {new context{num_threads}};
+    auto* ctx {new context{num_threads, 8192}}; // todo
     return std::bit_cast<piquant_context_t*>(ctx);
 }
 

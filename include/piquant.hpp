@@ -16,6 +16,8 @@
 #define QUANT_EXPORT __attribute__((visibility("default")))
 #endif
 
+#include <pithreadpool/threadpool.hpp>
+
 namespace piquant {
     // computes and returns {scale, zero_point} derived from the data's mean and stddev.
     [[nodiscard]] QUANT_EXPORT std::pair<float, std::int64_t> compute_quant_config_from_data(
@@ -26,6 +28,8 @@ namespace piquant {
 
     /* Aborts with a formatted message. Because not all tested C++ compilers support std::format, C-style formatting is used for now. Should be replaced later. Pulling in fmt::format just for abort seems a bit too much... */
     [[noreturn]] void panic(const char *msg, ...);
+
+    using quant_task_future = pi::threadpool::TaskFuture<pi::threadpool::void_t>;
 
 #define QUANT_STRINGIZE2(x) #x
 #define QUANT_STRINGIZE(x) QUANT_STRINGIZE2(x)
@@ -89,15 +93,10 @@ namespace piquant {
 
         num_
     };
-
     static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::num_) <= 0xff);
-    // Ensure that dtype can be stored in a byte
 
-    enum class uint4_t : std::uint8_t {
-    };
-
-    enum class int4_t : std::uint8_t {
-    };
+    enum class uint4_t : std::uint8_t {};
+    enum class int4_t : std::uint8_t {};
 
     struct dtype_info final {
         std::size_t stride;
@@ -129,13 +128,11 @@ namespace piquant {
         static constexpr T min{std::numeric_limits<T>::min()};
         static constexpr T max{std::numeric_limits<T>::max()};
     };
-
     template<>
     struct dtype_limits<uint4_t> final {
         static constexpr std::uint8_t min{0};
         static constexpr std::uint8_t max{0xf};
     };
-
     template<>
     struct dtype_limits<int4_t> final {
         static constexpr std::int8_t min{-0x8};
@@ -144,89 +141,34 @@ namespace piquant {
 
     template<typename T>
     concept is_int4 = std::is_same_v<T, uint4_t> || std::is_same_v<T, int4_t>;
-
     template<typename T>
     concept is_dtype = std::is_arithmetic_v<T> || is_int4<T>;
-
     template<typename T> requires is_dtype<T>
-    struct dtype_traits final {
-    };
+    struct dtype_traits final {};
 
-    template<>
-    struct dtype_traits<uint4_t> {
-        static constexpr dtype ty = dtype::uint4;
-    };
-
-    template<>
-    struct dtype_traits<int4_t> {
-        static constexpr dtype ty = dtype::int4;
-    };
-
-    template<>
-    struct dtype_traits<std::int8_t> {
-        static constexpr dtype ty = dtype::int8;
-    };
-
-    template<>
-    struct dtype_traits<std::uint8_t> {
-        static constexpr dtype ty = dtype::uint8;
-    };
-
-    template<>
-    struct dtype_traits<std::int16_t> {
-        static constexpr dtype ty = dtype::int16;
-    };
-
-    template<>
-    struct dtype_traits<std::uint16_t> {
-        static constexpr dtype ty = dtype::uint16;
-    };
-
-    template<>
-    struct dtype_traits<std::int32_t> {
-        static constexpr dtype ty = dtype::int32;
-    };
-
-    template<>
-    struct dtype_traits<std::uint32_t> {
-        static constexpr dtype ty = dtype::uint32;
-    };
-
-    template<>
-    struct dtype_traits<std::int64_t> {
-        static constexpr dtype ty = dtype::int64;
-    };
-
-    template<>
-    struct dtype_traits<std::uint64_t> {
-        static constexpr dtype ty = dtype::uint64;
-    };
-
-    template<>
-    struct dtype_traits<float> {
-        static constexpr dtype ty = dtype::f32;
-    };
-
-    template<>
-    struct dtype_traits<double> {
-        static constexpr dtype ty = dtype::f64;
-    };
+    template<> struct dtype_traits<uint4_t> { static constexpr dtype ty = dtype::uint4; };
+    template<> struct dtype_traits<int4_t> { static constexpr dtype ty = dtype::int4; };
+    template<> struct dtype_traits<std::int8_t> { static constexpr dtype ty = dtype::int8; };
+    template<> struct dtype_traits<std::uint8_t> { static constexpr dtype ty = dtype::uint8; };
+    template<> struct dtype_traits<std::int16_t> { static constexpr dtype ty = dtype::int16; };
+    template<> struct dtype_traits<std::uint16_t> { static constexpr dtype ty = dtype::uint16; };
+    template<> struct dtype_traits<std::int32_t> { static constexpr dtype ty = dtype::int32; };
+    template<> struct dtype_traits<std::uint32_t> { static constexpr dtype ty = dtype::uint32; };
+    template<> struct dtype_traits<std::int64_t> { static constexpr dtype ty = dtype::int64; };
+    template<> struct dtype_traits<std::uint64_t> { static constexpr dtype ty = dtype::uint64; };
+    template<> struct dtype_traits<float> { static constexpr dtype ty = dtype::f32; };
+    template<> struct dtype_traits<double> { static constexpr dtype ty = dtype::f64; };
 
     class QUANT_EXPORT context final {
     public:
-        explicit context(std::size_t num_threads);
-
-        context(const context &) = delete;
-
-        context(context &&) = delete;
-
-        auto operator=(const context &) -> context & = delete;
-
-        auto operator=(context &&) -> context & = delete;
-
+        explicit context(std::size_t num_threads, std::size_t task_queue_size = 8192);
+        context(const context&) = delete;
+        context(context&&) = delete;
+        auto operator=(const context&) -> context& = delete;
+        auto operator=(context&&) -> context& = delete;
         ~context();
 
-        auto quantize(
+        [[nodiscard]] auto quantize(
             std::span<const std::byte> in,
             dtype dtype_in,
             std::span<std::byte> out,
@@ -234,26 +176,25 @@ namespace piquant {
             float scale,
             std::int32_t zero_point,
             round_mode mode
-        ) const -> void;
+        ) const -> quant_task_future;
 
-        template<typename IN, typename OUT> requires requires
-        {
+        template<typename IN, typename OUT> requires requires {
             requires is_dtype<IN>;
             requires is_dtype<OUT>;
             dtype_info_of(dtype_traits<IN>::ty).is_quant == true;
             dtype_info_of(dtype_traits<OUT>::ty).is_quant == false;
         }
-        auto quantize_generic(
+        [[nodiscard]] auto quantize_generic(
             std::span<const IN> in,
             std::span<OUT> out,
             float scale,
             std::int32_t zero_point,
             round_mode mode
-        ) -> void {
-            quantize(
-                {reinterpret_cast<const std::byte *>(in.data()), in.size_bytes()},
+        ) -> quant_task_future {
+            return quantize(
+                {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
                 dtype_traits<IN>::ty,
-                {reinterpret_cast<std::byte *>(out.data()), out.size_bytes()},
+                {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},
                 dtype_traits<OUT>::ty,
                 scale,
                 zero_point,
@@ -261,7 +202,7 @@ namespace piquant {
             );
         }
 
-        auto dequantize(
+        [[nodiscard]] auto dequantize(
             std::span<const std::byte> in,
             dtype dtype_in,
             std::span<std::byte> out,
@@ -269,26 +210,25 @@ namespace piquant {
             float scale,
             std::int32_t zero_point,
             reduce_op op
-        ) const -> void;
+        ) const -> quant_task_future;
 
-        template<typename IN, typename OUT> requires requires
-        {
+        template<typename IN, typename OUT> requires requires {
             requires is_dtype<IN>;
             requires is_dtype<OUT>;
             dtype_info_of(dtype_traits<IN>::ty).is_quant == false;
             dtype_info_of(dtype_traits<OUT>::ty).is_quant == true;
         }
-        auto dequantize_generic(
+        [[nodiscard]] auto dequantize_generic(
             std::span<const IN> in,
             std::span<OUT> out,
             float scale,
             std::int32_t zero_point,
             reduce_op op
-        ) {
-            dequantize(
-                {reinterpret_cast<const std::byte *>(in.data()), in.size_bytes()},
+        ) -> quant_task_future {
+            return dequantize(
+                {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
                 dtype_traits<IN>::ty,
-                {reinterpret_cast<std::byte *>(out.data()), out.size_bytes()},
+                {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},
                 dtype_traits<OUT>::ty,
                 scale,
                 zero_point,
@@ -296,7 +236,7 @@ namespace piquant {
             );
         }
 
-        auto quantize_dequantize_fused(
+        [[nodiscard]] auto quantize_dequantize_fused(
             std::span<const std::byte> in,
             dtype dtype_in_out,
             std::span<std::byte> out,
@@ -305,7 +245,7 @@ namespace piquant {
             std::int32_t zero_point,
             round_mode mode,
             reduce_op op
-        ) const -> void;
+        ) const -> quant_task_future;
 
         template<typename INOUT, typename QUANT> requires requires
         {
@@ -313,7 +253,7 @@ namespace piquant {
             dtype_info_of(dtype_traits<INOUT>::ty).is_quant == false;
             dtype_info_of(dtype_traits<QUANT>::ty).is_quant == true;
         }
-        auto quantize_dequantize_fused_generic(
+        [[nodiscard]] auto quantize_dequantize_fused_generic(
             std::span<const INOUT> in,
             std::span<INOUT> out,
             float scale,
@@ -321,10 +261,10 @@ namespace piquant {
             round_mode mode,
             reduce_op op
         ) {
-            quantize_dequantize_fused(
-                {reinterpret_cast<const std::byte *>(in.data()), in.size_bytes()},
+            return quantize_dequantize_fused(
+                {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
                 dtype_traits<INOUT>::ty,
-                {reinterpret_cast<std::byte *>(out.data()), out.size_bytes()},
+                {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},
                 dtype_traits<QUANT>::ty,
                 scale,
                 zero_point,
@@ -332,8 +272,6 @@ namespace piquant {
                 op
             );
         }
-
-        auto reseed_thread_local_rng(std::uint32_t seed) const -> void;
 
         class pimpl;
 
@@ -345,8 +283,8 @@ namespace piquant {
 
         struct quant_descriptor final {
             command_type type{command_type::quant};
-            const std::byte *in{};
-            std::byte *out{};
+            const std::byte* in{};
+            std::byte* out{};
             std::int64_t numel{};
             float scale{};
             std::int32_t zero_point{};
