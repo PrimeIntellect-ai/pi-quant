@@ -32,7 +32,6 @@ using namespace piquant;
             std::ranges::generate(data_in, [&] { return dist(gen); }); \
             auto [scale, zero_point] {piquant::compute_quant_config_from_data(data_in, std::numeric_limits<std::make_signed_t<to>>::max())}; \
             piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())}; \
-            ctx.reseed_thread_local_rng(9'3'2002); \
             ctx.quantize_generic<ti, to>(data_in, quantized, scale, zero_point, piquant::round_mode::rnd); \
             std::vector<ti> dequantized {}; \
             dequantized.resize(numel); \

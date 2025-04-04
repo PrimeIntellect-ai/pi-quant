@@ -21,8 +21,7 @@ else()
 endif()
 
 message(STATUS "Building for ${CMAKE_SYSTEM_PROCESSOR}")
-
-set(QUANT_SOURCES include/piquant.hpp include/piquant.h src/piquant.cpp src/kernels.inl src/kernel_generic.cpp src/capi.cpp)
+file(GLOB QUANT_SOURCES include/*.hpp src/*.cpp src/*.hpp src/*.inl)
 if (${IS_AMD64})
     function(set_file_opts filename posix_arch msvc_arch)
         message(STATUS "BLAS CPU permutation ${filename} ${posix_arch} / ${msvc_arch}")
@@ -40,9 +39,9 @@ if (${IS_AMD64})
     )
     set(QUANT_SOURCES ${QUANT_SOURCES} ${QUANT_SOURCES_AMD64})
 
-    set_file_opts("kernel_amd64_sse42.cpp" "-mtune=nehalem -msse4.2"  "/arch:SSE4.2")
-    set_file_opts("kernel_amd64_avx2.cpp" "-mtune=skylake -mavx -mavx2 -mfma -mf16c"  "/arch:AVX2")
-    set_file_opts("kernel_amd64_avx512f.cpp" "-mtune=cannonlake -mavx -mavx2 -mfma -mf16c -mavx512f -mavx512bw" "/arch:AVX512")
+    set_file_opts("amd64/kernel_amd64_sse42.cpp" "-mtune=nehalem -msse4.2"  "/arch:SSE4.2")
+    set_file_opts("amd64/kernel_amd64_avx2.cpp" "-mtune=skylake -mavx -mavx2 -mfma -mf16c"  "/arch:AVX2")
+    set_file_opts("amd64/kernel_amd64_avx512f.cpp" "-mtune=cannonlake -mavx -mavx2 -mfma -mf16c -mavx512f -mavx512bw" "/arch:AVX512")
 
 endif()
 
@@ -53,8 +52,11 @@ else()
     target_compile_definitions(piquant PRIVATE QUANT_BUILD_SHARED)
 endif ()
 
-target_compile_options(piquant PRIVATE -fomit-frame-pointer -fno-rtti -fno-exceptions)
+target_compile_options(piquant PRIVATE -fomit-frame-pointer -fno-rtti)
 target_include_directories(piquant PUBLIC include)
+
+add_subdirectory(extern/threadpool)
+target_link_libraries(piquant PUBLIC threadpool)
 
 # release mode opt
 if (CMAKE_BUILD_TYPE STREQUAL "Release")

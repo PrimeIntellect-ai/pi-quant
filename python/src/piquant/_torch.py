@@ -9,18 +9,7 @@ else:
     if importlib.util.find_spec('torch') is not None:
         import torch
 
-def compute_quant_config_torch_f32(tensor: 'torch.Tensor') -> Tuple[float, int]:
-    """
-    Compute the scale and zero point of a tensor.
-        :param tensor: input tensor
-    """
-    if torch is None:
-        raise ImportError('torch is not installed')
-    assert tensor.is_contiguous()
-    assert tensor.dtype == torch.float32
-    return compute_quant_config_f32_raw_ptr(tensor.data_ptr(), tensor.numel())
-
-__torch_dtype_map: Dict['torch.dtype', QuantDtype] = {
+_dtype_map: Dict['torch.target_quant_dtype', QuantDtype] = {
     torch.uint8: QuantDtype.UINT8,
     torch.int8: QuantDtype.INT8,
     torch.uint16: QuantDtype.UINT16,
@@ -33,11 +22,22 @@ __torch_dtype_map: Dict['torch.dtype', QuantDtype] = {
     torch.float64: QuantDtype.F64
 }
 
-def torch_to_piquant_dtype(dtype: 'torch.dtype') -> QuantDtype:
+def compute_quant_config_torch(tensor: 'torch.Tensor', *, target_quant_dtype: QuantDtype) -> Tuple[float, int]:
+    """
+    Compute the scale and zero point of a tensor.
+        :param tensor: input tensor
+    """
     if torch is None:
         raise ImportError('torch is not installed')
-    assert dtype in __torch_dtype_map, f'Unsupported dtype: {dtype}'
-    return __torch_dtype_map[dtype]
+    assert tensor.is_contiguous()
+    assert tensor.dtype == torch.float32
+    return compute_quant_config_raw_ptr(tensor.data_ptr(), target_quant_dtype, tensor.numel())
+
+def torch_to_piquant_dtype(dtype: 'torch.target_quant_dtype') -> QuantDtype:
+    if torch is None:
+        raise ImportError('torch is not installed')
+    assert dtype in _dtype_map, f'Unsupported target_quant_dtype: {dtype}'
+    return _dtype_map[dtype]
 
 def quantize_torch(
     in_tensor: 'torch.Tensor',

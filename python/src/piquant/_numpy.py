@@ -9,7 +9,7 @@ else:
     if importlib.util.find_spec('numpy') is not None:
         import numpy
 
-__numpy_dtype_map: Dict['numpy.dtype', QuantDtype] = {
+__numpy_dtype_map: Dict['numpy.target_quant_dtype', QuantDtype] = {
     numpy.uint8: QuantDtype.UINT8,
     numpy.int8: QuantDtype.INT8,
     numpy.uint16: QuantDtype.UINT16,

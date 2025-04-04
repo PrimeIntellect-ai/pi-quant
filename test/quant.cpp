@@ -38,7 +38,6 @@ using namespace piquant;
             std::ranges::generate(data_in, [&] { return dist(gen); }); \
             quantize_naive<ti, to, piquant::round_mode::rnd>(data_in, data_out_naive, scale, zero_point); \
             piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())}; \
-            ctx.reseed_thread_local_rng(9'3'2002); \
             ctx.quantize_generic<ti, to>(data_in, data_out, scale, zero_point, piquant::round_mode::rnd); \
             for (std::size_t i {}; i < numel_out; ++i) { \
                 bool eq {eq = data_out[i] == data_out_naive[i]}; \
