@@ -1,4 +1,5 @@
 #include "piquant.hpp"
+#include "piquant_internal.hpp"
 
 #include <cassert>
 #include <cstdarg>
@@ -117,11 +118,11 @@ namespace piquant {
     auto panic(const char* msg, ...) -> void {
         std::va_list args;
         va_start(args, msg);
-        char tmp[8192];
-        int delta{std::snprintf(tmp, sizeof(tmp), "%s", "\x1b[31m")};
-        delta += std::vsnprintf(tmp+delta, sizeof(tmp)-delta, msg, args);
-        std::snprintf(tmp+delta, sizeof(tmp)-delta, "%s", "\x1b[0m");
-        std::cerr << tmp << std::endl;
+        std::array<char, 8192> tmp {};
+        int delta{std::snprintf(tmp.data(), sizeof(tmp), "%s", "\x1b[31m")};
+        delta += std::vsnprintf(tmp.data()+delta, sizeof(tmp)-delta, msg, args);
+        std::snprintf(tmp.data()+delta, sizeof(tmp)-delta, "%s", "\x1b[0m");
+        std::cerr << tmp.data() << std::endl;
         va_end(args);
         std::abort();
     }
@@ -186,28 +187,19 @@ namespace piquant {
                 piquant_assert2(level < quant_routines.size());
                 auto* const kernel {quant_routines[level]};
                 piquant_assert2(kernel != nullptr);
-                const auto si {dtype_info_of(cmd.dt_in).stride};
-                const auto so {cmd.type == context::command_type::quant_dequant ? si : dtype_info_of(cmd.dt_out).stride};
-                (*kernel)(
-                    cmd.in + si*oa,
-                    cmd.out + so*ob,
-                    range,
-                    cmd,
-                    pl.prng
-                );
             #else
                 auto* const kernel {&quant_generic};
                 piquant_assert2(kernel != nullptr);
-                const auto si {dtype_info_of(cmd.dt_in).stride};
-                const auto so {cmd.type == context::command_type::quant_dequant ? si : dtype_info_of(cmd.dt_out).stride};
-                (*kernel)(
-                    cmd.in + si*oa,
-                    cmd.out + so*ob,
-                    range,
-                    cmd,
-                    pl.prng
-                );
             #endif
+            const auto si {dtype_info_of(cmd.dt_in).stride};
+            const auto so {cmd.type == context::command_type::quant_dequant ? si : dtype_info_of(cmd.dt_out).stride};
+            (*kernel)(
+                cmd.in + si*oa,
+                cmd.out + so*ob,
+                range,
+                cmd,
+                pl.prng
+            );
         }};
 
         if (const auto partition {partition_row()}; partition) [[likely]] {

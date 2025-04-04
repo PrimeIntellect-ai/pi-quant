@@ -10,6 +10,7 @@
 #include <span>
 
 #include "piquant.hpp"
+#include "../src/piquant_internal.hpp"
 
 [[nodiscard]] static constexpr auto prng_canonical(piquant::prng_state& p) -> float { // returns ξ ∈ [0, 1)
     auto& remaining {p.remaining};

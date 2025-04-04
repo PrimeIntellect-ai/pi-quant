@@ -3,6 +3,7 @@
 #endif
 
 #include <piquant.hpp>
+#include "piquant_internal.hpp"
 
 #include <algorithm>
 #include <cstring>
