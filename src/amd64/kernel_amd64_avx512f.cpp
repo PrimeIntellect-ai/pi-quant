@@ -5,6 +5,6 @@
 #error "Spec level too high"
 #endif
 
-#define QUANT_KERNEL_IMPL quant_amd64_avx512f
+#define QUANT_KERNEL_IMPL install_quant_amd64_avx512f
 #include "../kernels.inl"
 #undef QUANT_KERNEL_IMPL

@@ -29,8 +29,8 @@ using namespace piquant;
         std::vector<ti> data_in {}; \
         data_in.resize(numel); \
         std::ranges::generate(data_in, [&] { return dist(gen); }); \
-        auto [scale, zero_point] {piquant::compute_quant_config_from_data(data_in, std::numeric_limits<std::make_signed_t<to>>::max())}; \
         piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())}; \
+        auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<to>::ty)}; \
         std::vector<ti> requantized {}; \
         requantized.resize(numel); \
         ti prev {piquant::reduce_op::reduce == piquant::reduce_op::add ? dist(gen) : 0.0f}; \

@@ -15,10 +15,6 @@
 #endif
 
 namespace piquant {
-    // computes and returns {scale, zero_point} derived from the data's mean and stddev.
-    [[nodiscard]] QUANT_EXPORT auto compute_quant_config_from_data(std::span<const float> x, std::int64_t tmax=0xff) -> std::pair<float, std::int64_t>;
-    [[nodiscard]] QUANT_EXPORT auto compute_quant_config_from_data(std::span<const double> x, std::int64_t tmax=0xff) -> std::pair<double, std::int64_t>;
-
     enum class round_mode {
         nearest,
         stochastic
@@ -214,6 +210,9 @@ namespace piquant {
                 op
             );
         }
+
+        [[nodiscard]] auto compute_quant_config_from_data(std::span<const float> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t>;
+        [[nodiscard]] auto compute_quant_config_from_data(std::span<const double> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t>;
 
         class pimpl;
 

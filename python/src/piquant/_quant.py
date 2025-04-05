@@ -73,7 +73,7 @@ def compute_quant_config_raw_ptr(ptr: int, target_quant_dtype: QuantDtype, numel
     scale: ffi.CData = ffi.new('float*')
     zero_point: ffi.CData = ffi.new('int64_t*')
     bs: int = target_quant_dtype.bit_size()
-    tmax: int = ((1<<bs)-1)>>1
+    tmax: int = ((1<<bs)-1)
     C.piquant_compute_quant_config_from_data(ptr, numel, tmax, scale, zero_point)
     return scale[0], zero_point[0]
 

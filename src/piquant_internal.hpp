@@ -42,4 +42,16 @@ namespace piquant {
             remaining = 1;
         }
     };
+
+    struct kernel_registry final {
+        auto (*quant_kernel)(
+          const void* x,
+          void* o,
+          std::int64_t numel,
+          const context::quant_descriptor& desc,
+          prng_state& prng
+        ) noexcept -> void;
+        auto (*quant_config_kernel_f32)(std::span<const float> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t>;
+        auto (*quant_config_kernel_f64)(std::span<const double> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t>;
+    };
 }
