@@ -419,10 +419,11 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                     vsum7 = vaddq_f32(vsum7, vld1q_f32(p+i+4*6));
                     vsum8 = vaddq_f32(vsum8, vld1q_f32(p+i+4*7));
                 }
-                sum = vaddvq_f32(vsum1) + vaddvq_f32(vsum2) +
-                      vaddvq_f32(vsum3) + vaddvq_f32(vsum4) +
-                      vaddvq_f32(vsum5) + vaddvq_f32(vsum6) +
-                      vaddvq_f32(vsum7) + vaddvq_f32(vsum8);
+                float32x4_t vsum = vaddq_f32(vsum1, vsum2);
+                vsum = vaddq_f32(vsum, vaddq_f32(vsum3, vsum4));
+                vsum = vaddq_f32(vsum, vaddq_f32(vsum5, vsum6));
+                vsum = vaddq_f32(vsum, vaddq_f32(vsum7, vsum8));
+                sum = vaddvq_f32(vsum);
             #endif
             for (; i < numel; ++i) {
                 sum += p[i];
@@ -460,10 +461,11 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                     vsq_delta7 = vmlaq_f32(vsq_delta7, vdelta7, vdelta7);
                     vsq_delta8 = vmlaq_f32(vsq_delta8, vdelta8, vdelta8);
                 }
-                sq_delta = vaddvq_f32(vsq_delta1) + vaddvq_f32(vsq_delta2) +
-                           vaddvq_f32(vsq_delta3) + vaddvq_f32(vsq_delta4) +
-                           vaddvq_f32(vsq_delta5) + vaddvq_f32(vsq_delta6) +
-                           vaddvq_f32(vsq_delta7) + vaddvq_f32(vsq_delta8);
+                float32x4_t vsqdt = vaddq_f32(vsq_delta1, vsq_delta2);
+                vsqdt = vaddq_f32(vsqdt, vaddq_f32(vsq_delta3, vsq_delta4));
+                vsqdt = vaddq_f32(vsqdt, vaddq_f32(vsq_delta5, vsq_delta6));
+                vsqdt = vaddq_f32(vsqdt, vaddq_f32(vsq_delta7, vsq_delta8));
+                sq_delta = vaddvq_f32(vsqdt);
             #endif
             for (; i < numel; ++i) {
                 float delta {p[i] - mean};
