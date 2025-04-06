@@ -7,6 +7,6 @@
 #error "Spec level too high"
 #endif
 
-#define QUANT_KERNEL_IMPL quant_amd64_sse42
+#define QUANT_KERNEL_IMPL install_quant_amd64_sse42
 #include "../kernels.inl"
 #undef QUANT_KERNEL_IMPL

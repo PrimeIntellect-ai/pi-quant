@@ -16,9 +16,6 @@ extern "C" {
 #define PIQUANT_EXPORT __attribute__((visibility("default")))
 #endif
 
-/* computes and returns {scale, zero_point} derived from the data's mean and stddev. */
-extern PIQUANT_EXPORT void piquant_compute_quant_config_from_data(const float* x, size_t n, int64_t tmax, float* out_scale, int64_t* out_zero_point);
-
 typedef struct piquant_context_t piquant_context_t; /* Opaque context ptr */
 
 typedef enum piquant_round_mode_t {
@@ -71,6 +68,16 @@ extern PIQUANT_EXPORT void piquant_dequantize(
     float scale,
     int32_t zero_point,
     piquant_reduce_op_t op
+);
+
+/* computes and returns {scale, zero_point} derived from the data's mean and stddev. */
+extern PIQUANT_EXPORT void piquant_compute_quant_config_from_data(
+    piquant_context_t* ctx,
+    const float* x,
+    size_t n,
+    piquant_dtype_t target_quant_dtype,
+    float* out_scale,
+    int64_t* out_zero_point
 );
 
 #ifdef __cplusplus

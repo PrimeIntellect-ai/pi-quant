@@ -14,108 +14,65 @@
 #include <pithreadpool/threadpool.hpp>
 
 namespace piquant {
-#define decl_quant_kernel_fn(impl) \
-    extern auto impl( \
-        const void* x, \
-        void* o, \
-        std::int64_t range, \
-        const context::quant_descriptor& desc, \
-        prng_state& prng \
-    ) noexcept -> void
+    #define decl_quant_kernel_installer_fn(impl) \
+        [[nodiscard]] extern auto impl() noexcept -> kernel_registry
 
-    decl_quant_kernel_fn(quant_generic);
+    decl_quant_kernel_installer_fn(install_quant_generic);
 
-    using quant_kernel = auto (
-        const void* x,
-        void* o,
-        std::int64_t range,
-        const context::quant_descriptor& desc,
-        prng_state& prng
-    ) noexcept -> void;
+    #ifdef __x86_64__
+        #include <cpuid.h>
 
-#ifdef __x86_64__
-#include <cpuid.h>
+        [[nodiscard]] static auto check_sse42_support() noexcept -> bool {
+            int info[4] = {-1};
+            __cpuid(0, info[0], info[1], info[2], info[3]);
+            if (info[0] < 1) return false;
+            __cpuid(1, info[0], info[1], info[2], info[3]);
+            return (info[2] & (1<<20)) != 0;
+        }
 
-    [[nodiscard]] static auto check_sse42_support() noexcept -> bool {
-        int info[4] = {-1};
-        __cpuid(0, info[0], info[1], info[2], info[3]);
-        if (info[0] < 1) return false;
-        __cpuid(1, info[0], info[1], info[2], info[3]);
-        return (info[2] & (1<<20)) != 0;
-    }
+        [[nodiscard]] static auto check_avx2_support() noexcept -> bool {
+            int info[4] = {-1};
+            __cpuid(0, info[0], info[1], info[2], info[3]);
+            if (info[0] < 7) return false;
+            __cpuid(1, info[0], info[1], info[2], info[3]);
+            if ((info[2] & 0x38081001) != 0x38081001) return false;
+            __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
+            if ((info[1] & 0x20) != 0x20) return false;
+            std::uint32_t lo, hi;
+            asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
+            return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 6) == 6;
+        }
 
-    [[nodiscard]] static auto check_avx2_support() noexcept -> bool {
-        int info[4] = {-1};
-        __cpuid(0, info[0], info[1], info[2], info[3]);
-        if (info[0] < 7) return false;
-        __cpuid(1, info[0], info[1], info[2], info[3]);
-        if ((info[2] & 0x38081001) != 0x38081001) return false;
-        __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
-        if ((info[1] & 0x20) != 0x20) return false;
-        std::uint32_t lo, hi;
-        asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
-        return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 6) == 6;
-    }
+        [[nodiscard]] static auto check_avx512f_support() noexcept -> bool {
+            int info[4] = {-1};
+            __cpuid(0, info[0], info[1], info[2], info[3]);
+            if (info[0] < 7) return false;
+            __cpuid(1, info[0], info[1], info[2], info[3]);
+            if ((info[2] & 0x8000000) == 0 || (info[2] & 0x10000000) == 0) return false;
+            __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
+            if ((info[1] & 0x10000) == 0) return false;
+            std::uint32_t lo, hi;
+            asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
+            return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 0xe0) == 0xe0;
+        }
 
-    [[nodiscard]] static auto check_avx512f_support() noexcept -> bool {
-        int info[4] = {-1};
-        __cpuid(0, info[0], info[1], info[2], info[3]);
-        if (info[0] < 7) return false;
-        __cpuid(1, info[0], info[1], info[2], info[3]);
-        if ((info[2] & 0x8000000) == 0 || (info[2] & 0x10000000) == 0) return false;
-        __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
-        if ((info[1] & 0x10000) == 0) return false;
-        std::uint32_t lo, hi;
-        asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
-        return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 0xe0) == 0xe0;
-    }
+        decl_quant_kernel_installer_fn(quant_amd64_sse42);
+        decl_quant_kernel_installer_fn(quant_amd64_avx2);
+        decl_quant_kernel_installer_fn(quant_amd64_avx512f);
 
-    decl_quant_kernel_fn(quant_amd64_sse42);
-    decl_quant_kernel_fn(quant_amd64_avx2);
-    decl_quant_kernel_fn(quant_amd64_avx512f);
+        static constexpr std::array<quant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> quant_routines = {
+            &quant_generic,
+            &quant_amd64_sse42,
+            &quant_amd64_avx2,
+            &quant_amd64_avx512f
+        };
 
-    static constexpr std::array<quant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> quant_routines = {
-        &quant_generic,
-        &quant_amd64_sse42,
-        &quant_amd64_avx2,
-        &quant_amd64_avx512f
-    };
+    #endif
 
-#endif
-
-#undef decl_kernel_pair
+    #undef decl_kernel_pair
 
     template <class... T>
     struct overloads final : T... { using T::operator()...; };
-
-    template <typename T> requires std::is_floating_point_v<T>
-    [[nodiscard]] static auto compute_quant_config_from_data(const std::span<const T> x, std::int64_t tmax) -> std::pair<T, std::int64_t> {
-        static constexpr  T std_scale {T{12.0}};
-        if (x.empty()) [[unlikely]] return {0.0, 0.0};
-        auto mean {static_cast<T>(std::accumulate(x.begin(), x.end(), 0.0) / static_cast<T>(x.size()))};
-        auto sq_delta {static_cast<T>(std::transform_reduce(
-            x.begin(), x.end(),
-            0.0,
-            std::plus{},
-            [mean](const T value) noexcept -> T {
-                const T delta {value - mean};
-                return delta * delta;
-            }
-        ))};
-        const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(x.size()-1)))};
-        const auto scale {static_cast<T>(std_scale*std/static_cast<T>(tmax))};
-        const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
-        return {scale, zp};
-    }
-
-
-    std::pair<float, std::int64_t> compute_quant_config_from_data(const std::span<const float> x, const std::int64_t tmax) {
-        return compute_quant_config_from_data<float>(x, tmax);
-    }
-
-    std::pair<double, std::int64_t> compute_quant_config_from_data(const std::span<const double> x, const std::int64_t tmax) {
-        return compute_quant_config_from_data<double>(x, tmax);
-    }
 
     auto panic(const char* msg, ...) -> void {
         std::va_list args;
@@ -154,16 +111,22 @@ namespace piquant {
         auto operator = (const pimpl&) -> pimpl& = delete;
         auto operator = (pimpl&&) -> pimpl& = delete;
         ~pimpl();
+
+        kernel_registry registry {};
         pi::threadpool::ThreadPool m_pool;
         std::size_t m_num_threads {};
+
         auto operator ()(const quant_descriptor& desc) -> void;
-        static auto job_entry(payload& pl, const quant_descriptor& cmd) -> void;
-#ifdef __x86_64__
-        amd64_cpu_caps cpu_caps {};
-#endif
+        auto operator ()(std::span<const float> x, std::int64_t t_max) -> std::pair<float, std::int32_t>;
+        auto operator ()(std::span<const double> x, std::int64_t t_max) const -> std::pair<float, std::int32_t>;
+        auto job_entry(payload& pl, const quant_descriptor& cmd) const -> void;
+
+        #ifdef __x86_64__
+            amd64_cpu_caps cpu_caps {};
+        #endif
     };
 
-    auto context::pimpl::job_entry(payload& pl, const quant_descriptor& cmd) -> void {
+    auto context::pimpl::job_entry(payload& pl, const quant_descriptor& cmd) const -> void {
         const std::int64_t tc {std::max(1ll, pl.tc)};
         const std::int64_t ti {pl.ti};
         const auto partition_row {[&] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
@@ -190,7 +153,7 @@ namespace piquant {
                 auto* const kernel {quant_routines[level]};
                 piquant_assert2(kernel != nullptr);
             #else
-                auto* const kernel {&quant_generic};
+                auto* const kernel {&registry.quant_kernel};
                 piquant_assert2(kernel != nullptr);
             #endif
             const auto si {dtype_info_of(cmd.dt_in).stride};
@@ -214,6 +177,7 @@ namespace piquant {
         : m_pool{static_cast<int>(std::max<std::size_t>(1, num_threads)),
             static_cast<int>(std::max<std::size_t>(1, task_queue_size))},
             m_num_threads{std::max<std::size_t>(1, num_threads)} {
+        registry = install_quant_generic();
         #ifdef __x86_64__
             if (check_avx512f_support()) cpu_caps = amd64_cpu_caps::avx512;
             else if (check_avx2_support()) cpu_caps = amd64_cpu_caps::avx2;
@@ -235,11 +199,19 @@ namespace piquant {
             auto& job {jobs.emplace_back(std::make_pair(payload{static_cast<std::uint32_t>(i)}, std::nullopt))};
             job.first.ti = static_cast<std::int64_t>(i);
             job.first.tc = static_cast<std::int64_t>(num_threads);
-            job.second = m_pool.scheduleTask([=, &jobs] {
+            job.second = m_pool.scheduleTask([=, this, &jobs] {
                 job_entry(jobs[i].first, desc);
             });
         }
         for (auto& [_, task] : jobs) task->join();
+    }
+
+    auto context::pimpl::operator()(std::span<const float> x, std::int64_t t_max) -> std::pair<float, std::int32_t> {
+        return (*registry.quant_config_kernel_f32)(x, t_max);
+    }
+
+    auto context::pimpl::operator()(std::span<const double> x, std::int64_t t_max) const -> std::pair<float, std::int32_t> {
+        return (*registry.quant_config_kernel_f64)(x, t_max);
     }
 
     context::context(std::size_t num_threads, std::size_t task_queue_size) {
@@ -339,5 +311,15 @@ namespace piquant {
             .reduce = op
         };
         (*this->m_pimpl)(info);
+    }
+
+    auto context::compute_quant_config_from_data(std::span<const float> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
+        auto t_max {static_cast<std::int64_t>((1ull<<dtype_info_of(quant_dst_dtype).bit_size)-1)};
+        return (*this->m_pimpl)(x, t_max);
+    }
+
+    auto context::compute_quant_config_from_data(std::span<const double> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
+        auto t_max {static_cast<std::int64_t>((1ull<<dtype_info_of(quant_dst_dtype).bit_size)-1)};
+        return (*this->m_pimpl)(x, t_max);
     }
 }

@@ -22,16 +22,18 @@ _dtype_map: Dict['torch.target_quant_dtype', QuantDtype] = {
     torch.float64: QuantDtype.F64
 }
 
-def compute_quant_config_torch(tensor: 'torch.Tensor', *, target_quant_dtype: QuantDtype) -> Tuple[float, int]:
+def compute_quant_config_torch(tensor: 'torch.Tensor', *, target_quant_dtype: QuantDtype,  ctx: Union[Context, None] = None) -> Tuple[float, int]:
     """
     Compute the scale and zero point of a tensor.
         :param tensor: input tensor
     """
     if torch is None:
         raise ImportError('torch is not installed')
+    if ctx is None:
+        ctx = Context.default()
     assert tensor.is_contiguous()
     assert tensor.dtype == torch.float32
-    return compute_quant_config_raw_ptr(tensor.data_ptr(), target_quant_dtype, tensor.numel())
+    return ctx.compute_quant_config_raw_ptr(tensor.data_ptr(), target_quant_dtype, tensor.numel())
 
 def torch_to_piquant_dtype(dtype: 'torch.target_quant_dtype') -> QuantDtype:
     if torch is None:

@@ -63,30 +63,16 @@ class DequantConfig:
     zero_point: int = 0
     reduce_op: ReduceOp = ReduceOp.SET
 
-def compute_quant_config_raw_ptr(ptr: int, target_quant_dtype: QuantDtype, numel: int) -> Tuple[float, int]:
-    """
-        Compute the scale and zero point of a tensor.
-        :param ptr: p input tensor data pointer (must point to a valid, contiguous memory region of type float (in C float*))
-        :param numel: number of elements in the tensor
-    """
-    ptr: ffi.CData = ffi.cast('float*', ptr)
-    scale: ffi.CData = ffi.new('float*')
-    zero_point: ffi.CData = ffi.new('int64_t*')
-    bs: int = target_quant_dtype.bit_size()
-    tmax: int = ((1<<bs)-1)>>1
-    C.piquant_compute_quant_config_from_data(ptr, numel, tmax, scale, zero_point)
-    return scale[0], zero_point[0]
-
 class Context:
     def __init__(self, num_threads: Union[int, None] = None) -> None:
         """Initialize a quantization context with a given number of threads. If num_threads is None, the number of threads is set to the number of available CPUs minus 1."""
         if num_threads is None:
             num_threads = max(multiprocessing.cpu_count()-1, 1)
         self.__num_threads = num_threads
-        self.__ctx = C.piquant_context_create(self.__num_threads)
+        self._ctx = C.piquant_context_create(self.__num_threads)
 
     def __del__(self) -> None:
-        C.piquant_context_destroy(self.__ctx)
+        C.piquant_context_destroy(self._ctx)
 
     @staticmethod
     @lru_cache(maxsize=1)
@@ -113,7 +99,7 @@ class Context:
         ptr_in: ffi.CData = ffi.cast('const void*', ptr_in)
         ptr_out: ffi.CData = ffi.cast('void*', ptr_out)
         C.piquant_quantize(
-            self.__ctx,
+            self._ctx,
             ptr_in,
             dtype_in.value,
             ptr_out,
@@ -140,7 +126,7 @@ class Context:
         ptr_in: ffi.CData = ffi.cast('const void*', ptr_in)
         ptr_out: ffi.CData = ffi.cast('void*', ptr_out)
         C.piquant_dequantize(
-            self.__ctx,
+            self._ctx,
             ptr_in,
             dtype_in.value,
             ptr_out,
@@ -150,3 +136,16 @@ class Context:
             zero_point,
             reduce_op.value
         )
+
+    def compute_quant_config_raw_ptr(self, ptr: int, target_quant_dtype: QuantDtype, numel: int) -> Tuple[float, int]:
+        """
+            Compute the scale and zero point of a tensor.
+            :param ptr: p input tensor data pointer (must point to a valid, contiguous memory region of type float (in C float*))
+            :param numel: number of elements in the tensor
+        """
+        ptr: ffi.CData = ffi.cast('float*', ptr)
+        scale: ffi.CData = ffi.new('float*')
+        zero_point: ffi.CData = ffi.new('int64_t*')
+        bs: int = target_quant_dtype.bit_size()
+        C.piquant_compute_quant_config_from_data(self._ctx, ptr, numel, ((1<<bs)-1), scale, zero_point)
+        return scale[0], zero_point[0]

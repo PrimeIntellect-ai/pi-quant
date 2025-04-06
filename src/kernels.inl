@@ -6,9 +6,9 @@
 #include "piquant_internal.hpp"
 
 #include <algorithm>
-#include <cstring>
 #include <cmath>
 #include <cstdint>
+#include <numeric>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
@@ -27,6 +27,10 @@
 #endif
 
 namespace piquant {
+    static constexpr double std_scale {12.0};
+
+    struct kernel_registry;
+
     [[nodiscard]] static constexpr auto PIQUANT_AINLINE prng_canonical(prng_state& p) -> float { // returns ξ ∈ [0, 1)
         auto& remaining {p.remaining};
         auto& next {p.next};
@@ -306,7 +310,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         const std::int64_t zp,
         prng_state& prng
     ) noexcept -> void {
-        if constexpr(std::is_same_v<IN, float> && std::is_same_v<OUT, std::uint8_t> && RND == round_mode::nearest) { // Use SIMD optimized kernels for some dtype permutations
+        if constexpr (std::is_same_v<IN, float> && std::is_same_v<OUT, std::uint8_t> && RND == round_mode::nearest) { // Use SIMD optimized kernels for some dtype permutations
             quant_f32_to_uint8_nearest(static_cast<const float*>(in), static_cast<std::uint8_t*>(out), numel, scale, zp);
             return;
         }
@@ -370,14 +374,85 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         } else
             panic("Invalid reduce operation");
     }
+
+    template <typename T> requires std::is_floating_point_v<T>
+    [[nodiscard]] auto compute_quant_config_from_data(const T* p, std::int64_t numel, std::int64_t tmax) -> std::pair<T, std::int64_t> {
+        if (!numel) [[unlikely]] return {0.0, 0.0};
+        auto mean {static_cast<T>(std::accumulate(p, p+numel, 0.0) / static_cast<T>(numel))};
+        auto sq_delta {static_cast<T>(std::transform_reduce(
+            p, p+numel,
+            0.0,
+            std::plus{},
+            [mean](const T value) noexcept -> T {
+                T delta {value - mean};
+                return delta*delta;
+            }
+        ))};
+        const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
+        const auto scale {static_cast<T>(std_scale*std/static_cast<T>(tmax))};
+        const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
+        return {scale, zp};
+    }
+
+    template <>
+    [[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel, std::int64_t tmax) -> std::pair<float, std::int64_t> {
+        if (!numel) [[unlikely]] return {0.0, 0.0};
+        float sum {};
+        {
+            std::int64_t i {};
+            #ifdef __ARM_NEON
+                float32x4_t vsum {vdupq_n_f32(0.0f)};
+                for (; i+3 < numel; i += 4) {
+                    vsum = vaddq_f32(vsum, vld1q_f32(p+i));
+                }
+                sum = vaddvq_f32(vsum);
+            #endif
+            for (; i < numel; ++i) {
+                sum += p[i];
+            }
+        }
+        float mean {sum / static_cast<float>(numel)};
+        float sq_delta {};
+        {
+            std::int64_t i {};
+            #ifdef __ARM_NEON
+                float32x4_t vsq_delta {vdupq_n_f32(0.0f)};
+                float32x4_t vmean {vdupq_n_f32(mean)};
+                for (; i+3 < numel; i += 4) {
+                    float32x4_t vdelta {vld1q_f32(p+i)};
+                    vdelta = vsubq_f32(vdelta, vmean);
+                    vsq_delta = vmlaq_f32(vsq_delta, vdelta, vdelta);
+                }
+                sq_delta = vaddvq_f32(vsq_delta);
+            #endif
+            for (; i < numel; ++i) {
+                float delta {p[i] - mean};
+                sq_delta += delta*delta;
+            }
+        }
+        auto stddev {(std::sqrt(sq_delta / static_cast<float>(numel-1)))};
+        auto scale {static_cast<float>(std_scale * stddev / static_cast<float>(tmax))};
+        std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean / scale))};
+        return {scale, zp};
+    }
+
+    static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t> {
+        return compute_quant_config_from_data(x.data(), x.size(), tmax>>1);
+    }
+
+    static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t> {
+        return compute_quant_config_from_data(x.data(), x.size(), tmax>>1);
+    }
 };
 
 namespace piquant {
     [[nodiscard]] constexpr auto make_pair_perm(const dtype from, const dtype to) noexcept -> std::uint16_t {
-        return (static_cast<std::uint16_t>(from) & 0xff)<<8 | (static_cast<std::uint16_t>(to) & 0xff);
+        auto ito {static_cast<std::underlying_type_t<decltype(to)>>(to)};
+        auto ifrom {static_cast<std::underlying_type_t<decltype(from)>>(from)};
+        return ((255&ifrom)<<8)+(255&ito);
     }
 
-    auto PIQUANT_HOT QUANT_KERNEL_IMPL(
+    static auto PIQUANT_HOT quantize_dispatch(
         const void* x,
         void* o,
         std::int64_t range,
@@ -499,5 +574,13 @@ namespace piquant {
                 }
             return;
         }
+    }
+
+    auto QUANT_KERNEL_IMPL() noexcept -> kernel_registry {
+        return kernel_registry {
+            .quant_kernel = &quantize_dispatch,
+            .quant_config_kernel_f32 = &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_config_kernel_f32,
+            .quant_config_kernel_f64 = &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_config_kernel_f64,
+        };
     }
 }
