@@ -102,3 +102,22 @@ inline auto quantize_naive_4bit(
         out[i] = static_cast<piquant::uint4_t>((hi << 4) | lo);
     }
 }
+
+template <typename T> requires std::is_floating_point_v<T>
+[[nodiscard]] auto compute_quant_config_from_data(const T* p, std::int64_t numel, std::int64_t tmax) -> std::pair<T, std::int64_t> {
+    if (!numel) [[unlikely]] return {0.0, 0.0};
+    auto mean {static_cast<T>(std::accumulate(p, p+numel, 0.0) / static_cast<T>(numel))};
+    auto sq_delta {static_cast<T>(std::transform_reduce(
+        p, p+numel,
+        0.0,
+        std::plus{},
+        [mean](const T value) noexcept -> T {
+            T delta {value - mean};
+            return delta*delta;
+        }
+    ))};
+    const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
+    const auto scale {static_cast<T>(12.0f*std/static_cast<T>(tmax))};
+    const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
+    return {scale, zp};
+}
