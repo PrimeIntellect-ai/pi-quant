@@ -27,6 +27,8 @@
 #endif
 
 namespace piquant {
+    static constexpr double std_scale {12.0};
+
     struct kernel_registry;
 
     [[nodiscard]] static constexpr auto PIQUANT_AINLINE prng_canonical(prng_state& p) -> float { // returns ξ ∈ [0, 1)
@@ -373,33 +375,73 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             panic("Invalid reduce operation");
     }
 
-    static constexpr double std_scale {12.0};
-
     template <typename T> requires std::is_floating_point_v<T>
-    [[nodiscard]] static auto compute_quant_config_from_data(const std::span<const T> x, std::int64_t tmax) -> std::pair<T, std::int64_t> {
-        if (x.empty()) [[unlikely]] return {0.0, 0.0};
-        auto mean {static_cast<T>(std::accumulate(x.begin(), x.end(), 0.0) / static_cast<T>(x.size()))};
+    [[nodiscard]] auto compute_quant_config_from_data(const T* p, std::int64_t numel, std::int64_t tmax) -> std::pair<T, std::int64_t> {
+        if (!numel) [[unlikely]] return {0.0, 0.0};
+        auto mean {static_cast<T>(std::accumulate(p, p+numel, 0.0) / static_cast<T>(numel))};
         auto sq_delta {static_cast<T>(std::transform_reduce(
-            x.begin(), x.end(),
+            p, p+numel,
             0.0,
             std::plus{},
             [mean](const T value) noexcept -> T {
-                const T delta {value - mean};
-                return delta * delta;
+                T delta {value - mean};
+                return delta*delta;
             }
         ))};
-        const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(x.size()-1)))};
+        const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
         const auto scale {static_cast<T>(std_scale*std/static_cast<T>(tmax))};
         const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
         return {scale, zp};
     }
 
+    template <>
+    [[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel, std::int64_t tmax) -> std::pair<float, std::int64_t> {
+        if (!numel) [[unlikely]] return {0.0, 0.0};
+        float sum {};
+        {
+            std::int64_t i {};
+            #ifdef __ARM_NEON
+                float32x4_t vsum {vdupq_n_f32(0.0f)};
+                for (; i+3 < numel; i += 4) {
+                    vsum = vaddq_f32(vsum, vld1q_f32(p+i));
+                }
+                sum = vaddvq_f32(vsum);
+            #endif
+            for (; i < numel; ++i) {
+                sum += p[i];
+            }
+        }
+        float mean {sum / static_cast<float>(numel)};
+        float sq_delta {};
+        {
+            std::int64_t i {};
+            #ifdef __ARM_NEON
+                float32x4_t vsq_delta {vdupq_n_f32(0.0f)};
+                float32x4_t vmean {vdupq_n_f32(mean)};
+                for (; i+3 < numel; i += 4) {
+                    float32x4_t vdelta {vld1q_f32(p+i)};
+                    vdelta = vsubq_f32(vdelta, vmean);
+                    vsq_delta = vmlaq_f32(vsq_delta, vdelta, vdelta);
+                }
+                sq_delta = vaddvq_f32(vsq_delta);
+            #endif
+            for (; i < numel; ++i) {
+                float delta {p[i] - mean};
+                sq_delta += delta*delta;
+            }
+        }
+        auto stddev {(std::sqrt(sq_delta / static_cast<float>(numel-1)))};
+        auto scale {static_cast<float>(std_scale * stddev / static_cast<float>(tmax))};
+        std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean / scale))};
+        return {scale, zp};
+    }
+
     static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t> {
-        return compute_quant_config_from_data(x, tmax);
+        return compute_quant_config_from_data(x.data(), x.size(), tmax>>1);
     }
 
     static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t> {
-        return compute_quant_config_from_data(x, tmax);
+        return compute_quant_config_from_data(x.data(), x.size(), tmax>>1);
     }
 };
 
