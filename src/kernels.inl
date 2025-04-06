@@ -395,85 +395,49 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     }
 
     template <>
-    [[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel, std::int64_t tmax) -> std::pair<float, std::int64_t> {
-        if (!numel) [[unlikely]] return {0.0, 0.0};
+[[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel, std::int64_t tmax)
+    -> std::pair<float, std::int64_t> {
+        if (!numel) [[unlikely]] return {0.0f, 0.0};
         float sum {};
-        {
-            std::int64_t i {};
-            #ifdef __ARM_NEON
+        float sum_sq {};
+        std::int64_t i {};
+        #ifdef __ARM_NEON
                 float32x4_t vsum1 {vdupq_n_f32(0.0f)};
                 float32x4_t vsum2 {vdupq_n_f32(0.0f)};
                 float32x4_t vsum3 {vdupq_n_f32(0.0f)};
                 float32x4_t vsum4 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum5 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum6 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum7 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum8 {vdupq_n_f32(0.0f)};
-                for (; i+32 <= numel; i += 32) {
-                    vsum1 = vaddq_f32(vsum1, vld1q_f32(p+i+4*0));
-                    vsum2 = vaddq_f32(vsum2, vld1q_f32(p+i+4*1));
-                    vsum3 = vaddq_f32(vsum3, vld1q_f32(p+i+4*2));
-                    vsum4 = vaddq_f32(vsum4, vld1q_f32(p+i+4*3));
-                    vsum5 = vaddq_f32(vsum5, vld1q_f32(p+i+4*4));
-                    vsum6 = vaddq_f32(vsum6, vld1q_f32(p+i+4*5));
-                    vsum7 = vaddq_f32(vsum7, vld1q_f32(p+i+4*6));
-                    vsum8 = vaddq_f32(vsum8, vld1q_f32(p+i+4*7));
+                float32x4_t vsum_sq1 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum_sq2 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum_sq3 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum_sq4 {vdupq_n_f32(0.0f)};
+                for (; i+16 <= numel; i += 16) {
+                    float32x4_t v1 = vld1q_f32(p+i+4*0);
+                    float32x4_t v2 = vld1q_f32(p+i+4*1);
+                    float32x4_t v3 = vld1q_f32(p+i+4*2);
+                    float32x4_t v4 = vld1q_f32(p+i+4*3);
+                    vsum1 = vaddq_f32(vsum1, v1);
+                    vsum2 = vaddq_f32(vsum2, v2);
+                    vsum3 = vaddq_f32(vsum3, v3);
+                    vsum4 = vaddq_f32(vsum4, v4);
+                    vsum_sq1 = vmlaq_f32(vsum_sq1, v1, v1);
+                    vsum_sq2 = vmlaq_f32(vsum_sq2, v2, v2);
+                    vsum_sq3 = vmlaq_f32(vsum_sq3, v3, v3);
+                    vsum_sq4 = vmlaq_f32(vsum_sq4, v4, v4);
                 }
-                float32x4_t vsum = vaddq_f32(vsum1, vsum2);
-                vsum = vaddq_f32(vsum, vaddq_f32(vsum3, vsum4));
-                vsum = vaddq_f32(vsum, vaddq_f32(vsum5, vsum6));
-                vsum = vaddq_f32(vsum, vaddq_f32(vsum7, vsum8));
-                sum = vaddvq_f32(vsum);
-            #endif
-            for (; i < numel; ++i) {
-                sum += p[i];
-            }
+                float32x4_t vsum_total {vaddq_f32(vsum1, vaddq_f32(vsum2, vaddq_f32(vsum3, vsum4)))};
+                float32x4_t vsum_sq_total {vaddq_f32(vsum_sq1, vaddq_f32(vsum_sq2, vaddq_f32(vsum_sq3, vsum_sq4)))};
+                sum = vaddvq_f32(vsum_total);
+                sum_sq = vaddvq_f32(vsum_sq_total);
+        #endif
+        for (; i < numel; ++i) {
+            float x {p[i]};
+            sum += x;
+            sum_sq += x*x;
         }
         float mean {sum / static_cast<float>(numel)};
-        float sq_delta {};
-        {
-            std::int64_t i {};
-            #ifdef __ARM_NEON
-                float32x4_t vsq_delta1 {vdupq_n_f32(0.0f)};
-                float32x4_t vsq_delta2 {vdupq_n_f32(0.0f)};
-                float32x4_t vsq_delta3 {vdupq_n_f32(0.0f)};
-                float32x4_t vsq_delta4 {vdupq_n_f32(0.0f)};
-                float32x4_t vsq_delta5 {vdupq_n_f32(0.0f)};
-                float32x4_t vsq_delta6 {vdupq_n_f32(0.0f)};
-                float32x4_t vsq_delta7 {vdupq_n_f32(0.0f)};
-                float32x4_t vsq_delta8 {vdupq_n_f32(0.0f)};
-                float32x4_t vmean {vdupq_n_f32(mean)};
-                for (; i+32 <= numel; i += 32) {
-                    float32x4_t vdelta1 {vsubq_f32(vld1q_f32(p+i+4*0), vmean)};
-                    float32x4_t vdelta2 {vsubq_f32(vld1q_f32(p+i+4*1), vmean)};
-                    float32x4_t vdelta3 {vsubq_f32(vld1q_f32(p+i+4*2), vmean)};
-                    float32x4_t vdelta4 {vsubq_f32(vld1q_f32(p+i+4*3), vmean)};
-                    float32x4_t vdelta5 {vsubq_f32(vld1q_f32(p+i+4*4), vmean)};
-                    float32x4_t vdelta6 {vsubq_f32(vld1q_f32(p+i+4*5), vmean)};
-                    float32x4_t vdelta7 {vsubq_f32(vld1q_f32(p+i+4*6), vmean)};
-                    float32x4_t vdelta8 {vsubq_f32(vld1q_f32(p+i+4*7), vmean)};
-                    vsq_delta1 = vmlaq_f32(vsq_delta1, vdelta1, vdelta1);
-                    vsq_delta2 = vmlaq_f32(vsq_delta2, vdelta2, vdelta2);
-                    vsq_delta3 = vmlaq_f32(vsq_delta3, vdelta3, vdelta3);
-                    vsq_delta4 = vmlaq_f32(vsq_delta4, vdelta4, vdelta4);
-                    vsq_delta5 = vmlaq_f32(vsq_delta5, vdelta5, vdelta5);
-                    vsq_delta6 = vmlaq_f32(vsq_delta6, vdelta6, vdelta6);
-                    vsq_delta7 = vmlaq_f32(vsq_delta7, vdelta7, vdelta7);
-                    vsq_delta8 = vmlaq_f32(vsq_delta8, vdelta8, vdelta8);
-                }
-                float32x4_t vsqdt = vaddq_f32(vsq_delta1, vsq_delta2);
-                vsqdt = vaddq_f32(vsqdt, vaddq_f32(vsq_delta3, vsq_delta4));
-                vsqdt = vaddq_f32(vsqdt, vaddq_f32(vsq_delta5, vsq_delta6));
-                vsqdt = vaddq_f32(vsqdt, vaddq_f32(vsq_delta7, vsq_delta8));
-                sq_delta = vaddvq_f32(vsqdt);
-            #endif
-            for (; i < numel; ++i) {
-                float delta {p[i] - mean};
-                sq_delta += delta*delta;
-            }
-        }
-        auto stddev {(std::sqrt(sq_delta / static_cast<float>(numel-1)))};
-        auto scale {static_cast<float>(std_scale * stddev / static_cast<float>(tmax))};
+        float variance {(sum_sq - sum*sum / static_cast<float>(numel)) / static_cast<float>(numel - 1)};
+        float stddev {std::sqrt(variance)};
+        float scale {static_cast<float>(std_scale*stddev / static_cast<float>(tmax))};
         std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean / scale))};
         return {scale, zp};
     }
