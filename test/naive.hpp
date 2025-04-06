@@ -104,7 +104,7 @@ inline auto quantize_naive_4bit(
 }
 
 template <typename T> requires std::is_floating_point_v<T>
-[[nodiscard]] auto compute_quant_config_from_data(const T* p, std::int64_t numel, std::int64_t tmax) -> std::pair<T, std::int64_t> {
+[[nodiscard]] auto compute_quant_config_from_data_naive(const T* p, std::int64_t numel, std::int64_t tmax) -> std::pair<T, std::int64_t> {
     if (!numel) [[unlikely]] return {0.0, 0.0};
     auto mean {static_cast<T>(std::accumulate(p, p+numel, 0.0) / static_cast<T>(numel))};
     auto sq_delta {static_cast<T>(std::transform_reduce(

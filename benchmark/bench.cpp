@@ -27,12 +27,10 @@ auto main() -> int {
     ankerl::nanobench::Bench bench {};
 
     piquant::context ctx {nt};
-
-    bench.run("OPTIMIZED", [&] {
-        ctx.quantize_generic<float, std::uint8_t>(data_in, data_out, 1.0, 0, piquant::round_mode::nearest);
+    bench.run("quantize", [&] {
+        auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, piquant::dtype::uint8)};
+        ankerl::nanobench::doNotOptimizeAway(zero_point);
+        ankerl::nanobench::doNotOptimizeAway(scale);
     });
-
-    ankerl::nanobench::doNotOptimizeAway(data_in.data());
-    ankerl::nanobench::doNotOptimizeAway(data_out.data());
     return 0;
 }
