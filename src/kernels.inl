@@ -377,7 +377,6 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     template <typename T> requires std::is_floating_point_v<T>
     [[nodiscard]] static auto compute_quant_config_from_data(const std::span<const T> x, std::int64_t tmax) -> std::pair<T, std::int64_t> {
-        static constexpr T std_scale {T{12.0}};
         if (x.empty()) [[unlikely]] return {0.0, 0.0};
         auto mean {static_cast<T>(std::accumulate(x.begin(), x.end(), 0.0) / static_cast<T>(x.size()))};
         auto sq_delta {static_cast<T>(std::transform_reduce(

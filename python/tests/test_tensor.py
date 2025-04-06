@@ -6,7 +6,8 @@ from piquant import *
 def test_ptr_dequant_config_compute():
     tensor = torch.rand(32)
 
-    scale, zero_point = compute_quant_config_raw_ptr(tensor.data_ptr(), QuantDtype.UINT8, tensor.numel())
+    ctx = Context()
+    scale, zero_point = ctx.compute_quant_config_raw_ptr(tensor.data_ptr(), QuantDtype.UINT8, tensor.numel())
     assert scale > 0
     assert zero_point >= 0
 
