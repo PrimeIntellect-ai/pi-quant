@@ -57,8 +57,9 @@ target_include_directories(piquant PUBLIC include)
 
 if (NOT TARGET threadpool)
     add_subdirectory(extern/threadpool)
-    target_link_libraries(piquant PUBLIC threadpool)
 endif()
+
+target_link_libraries(piquant PUBLIC threadpool)
 
 # release mode opt
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
