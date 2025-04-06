@@ -401,11 +401,18 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         {
             std::int64_t i {};
             #ifdef __ARM_NEON
-                float32x4_t vsum {vdupq_n_f32(0.0f)};
-                for (; i+3 < numel; i += 4) {
-                    vsum = vaddq_f32(vsum, vld1q_f32(p+i));
+                float32x4_t vsum1 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum2 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum3 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum4 {vdupq_n_f32(0.0f)};
+                for (; i+16 <= numel; i += 16) {
+                    vsum1 = vaddq_f32(vsum1, vld1q_f32(p+i));
+                    vsum2 = vaddq_f32(vsum2, vld1q_f32(p+i+4));
+                    vsum3 = vaddq_f32(vsum3, vld1q_f32(p+i+8));
+                    vsum4 = vaddq_f32(vsum4, vld1q_f32(p+i+12));
                 }
-                sum = vaddvq_f32(vsum);
+                sum = vaddvq_f32(vsum1) + vaddvq_f32(vsum2) +
+                      vaddvq_f32(vsum3) + vaddvq_f32(vsum4);
             #endif
             for (; i < numel; ++i) {
                 sum += p[i];
@@ -416,14 +423,20 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         {
             std::int64_t i {};
             #ifdef __ARM_NEON
-                float32x4_t vsq_delta {vdupq_n_f32(0.0f)};
+                float32x4_t vsq_delta1 {vdupq_n_f32(0.0f)};
+                float32x4_t vsq_delta2 {vdupq_n_f32(0.0f)};
+                float32x4_t vsq_delta3 {vdupq_n_f32(0.0f)};
+                float32x4_t vsq_delta4 {vdupq_n_f32(0.0f)};
                 float32x4_t vmean {vdupq_n_f32(mean)};
-                for (; i+3 < numel; i += 4) {
-                    float32x4_t vdelta {vld1q_f32(p+i)};
-                    vdelta = vsubq_f32(vdelta, vmean);
-                    vsq_delta = vmlaq_f32(vsq_delta, vdelta, vdelta);
+                for (; i+16 <= numel; i += 16) {
+                    float32x4_t vdelta {vsubq_f32(vld1q_f32(p+i), vmean)};
+                    vsq_delta1 = vmlaq_f32(vsq_delta1, vdelta, vdelta);
+                    vsq_delta2 = vmlaq_f32(vsq_delta2, vdelta, vdelta);
+                    vsq_delta3 = vmlaq_f32(vsq_delta3, vdelta, vdelta);
+                    vsq_delta4 = vmlaq_f32(vsq_delta4, vdelta, vdelta);
                 }
-                sq_delta = vaddvq_f32(vsq_delta);
+                sq_delta = vaddvq_f32(vsq_delta1) + vaddvq_f32(vsq_delta2) +
+                            vaddvq_f32(vsq_delta3) + vaddvq_f32(vsq_delta4);
             #endif
             for (; i < numel; ++i) {
                 float delta {p[i] - mean};
