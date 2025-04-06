@@ -395,7 +395,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     }
 
     template <>
-[[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel, std::int64_t tmax)
+    [[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel, std::int64_t tmax)
     -> std::pair<float, std::int64_t> {
         if (!numel) [[unlikely]] return {0.0f, 0.0};
         float sum {};
