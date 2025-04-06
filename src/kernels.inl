@@ -406,26 +406,46 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 float32x4_t vsum2 {vdupq_n_f32(0.0f)};
                 float32x4_t vsum3 {vdupq_n_f32(0.0f)};
                 float32x4_t vsum4 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum5 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum6 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum7 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum8 {vdupq_n_f32(0.0f)};
                 float32x4_t vsum_sq1 {vdupq_n_f32(0.0f)};
                 float32x4_t vsum_sq2 {vdupq_n_f32(0.0f)};
                 float32x4_t vsum_sq3 {vdupq_n_f32(0.0f)};
                 float32x4_t vsum_sq4 {vdupq_n_f32(0.0f)};
-                for (; i+16 <= numel; i += 16) {
+                float32x4_t vsum_sq5 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum_sq6 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum_sq7 {vdupq_n_f32(0.0f)};
+                float32x4_t vsum_sq8 {vdupq_n_f32(0.0f)};
+                for (; i+32 <= numel; i += 32) {
                     float32x4_t v1 = vld1q_f32(p+i+4*0);
                     float32x4_t v2 = vld1q_f32(p+i+4*1);
                     float32x4_t v3 = vld1q_f32(p+i+4*2);
                     float32x4_t v4 = vld1q_f32(p+i+4*3);
+                    float32x4_t v5 = vld1q_f32(p+i+4*4);
+                    float32x4_t v6 = vld1q_f32(p+i+4*5);
+                    float32x4_t v7 = vld1q_f32(p+i+4*6);
+                    float32x4_t v8 = vld1q_f32(p+i+4*7);
                     vsum1 = vaddq_f32(vsum1, v1);
                     vsum2 = vaddq_f32(vsum2, v2);
                     vsum3 = vaddq_f32(vsum3, v3);
                     vsum4 = vaddq_f32(vsum4, v4);
+                    vsum5 = vaddq_f32(vsum5, v5);
+                    vsum6 = vaddq_f32(vsum6, v6);
+                    vsum7 = vaddq_f32(vsum7, v7);
+                    vsum8 = vaddq_f32(vsum8, v8);
                     vsum_sq1 = vmlaq_f32(vsum_sq1, v1, v1);
                     vsum_sq2 = vmlaq_f32(vsum_sq2, v2, v2);
                     vsum_sq3 = vmlaq_f32(vsum_sq3, v3, v3);
                     vsum_sq4 = vmlaq_f32(vsum_sq4, v4, v4);
+                    vsum_sq5 = vmlaq_f32(vsum_sq5, v5, v5);
+                    vsum_sq6 = vmlaq_f32(vsum_sq6, v6, v6);
+                    vsum_sq7 = vmlaq_f32(vsum_sq7, v7, v7);
+                    vsum_sq8 = vmlaq_f32(vsum_sq8, v8, v8);
                 }
-                float32x4_t vsum_total {vaddq_f32(vsum1, vaddq_f32(vsum2, vaddq_f32(vsum3, vsum4)))};
-                float32x4_t vsum_sq_total {vaddq_f32(vsum_sq1, vaddq_f32(vsum_sq2, vaddq_f32(vsum_sq3, vsum_sq4)))};
+                float32x4_t vsum_total {vaddq_f32(vsum1, vaddq_f32(vsum2, vaddq_f32(vsum3, vaddq_f32(vsum4, vaddq_f32(vsum5, vaddq_f32(vsum6, vaddq_f32(vsum7, vsum8)))))))};
+                float32x4_t vsum_sq_total {vaddq_f32(vsum_sq1, vaddq_f32(vsum_sq2, vaddq_f32(vsum_sq3, vaddq_f32(vsum_sq4, vaddq_f32(vsum_sq5, vaddq_f32(vsum_sq6, vaddq_f32(vsum_sq7, vsum_sq8)))))))};
                 sum = vaddvq_f32(vsum_total);
                 sum_sq = vaddvq_f32(vsum_sq_total);
         #endif
