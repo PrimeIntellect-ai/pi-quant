@@ -12,31 +12,16 @@
 #include "piquant.hpp"
 #include "../src/piquant_internal.hpp"
 
-[[nodiscard]] static constexpr auto prng_canonical(piquant::prng_state& p) -> float { // returns ξ ∈ [0, 1)
-    auto& remaining {p.remaining};
-    auto& next {p.next};
-    auto& state {p.state};
-    if (--remaining <= 0) {
-        remaining = 624;
-        next = 0;
-        uint32_t y, i;
-        for (i = 0; i < 624-397; ++i) {
-            y = (state[i] & 0x80000000u) | (state[i+1] & 0x7fffffffu);
-            state[i] = state[i+397] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
-        }
-        for (; i < 624-1; ++i) {
-            y = (state[i] & 0x80000000u) | (state[i+1] & 0x7fffffffu);
-            state[i] = state[i + (397-624)] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
-        }
-        y = (state[624-1] & 0x80000000u) | (state[0] & 0x7fffffffu);
-        state[624-1] = state[397-1] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
-    }
-    uint32_t y = state[next++];
-    y ^= y >> 11;
-    y ^= (y << 7) & 0x9d2c5680;
-    y ^= (y << 15) & 0xefc60000;
-    y ^= y >> 18;
-    return (1.f/static_cast<float>(1<<23)*(static_cast<float>(y>>9) + 0.5f));
+inline thread_local std::uint32_t prng {};
+
+[[nodiscard]] inline auto xs32_canonical(std::uint32_t& s) noexcept -> float {
+    static constexpr auto bias {static_cast<float>(0x800000)};
+    std::uint32_t y {s};
+    y ^= y<<13;
+    y ^= y>>17;
+    y ^= y<<5;
+    s = y;
+    return (1.f/bias*(static_cast<float>(y>>9) + 0.5f));
 }
 
 template <typename IN, typename OUT, const piquant::round_mode RND> requires requires {
@@ -63,11 +48,10 @@ auto quantize_naive(
             for (std::int64_t i {}; i < x.size(); ++i)
                 o[i] = Q(x[i]);
     } else {
-        piquant::prng_state prng {9'3'2002};
         const auto Q{[&](const IN x) noexcept -> OUT {
             double rnd {x * inv_scale};
             const double dec {std::abs(rnd - std::trunc(rnd))};
-            const double xi {prng_canonical(prng)};
+            const double xi {xs32_canonical(prng)};
             double adj {xi < dec ? 1.0f : 0.0f};
             if (rnd < 0.0f) adj = -1.0f * adj;
             rnd = std::trunc(rnd) + adj;
@@ -117,7 +101,7 @@ template <typename T> requires std::is_floating_point_v<T>
         }
     ))};
     const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
-    const auto scale {static_cast<T>(12.0f*std/static_cast<T>(tmax))};
+    const auto scale {static_cast<T>(piquant::stddev_scale*std/static_cast<T>(tmax))};
     const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
     return {scale, zp};
 }

@@ -17,28 +17,12 @@ namespace piquant {
     }
     #define piquant_assert2(expr) piquant_assert(expr, "")
 
-    struct prng_state final {
-        // Mersenne-Twister 64
-        std::uint32_t remaining{};
-        std::uint32_t next{};
-        std::array<std::uint32_t, 624> state{};
-
-        constexpr prng_state(const std::uint32_t seed) {
-            state[0] = seed;
-            for (size_t i = 1; i < 624; ++i)
-                state[i] = ((state[i - 1] ^ (state[i - 1] >> 30)) * 1812433253 + i) & ~0u;
-            next = 0;
-            remaining = 1;
-        }
-    };
-
     struct kernel_registry final {
         auto (*quant_kernel)(
           const void* x,
           void* o,
           std::int64_t numel,
-          const context::quant_descriptor& desc,
-          prng_state& prng
+          const context::quant_descriptor& desc
         ) noexcept -> void;
         auto (*quant_config_kernel_f32)(std::span<const float> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t>;
         auto (*quant_config_kernel_f64)(std::span<const double> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t>;

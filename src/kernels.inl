@@ -27,59 +27,103 @@
 #endif
 
 namespace piquant {
-    static constexpr double std_scale {12.0};
-
     struct kernel_registry;
-
-    [[nodiscard]] static constexpr auto PIQUANT_AINLINE prng_canonical(prng_state& p) -> float { // returns ξ ∈ [0, 1)
-        auto& remaining {p.remaining};
-        auto& next {p.next};
-        auto& state {p.state};
-        if (--remaining <= 0) {
-            remaining = 624;
-            next = 0;
-            uint32_t y, i;
-            for (i = 0; i < 624-397; ++i) {
-                y = (state[i] & 0x80000000u) | (state[i+1] & 0x7fffffffu);
-                state[i] = state[i+397] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
-            }
-            for (; i < 624-1; ++i) {
-                y = (state[i] & 0x80000000u) | (state[i+1] & 0x7fffffffu);
-                state[i] = state[i + (397-624)] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
-            }
-            y = (state[624-1] & 0x80000000u) | (state[0] & 0x7fffffffu);
-            state[624-1] = state[397-1] ^ (y>>1) ^ ((y&1) ? 0 : 0x9908b0dfu);
-        }
-        uint32_t y = state[next++];
-        y ^= y >> 11;
-        y ^= (y << 7) & 0x9d2c5680;
-        y ^= (y << 15) & 0xefc60000;
-        y ^= y >> 18;
-        return (1.f/static_cast<float>(1<<23)*(static_cast<float>(y>>9) + 0.5f));
-    }
 }
 
 #define concat(a, b) a ## b
 #define impl_namespace(a, b) piquant::concat(a, _impl)
 
 namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
+    // Xorshift 128 plus PRNG (scalar) used for stochastic rounding.
+    // Generates a canonical float ∈ [0, 1) using a 64-bit state.
+    struct xs128p_state final {
+        std::uint64_t p1 {};
+        std::uint64_t p2 {};
+
+        [[nodiscard]] auto PIQUANT_AINLINE operator ()() noexcept -> std::uint64_t {
+            std::uint64_t s1 {p1};
+            std::uint64_t s0 {p2};
+            p1 = s0;
+            s1 ^= s1<<23;
+            p2 = s1^s0^(s1>>18)^(s0>>5);
+            return p2 + s0;
+        }
+        [[nodiscard]] auto PIQUANT_AINLINE canonical() noexcept -> float {
+            static constexpr auto bias {static_cast<float>(0x800000)};
+            std::uint64_t y {~0u & (*this)()};
+            return (1.f/bias*(static_cast<float>(y>>9) + 0.5f));
+        }
+        [[nodiscard]] auto PIQUANT_AINLINE bounded(std::array<std::uint32_t, 2> bounds) noexcept -> std::array<std::uint32_t, 2> {
+            auto [b1, b2] {bounds}; // [0, bound1), [0, bound2)
+            std::uint64_t y {(*this)()};
+            return {
+                static_cast<std::uint32_t>(((y&~0u)*b1)>>32),
+                static_cast<std::uint32_t>(((y>>32)*b2)>>32)
+            };
+        }
+    };
+
+    // Xorshift 128 plus PRNG (SIMD) used for stochastic rounding.
+    // Generates N canonical floats ∈ [0, 1), where N is vector_width / sizeof(float).
+    struct xs128pv_state final {
+        #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
+            __m128i p1;
+            __m128i p2;
+        #elif defined(__AVX2__)
+            __m256i p1;
+            __m256i p2;
+        #elif defined(__SSE4_2__)
+            __m512i p1;
+            __m512i p2;
+        #elif defined(__aarch64__) && defined(__ARM_NEON__)
+            uint64x2_t p1;
+            uint64x2_t p2;
+        #else
+            xs128p_state scalar {};
+        #endif
+
+        static constexpr std::array<std::uint64_t, 2> jump_tab { 0x8a5cd789635d2dff, 0x121fd2155c472f96 };
+        [[nodiscard]] static constexpr auto jump(std::array<std::uint64_t, 2> in) noexcept -> std::array<std::uint64_t, 2> {
+            constexpr auto jump_to_keys {
+                [](std::uint64_t& ps0, std::uint64_t& ps1) noexcept -> void {
+                    uint64_t s1 {ps0};
+                    uint64_t s0 {ps1};
+                    ps0 = s0;
+                    s1 ^= s1<<23;
+                    ps1 = s1^s0^(s1>>18)^(s0>>5);
+                }
+            };
+            auto [i1, i2] {in};
+            std::uint64_t s0 {};
+            std::uint64_t s1 {};
+            for (std::size_t i {}; i < jump_tab.size(); ++i)
+                for (std::uint32_t j {}; j < 64; ++j) {
+                    if (1&jump_tab[i]<<j) {
+                        s0 ^= i1;
+                        s1 ^= i2;
+                    }
+                    jump_to_keys(i1, i2);
+                }
+            return {s0, s1};
+        }
+    };
+
     static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
-        const float* const PIQUANT_RESTRICT x,
-        std::uint8_t* const PIQUANT_RESTRICT o,
-        const std::int64_t numel,
+        const float* PIQUANT_RESTRICT x,
+        std::uint8_t* PIQUANT_RESTRICT o,
+        std::int64_t numel,
         float scale,
-        const std::int32_t zp
+        std::int32_t zp
    ) noexcept -> void {
         scale = 1.0f / scale; /* We multiply by reciprocal */
         std::int64_t i {};
         #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
-            const __m512 vinv_scale {_mm512_set1_ps(inv_scale)};
-            const __m512i vzero_point {_mm512_set1_epi32(zp)};
-            const __m512i vmin {_mm512_setzero_si512()};
-            const __m512i vmax {_mm512_set1_epi32(0xff)};
-            constexpr int k_round_mode {_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC};
-            constexpr std::size_t step {64};
-            for (; i+step <= numel; i += step) {
+            __m512 vinv_scale {_mm512_set1_ps(inv_scale)};
+            __m512i vzero_point {_mm512_set1_epi32(zp)};
+            __m512i vmin {_mm512_setzero_si512()};
+            __m512i vmax {_mm512_set1_epi32(0xff)};
+            constexpr auto k_round_mode {_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC};
+            for (; i+63 < numel; i += 64) {
                 __m512 xf0 {_mm512_loadu_ps(x+i+(0<<4))};
                 __m512 xf1 {_mm512_loadu_ps(x+i+(1<<4))};
                 __m512 xf2 {_mm512_loadu_ps(x+i+(2<<4))};
@@ -101,12 +145,11 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             const __m256i vzero_point {_mm256_set1_epi32(zp)};
             const __m256i vmin {_mm256_setzero_si256()};
             const __m256i vmax {_mm256_set1_epi32(0xff)};
-            constexpr std::size_t step {32};
             static const __m256i shuffle_matrix {_mm256_setr_epi8(
                 0,1,2,3, 8,9,10,11, 4,5,6,7, 12,13,14,15,
                 0,1,2,3, 8,9,10,11, 4,5,6,7, 12,13,14,15
             )};
-            for (; i + step <= numel; i += step) {
+            for (; i+31 < numel; i += 32) {
                 __m256 xf0 {_mm256_loadu_ps(x+i+(0<<3))};
                 __m256 xf1 {_mm256_loadu_ps(x+i+(1<<3))};
                 __m256 xf2 {_mm256_loadu_ps(x+i+(2<<3))};
@@ -154,8 +197,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             const __m128i vzero_point {_mm_set1_epi32(zp)};
             const __m128i vmin {_mm_setzero_si128()};
             const __m128i vmax {_mm_set1_epi32(0xff)};
-            constexpr std::size_t step = 16;
-            for (; i + step <= numel; i += step) {
+            for (; i+15 < numel; i += 16) {
                 __m128 xf0 = _mm_loadu_ps(x+i+(0<<2));
                 __m128 xf1 = _mm_loadu_ps(x+i+(1<<2));
                 __m128 xf2 = _mm_loadu_ps(x+i+(2<<2));
@@ -194,24 +236,23 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i), result);
             }
         #elif defined(__aarch64__) && defined(__ARM_NEON__)
-            const float32x4_t vinv_scale = vdupq_n_f32(scale);
-            const int32x4_t vzero_point = vdupq_n_s32(zp);
-            const int32x4_t vmin = vdupq_n_s32(0);
-            const int32x4_t vmax = vdupq_n_s32(0xff);
-            constexpr std::size_t step = 16;
-            for (; i+step <= numel; i += step) {
-                float32x4_t xf0 = vld1q_f32(x+i+(0<<2));
-                float32x4_t xf1 = vld1q_f32(x+i+(1<<2));
-                float32x4_t xf2 = vld1q_f32(x+i+(2<<2));
-                float32x4_t xf3 = vld1q_f32(x+i+(3<<2));
+            float32x4_t vinv_scale {vdupq_n_f32(scale)};
+            int32x4_t vzero_point {vdupq_n_s32(zp)};
+            int32x4_t vmin {vdupq_n_s32(0)};
+            int32x4_t vmax {vdupq_n_s32(0xff)};
+            for (; i+15 <= numel; i += 16) {
+                float32x4_t xf0 {vld1q_f32(x+i+(0<<2))};
+                float32x4_t xf1 {vld1q_f32(x+i+(1<<2))};
+                float32x4_t xf2 {vld1q_f32(x+i+(2<<2))};
+                float32x4_t xf3 {vld1q_f32(x+i+(3<<2))};
                 xf0 = vmulq_f32(xf0, vinv_scale);
                 xf1 = vmulq_f32(xf1, vinv_scale);
                 xf2 = vmulq_f32(xf2, vinv_scale);
                 xf3 = vmulq_f32(xf3, vinv_scale);
-                int32x4_t xi0 = vcvtaq_s32_f32(xf0);
-                int32x4_t xi1 = vcvtaq_s32_f32(xf1);
-                int32x4_t xi2 = vcvtaq_s32_f32(xf2);
-                int32x4_t xi3 = vcvtaq_s32_f32(xf3);
+                int32x4_t xi0 {vcvtaq_s32_f32(xf0)};
+                int32x4_t xi1 {vcvtaq_s32_f32(xf1)};
+                int32x4_t xi2 {vcvtaq_s32_f32(xf2)};
+                int32x4_t xi3 {vcvtaq_s32_f32(xf3)};
                 xi0 = vaddq_s32(xi0, vzero_point);
                 xi1 = vaddq_s32(xi1, vzero_point);
                 xi2 = vaddq_s32(xi2, vzero_point);
@@ -224,21 +265,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 xi1 = vminq_s32(xi1, vmax);
                 xi2 = vminq_s32(xi2, vmax);
                 xi3 = vminq_s32(xi3, vmax);
-                int16x4_t p16_0_low = vqmovn_s32(xi0);
-                int16x4_t p16_0_high = vqmovn_s32(xi1);
-                int16x8_t pack16_0 = vcombine_s16(p16_0_low, p16_0_high);
-                int16x4_t p16_1_low = vqmovn_s32(xi2);
-                int16x4_t p16_1_high = vqmovn_s32(xi3);
-                int16x8_t pack16_1 = vcombine_s16(p16_1_low, p16_1_high);
-                uint8x8_t result_low = vqmovun_s16(pack16_0);
-                uint8x8_t result_high = vqmovun_s16(pack16_1);
-                uint8x16_t result = vcombine_u8(result_low, result_high);
+                int16x8_t pack16_0 {vcombine_s16(vqmovn_s32(xi0), vqmovn_s32(xi1))};
+                int16x8_t pack16_1 {vcombine_s16(vqmovn_s32(xi2), vqmovn_s32(xi3))};
+                uint8x16_t result {vcombine_u8(vqmovun_s16(pack16_0), vqmovun_s16(pack16_1))};
                 vst1q_u8(o+i, result);
             }
         #endif
         for (; i < numel; ++i) {
-            const float rnd {std::round(x[i] * scale)};
-            const std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
+            float rnd {std::round(x[i] * scale)};
+            std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
     }
@@ -265,34 +300,38 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     concept is_int4 = std::is_same_v<T, uint4_t> || std::is_same_v<T, int4_t>;
 
     template <typename OUT> requires is_int4<OUT>
-    [[nodiscard]] static constexpr auto PIQUANT_AINLINE pack_nibbles(const OUT x, const OUT y) -> OUT {
-        const auto xi {static_cast<std::uint8_t>(x)};
-        const auto yi {static_cast<std::uint8_t>(y)};
+    [[nodiscard]] static constexpr auto PIQUANT_AINLINE pack_nibbles(OUT x, OUT y) -> OUT {
+        auto xi {static_cast<std::uint8_t>(x)};
+        auto yi {static_cast<std::uint8_t>(y)};
         constexpr auto m {dtype_limits<uint4_t>::max};
-        const auto pa {static_cast<std::uint8_t>((m&xi)<<4|m&yi)};
+        auto pa {static_cast<std::uint8_t>((m&xi)<<4|m&yi)};
         return static_cast<OUT>(pa);
     }
 
     template <const round_mode RND, typename IN, typename OUT, typename... Args>
-         requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>) && std::is_same_v<std::common_type_t<Args...>, IN> && sizeof...(Args) != 0)
-    static inline auto PIQUANT_AINLINE quant_step(const double inv_scale, const std::int32_t zp, prng_state& prng, const Args... args) noexcept -> OUT {
+         requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>)
+             && std::is_same_v<std::common_type_t<Args...>, IN> && sizeof...(Args) != 0)
+    static auto PIQUANT_AINLINE quant_step(double inv_scale, std::int32_t zp, Args... args) noexcept -> OUT {
+
+        thread_local constinit xs128p_state s_prng {0x123456789abcdef0, 0x0fedcba987654321};
+
         if constexpr (RND == round_mode::stochastic) {
             const auto Q{[&](const IN x) noexcept -> OUT {
                 double rnd {x * inv_scale};
-                const double dec {std::abs(rnd - std::trunc(rnd))};
-                const double xi {prng_canonical(prng)};
+                double dec {std::abs(rnd - std::trunc(rnd))};
+                double xi {(s_prng.canonical())};
                 double adj {xi < dec ? 1.0f : 0.0f};
                 if (rnd < 0.0f) adj = -1.0f * adj;
                 rnd = std::trunc(rnd) + adj;
-                const auto integral {static_cast<std::int64_t>(rnd) + zp};
+                auto integral {static_cast<std::int64_t>(rnd) + zp};
                 return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
             }};
             if constexpr (sizeof...(Args) == 1) return Q(args...);
             else return pack_nibbles(Q(args)...);
         } else {
             const auto Q {[=](const IN x) noexcept -> OUT {
-                const double rnd {std::round(static_cast<double>(x) * inv_scale)};
-                const auto integral {static_cast<std::int64_t>(rnd) + zp};
+                double rnd {std::round(static_cast<double>(x) * inv_scale)};
+                auto integral {static_cast<std::int64_t>(rnd) + zp};
                 return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
             }};
             if constexpr (sizeof...(Args) == 1) return Q(args...);
@@ -303,45 +342,44 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     template <typename IN, typename OUT, const round_mode RND>
         requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>))
     static auto PIQUANT_HOT quant_generic(
-        const void* const in,
-        void* const out,
+        const void* in,
+        void* out,
         std::int64_t numel,
         float scale,
-        const std::int64_t zp,
-        prng_state& prng
+        std::int64_t zp
     ) noexcept -> void {
         if constexpr (std::is_same_v<IN, float> && std::is_same_v<OUT, std::uint8_t> && RND == round_mode::nearest) { // Use SIMD optimized kernels for some dtype permutations
             quant_f32_to_uint8_nearest(static_cast<const float*>(in), static_cast<std::uint8_t*>(out), numel, scale, zp);
             return;
         }
-        const auto* PIQUANT_RESTRICT const x {static_cast<const IN*>(in)};
-        auto* PIQUANT_RESTRICT const o {static_cast<OUT*>(out)};
-        const double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
+        const auto* PIQUANT_RESTRICT x {static_cast<const IN*>(in)};
+        auto* PIQUANT_RESTRICT o {static_cast<OUT*>(out)};
+        double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
         if constexpr (is_int4<OUT>) numel = (numel+1)>>1;
         for (std::int64_t i {}; i < numel; ++i)
             if constexpr (is_int4<OUT>)
-                o[i] = quant_step<RND, IN, OUT>(inv_scale, zp, prng, x[i], x[i+1]);
+                o[i] = quant_step<RND, IN, OUT>(inv_scale, zp, x[i], x[i+1]);
             else
-                o[i] = quant_step<RND, IN, OUT>(inv_scale, zp, prng, x[i]);
+                o[i] = quant_step<RND, IN, OUT>(inv_scale, zp, x[i]);
     }
 
     template <typename IN, typename OUT>
           requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
-    static inline auto PIQUANT_AINLINE dequant_step(const double scale, const std::int32_t zp, const IN x) noexcept -> OUT {
+    static auto PIQUANT_AINLINE dequant_step(double scale, std::int32_t zp, const IN x) noexcept -> OUT {
         return static_cast<OUT>(static_cast<std::make_signed_t<IN>>(x) - zp)*scale;
     }
 
     template <typename IN, typename OUT, const reduce_op RDO>
             requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
     static auto PIQUANT_HOT dequant_generic(
-        const void* const in,
-        void* const out,
-        const std::int64_t numel,
+        const void* in,
+        void* out,
+        std::int64_t numel,
         double scale,
-        const std::int64_t zp
+        std::int64_t zp
     ) noexcept -> void {
-        const auto* PIQUANT_RESTRICT const x {static_cast<const IN*>(in)};
-        auto* PIQUANT_RESTRICT const o {static_cast<OUT*>(out)};
+        const auto* PIQUANT_RESTRICT x {static_cast<const IN*>(in)};
+        auto* PIQUANT_RESTRICT o {static_cast<OUT*>(out)};
         if constexpr (RDO == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
                 o[i] = dequant_step<IN, OUT>(scale, zp, x[i]);
@@ -355,22 +393,21 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     template <typename IN, typename QUANT, const round_mode RND, const reduce_op RDO>
       requires (std::is_floating_point_v<IN> && (std::is_integral_v<QUANT> || is_int4<QUANT>))
     static auto PIQUANT_HOT quant_dequant_generic(
-      const void* const in,
-      void* const out,
-      const std::int64_t numel,
+      const void* in,
+      void* out,
+      std::int64_t numel,
       double scale,
-      const std::int64_t zp,
-      prng_state& prng
+      std::int64_t zp
     ) noexcept -> void {
-        const auto* PIQUANT_RESTRICT const x {static_cast<const IN*>(in)};
-        auto* PIQUANT_RESTRICT const o {static_cast<IN*>(out)};
-        const double inv_scale {1.0 / scale};
+        const auto* PIQUANT_RESTRICT x {static_cast<const IN*>(in)};
+        auto* PIQUANT_RESTRICT o {static_cast<IN*>(out)};
+        double inv_scale {1.0 / scale};
         if constexpr (RDO == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
-                o[i] = dequant_step<QUANT, IN>(scale, zp, quant_step<RND, IN, QUANT>(inv_scale, zp, prng, x[i]));
+                o[i] = dequant_step<QUANT, IN>(scale, zp, quant_step<RND, IN, QUANT>(inv_scale, zp, x[i]));
         } else if constexpr (RDO == reduce_op::add) {
             for (std::int64_t i {}; i < numel; ++i)
-                o[i] += dequant_step<QUANT, IN>(scale, zp, quant_step<RND, IN, QUANT>(inv_scale, zp, prng, x[i]));
+                o[i] += dequant_step<QUANT, IN>(scale, zp, quant_step<RND, IN, QUANT>(inv_scale, zp, x[i]));
         } else
             panic("Invalid reduce operation");
     }
@@ -378,8 +415,8 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     template <typename T> requires std::is_floating_point_v<T>
     [[nodiscard]] auto compute_quant_config_from_data(const T* p, std::int64_t numel, std::int64_t tmax) -> std::pair<T, std::int64_t> {
         if (!numel) [[unlikely]] return {0.0, 0.0};
-        auto mean {static_cast<T>(std::accumulate(p, p+numel, 0.0) / static_cast<T>(numel))};
-        auto sq_delta {static_cast<T>(std::transform_reduce(
+        T mean {static_cast<T>(std::accumulate(p, p+numel, 0.0) / static_cast<T>(numel))};
+        const auto sq_delta {static_cast<T>(std::transform_reduce(
             p, p+numel,
             0.0,
             std::plus{},
@@ -388,9 +425,9 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 return delta*delta;
             }
         ))};
-        const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
-        const auto scale {static_cast<T>(std_scale*std/static_cast<T>(tmax))};
-        const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
+        T std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
+        T scale {static_cast<T>(stddev_scale*std/static_cast<T>(tmax))};
+        std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
         return {scale, zp};
     }
 
@@ -435,15 +472,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             __m256 vsum_sq6 {_mm256_setzero_ps()};
             __m256 vsum_sq7 {_mm256_setzero_ps()};
             __m256 vsum_sq8 {_mm256_setzero_ps()};
-            for (; i+64 <= numel; i += 64) {
-                __m256 v1 = _mm256_loadu_ps(p+i+8*0);
-                __m256 v2 = _mm256_loadu_ps(p+i+8*1);
-                __m256 v3 = _mm256_loadu_ps(p+i+8*2);
-                __m256 v4 = _mm256_loadu_ps(p+i+8*3);
-                __m256 v5 = _mm256_loadu_ps(p+i+8*4);
-                __m256 v6 = _mm256_loadu_ps(p+i+8*5);
-                __m256 v7 = _mm256_loadu_ps(p+i+8*6);
-                __m256 v8 = _mm256_loadu_ps(p+i+8*7);
+            for (; i+63 < numel; i += 64) {
+                __m256 v1 {_mm256_loadu_ps(p+i+8*0)};
+                __m256 v2 {_mm256_loadu_ps(p+i+8*1)};
+                __m256 v3 {_mm256_loadu_ps(p+i+8*2)};
+                __m256 v4 {_mm256_loadu_ps(p+i+8*3)};
+                __m256 v5 {_mm256_loadu_ps(p+i+8*4)};
+                __m256 v6 {_mm256_loadu_ps(p+i+8*5)};
+                __m256 v7 {_mm256_loadu_ps(p+i+8*6)};
+                __m256 v8 {_mm256_loadu_ps(p+i+8*7)};
                 vsum1 = _mm256_add_ps(vsum1, v1);
                 vsum2 = _mm256_add_ps(vsum2, v2);
                 vsum3 = _mm256_add_ps(vsum3, v3);
@@ -482,15 +519,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             __m128 vsum_sq6 {_mm_setzero_ps()};
             __m128 vsum_sq7 {_mm_setzero_ps()};
             __m128 vsum_sq8 {_mm_setzero_ps()};
-            for (; i+32 <= numel; i += 32) {
-                __m128 v1 = _mm_loadu_ps(p+i+4*0);
-                __m128 v2 = _mm_loadu_ps(p+i+4*1);
-                __m128 v3 = _mm_loadu_ps(p+i+4*2);
-                __m128 v4 = _mm_loadu_ps(p+i+4*3);
-                __m128 v5 = _mm_loadu_ps(p+i+4*4);
-                __m128 v6 = _mm_loadu_ps(p+i+4*5);
-                __m128 v7 = _mm_loadu_ps(p+i+4*6);
-                __m128 v8 = _mm_loadu_ps(p+i+4*7);
+            for (; i+31 < numel; i += 32) {
+                __m128 v1 {_mm_loadu_ps(p+i+4*0)};
+                __m128 v2 {_mm_loadu_ps(p+i+4*1)};
+                __m128 v3 {_mm_loadu_ps(p+i+4*2)};
+                __m128 v4 {_mm_loadu_ps(p+i+4*3)};
+                __m128 v5 {_mm_loadu_ps(p+i+4*4)};
+                __m128 v6 {_mm_loadu_ps(p+i+4*5)};
+                __m128 v7 {_mm_loadu_ps(p+i+4*6)};
+                __m128 v8 {_mm_loadu_ps(p+i+4*7)};
                 vsum1 = _mm_add_ps(vsum1, v1);
                 vsum2 = _mm_add_ps(vsum2, v2);
                 vsum3 = _mm_add_ps(vsum3, v3);
@@ -529,15 +566,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             float32x4_t vsum_sq6 {vdupq_n_f32(0.0f)};
             float32x4_t vsum_sq7 {vdupq_n_f32(0.0f)};
             float32x4_t vsum_sq8 {vdupq_n_f32(0.0f)};
-            for (; i+32 <= numel; i += 32) {
-                float32x4_t v1 = vld1q_f32(p+i+4*0);
-                float32x4_t v2 = vld1q_f32(p+i+4*1);
-                float32x4_t v3 = vld1q_f32(p+i+4*2);
-                float32x4_t v4 = vld1q_f32(p+i+4*3);
-                float32x4_t v5 = vld1q_f32(p+i+4*4);
-                float32x4_t v6 = vld1q_f32(p+i+4*5);
-                float32x4_t v7 = vld1q_f32(p+i+4*6);
-                float32x4_t v8 = vld1q_f32(p+i+4*7);
+            for (; i+31 < numel; i += 32) {
+                float32x4_t v1 {vld1q_f32(p+i+4*0)};
+                float32x4_t v2 {vld1q_f32(p+i+4*1)};
+                float32x4_t v3 {vld1q_f32(p+i+4*2)};
+                float32x4_t v4 {vld1q_f32(p+i+4*3)};
+                float32x4_t v5 {vld1q_f32(p+i+4*4)};
+                float32x4_t v6 {vld1q_f32(p+i+4*5)};
+                float32x4_t v7 {vld1q_f32(p+i+4*6)};
+                float32x4_t v8 {vld1q_f32(p+i+4*7)};
                 vsum1 = vaddq_f32(vsum1, v1);
                 vsum2 = vaddq_f32(vsum2, v2);
                 vsum3 = vaddq_f32(vsum3, v3);
@@ -568,7 +605,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         float mean {sum / static_cast<float>(numel)};
         float variance {(sum_sq - sum*sum / static_cast<float>(numel)) / static_cast<float>(numel - 1)};
         float stddev {std::sqrt(variance)};
-        float scale {static_cast<float>(std_scale*stddev / static_cast<float>(tmax))};
+        float scale {static_cast<float>(stddev_scale*stddev / static_cast<float>(tmax))};
         std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean / scale))};
         return {scale, zp};
     }
@@ -583,7 +620,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 };
 
 namespace piquant {
-    [[nodiscard]] constexpr auto make_pair_perm(const dtype from, const dtype to) noexcept -> std::uint16_t {
+    [[nodiscard]] constexpr auto make_pair_perm(dtype from,dtype to) noexcept -> std::uint16_t {
         auto ito {static_cast<std::underlying_type_t<decltype(to)>>(to)};
         auto ifrom {static_cast<std::underlying_type_t<decltype(from)>>(from)};
         return ((255&ifrom)<<8)+(255&ito);
@@ -593,8 +630,7 @@ namespace piquant {
         const void* x,
         void* o,
         std::int64_t range,
-        const context::quant_descriptor& desc,
-        prng_state& prng
+        const context::quant_descriptor& desc
     ) noexcept -> void {
         using enum dtype;
         const dtype_info& dt_in {dtype_info_of(desc.dt_in)};
@@ -606,9 +642,9 @@ namespace piquant {
                 #define impl_quant_perm(dti, dto, ti, to) \
                     case make_pair_perm(dti, dto): \
                         if (desc.rnd_mode == round_mode::stochastic) \
-                            impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<ti, to, round_mode::stochastic>(x, o, range, desc.scale, desc.zero_point, prng); \
+                            impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<ti, to, round_mode::stochastic>(x, o, range, desc.scale, desc.zero_point); \
                         else \
-                            impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<ti, to, round_mode::nearest>(x, o, range, desc.scale, desc.zero_point, prng); \
+                            impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<ti, to, round_mode::nearest>(x, o, range, desc.scale, desc.zero_point); \
                     return
                 switch (make_pair_perm(desc.dt_in, desc.dt_out)) {
                     impl_quant_perm(f32, uint4, float, uint4_t);
@@ -677,14 +713,14 @@ namespace piquant {
                     case make_pair_perm(dti, dto): \
                         if (desc.reduce == reduce_op::set) \
                             if (desc.rnd_mode == round_mode::stochastic) \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::set>(x, o, range, desc.scale, desc.zero_point, prng); \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::set>(x, o, range, desc.scale, desc.zero_point); \
                             else \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::set>(x, o, range, desc.scale, desc.zero_point, prng); \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::set>(x, o, range, desc.scale, desc.zero_point); \
                         else \
                             if (desc.rnd_mode == round_mode::stochastic) \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::add>(x, o, range, desc.scale, desc.zero_point, prng); \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::add>(x, o, range, desc.scale, desc.zero_point); \
                             else \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::add>(x, o, range, desc.scale, desc.zero_point, prng); \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::add>(x, o, range, desc.scale, desc.zero_point); \
                     return
                 switch (make_pair_perm(desc.dt_in, desc.dt_out)) {
                     impl_quant_perm(f32, uint4, float, uint4_t);

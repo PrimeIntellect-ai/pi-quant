@@ -88,12 +88,9 @@ namespace piquant {
     };
 
     struct payload {
-        prng_state prng;
         std::int64_t ti {}; // thread index
         std::int64_t tc {}; // thread count
         std::uint64_t phase {};
-
-        explicit constexpr payload(const std::uint32_t seed) noexcept : prng{seed} {}
     };
 
     class context::pimpl final {
@@ -144,8 +141,7 @@ namespace piquant {
                 cmd.in + si*oa,
                 cmd.out + so*ob,
                 range,
-                cmd,
-                pl.prng
+                cmd
             );
         }};
 
