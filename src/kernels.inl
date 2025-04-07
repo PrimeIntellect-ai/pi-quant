@@ -40,6 +40,8 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         std::uint64_t p1 {};
         std::uint64_t p2 {};
 
+        constexpr xs128p_state(std::uint64_t p1, std::uint64_t p2) noexcept : p1{p1}, p2{p2} {}
+
         [[nodiscard]] auto PIQUANT_AINLINE operator ()() noexcept -> std::uint64_t {
             std::uint64_t s1 {p1};
             std::uint64_t s0 {p2};
@@ -66,22 +68,6 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     // Xorshift 128 plus PRNG (SIMD) used for stochastic rounding.
     // Generates N canonical floats ∈ [0, 1), where N is vector_width / sizeof(float).
     struct xs128pv_state final {
-        #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
-            __m128i p1;
-            __m128i p2;
-        #elif defined(__AVX2__)
-            __m256i p1;
-            __m256i p2;
-        #elif defined(__SSE4_2__)
-            __m512i p1;
-            __m512i p2;
-        #elif defined(__aarch64__) && defined(__ARM_NEON__)
-            uint64x2_t p1;
-            uint64x2_t p2;
-        #else
-            xs128p_state scalar {};
-        #endif
-
         static constexpr std::array<std::uint64_t, 2> jump_tab { 0x8a5cd789635d2dff, 0x121fd2155c472f96 };
         [[nodiscard]] static constexpr auto jump(std::array<std::uint64_t, 2> in) noexcept -> std::array<std::uint64_t, 2> {
             constexpr auto jump_to_keys {
@@ -106,7 +92,20 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 }
             return {s0, s1};
         }
+
+        #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
+            __m128i p1;
+            __m128i p2;
+        #elif defined(__AVX2__)
+            __m256i p1;
+            __m256i p2;
+        #else
+            xs128p_state scalar;
+            constexpr xs128pv_state(std::uint64_t p1, std::uint64_t p2) noexcept : scalar{p1, p2} {}
+        #endif
     };
+
+    static thread_local constinit xs128p_state s_sprng {0x123456789abcdef0, 0x0fedcba987654321};
 
     static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
         const float* PIQUANT_RESTRICT x,
@@ -312,14 +311,11 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
          requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>)
              && std::is_same_v<std::common_type_t<Args...>, IN> && sizeof...(Args) != 0)
     static auto PIQUANT_AINLINE quant_step(double inv_scale, std::int32_t zp, Args... args) noexcept -> OUT {
-
-        thread_local constinit xs128p_state s_prng {0x123456789abcdef0, 0x0fedcba987654321};
-
         if constexpr (RND == round_mode::stochastic) {
             const auto Q{[&](const IN x) noexcept -> OUT {
                 double rnd {x * inv_scale};
                 double dec {std::abs(rnd - std::trunc(rnd))};
-                double xi {(s_prng.canonical())};
+                double xi {(s_sprng.canonical())};
                 double adj {xi < dec ? 1.0f : 0.0f};
                 if (rnd < 0.0f) adj = -1.0f * adj;
                 rnd = std::trunc(rnd) + adj;
