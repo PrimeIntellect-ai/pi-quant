@@ -3,6 +3,7 @@
 #include <array>
 #include <span>
 #include <cstdint>
+#include <memory>
 
 #ifdef _MSC_VER
 #ifdef QUANT_BUILD_SHARED

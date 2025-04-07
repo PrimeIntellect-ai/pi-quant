@@ -33,9 +33,9 @@ if (${IS_AMD64})
     endfunction()
 
     set(QUANT_SOURCES_AMD64
-        src/kernel_amd64_sse42.cpp
-        src/kernel_amd64_avx2.cpp
-        src/kernel_amd64_avx512f.cpp
+        src/amd64/kernel_amd64_sse42.cpp
+        src/amd64/kernel_amd64_avx2.cpp
+        src/amd64/kernel_amd64_avx512f.cpp
     )
     set(QUANT_SOURCES ${QUANT_SOURCES} ${QUANT_SOURCES_AMD64})
 
@@ -50,6 +50,7 @@ if (QUANT_COMPILE_STATIC)
 else()
     add_library(piquant SHARED ${QUANT_SOURCES})
     target_compile_definitions(piquant PRIVATE QUANT_BUILD_SHARED)
+    add_compile_options(-fPIC)
 endif ()
 
 target_compile_options(piquant PRIVATE -fomit-frame-pointer -fno-rtti)

@@ -394,6 +394,21 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         return {scale, zp};
     }
 
+    #ifdef __AVX2__
+        [[nodiscard]] static auto avx2_hsum256(__m256 x) noexcept -> float {
+            __m128 hiQuad = _mm256_extractf128_ps(x, 1);
+            __m128 loQuad = _mm256_castps256_ps128(x);
+            __m128 sumQuad = _mm_add_ps(loQuad, hiQuad);
+            __m128 loDual = sumQuad;
+            __m128 hiDual = _mm_movehl_ps(sumQuad, sumQuad);
+            __m128 sumDual = _mm_add_ps(loDual, hiDual);
+            __m128 lo = sumDual;
+            __m128 hi = _mm_shuffle_ps(sumDual, sumDual, 0x1);
+            __m128 sum = _mm_add_ss(lo, hi);
+            return _mm_cvtss_f32(sum);
+        }
+    #endif
+
     template <>
     [[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel, std::int64_t tmax)
     -> std::pair<float, std::int64_t> {
@@ -401,53 +416,149 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         float sum {};
         float sum_sq {};
         std::int64_t i {};
-        #ifdef __ARM_NEON
-                float32x4_t vsum1 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum2 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum3 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum4 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum5 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum6 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum7 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum8 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum_sq1 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum_sq2 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum_sq3 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum_sq4 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum_sq5 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum_sq6 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum_sq7 {vdupq_n_f32(0.0f)};
-                float32x4_t vsum_sq8 {vdupq_n_f32(0.0f)};
-                for (; i+32 <= numel; i += 32) {
-                    float32x4_t v1 = vld1q_f32(p+i+4*0);
-                    float32x4_t v2 = vld1q_f32(p+i+4*1);
-                    float32x4_t v3 = vld1q_f32(p+i+4*2);
-                    float32x4_t v4 = vld1q_f32(p+i+4*3);
-                    float32x4_t v5 = vld1q_f32(p+i+4*4);
-                    float32x4_t v6 = vld1q_f32(p+i+4*5);
-                    float32x4_t v7 = vld1q_f32(p+i+4*6);
-                    float32x4_t v8 = vld1q_f32(p+i+4*7);
-                    vsum1 = vaddq_f32(vsum1, v1);
-                    vsum2 = vaddq_f32(vsum2, v2);
-                    vsum3 = vaddq_f32(vsum3, v3);
-                    vsum4 = vaddq_f32(vsum4, v4);
-                    vsum5 = vaddq_f32(vsum5, v5);
-                    vsum6 = vaddq_f32(vsum6, v6);
-                    vsum7 = vaddq_f32(vsum7, v7);
-                    vsum8 = vaddq_f32(vsum8, v8);
-                    vsum_sq1 = vmlaq_f32(vsum_sq1, v1, v1);
-                    vsum_sq2 = vmlaq_f32(vsum_sq2, v2, v2);
-                    vsum_sq3 = vmlaq_f32(vsum_sq3, v3, v3);
-                    vsum_sq4 = vmlaq_f32(vsum_sq4, v4, v4);
-                    vsum_sq5 = vmlaq_f32(vsum_sq5, v5, v5);
-                    vsum_sq6 = vmlaq_f32(vsum_sq6, v6, v6);
-                    vsum_sq7 = vmlaq_f32(vsum_sq7, v7, v7);
-                    vsum_sq8 = vmlaq_f32(vsum_sq8, v8, v8);
-                }
-                float32x4_t vsum_total {vaddq_f32(vsum1, vaddq_f32(vsum2, vaddq_f32(vsum3, vaddq_f32(vsum4, vaddq_f32(vsum5, vaddq_f32(vsum6, vaddq_f32(vsum7, vsum8)))))))};
-                float32x4_t vsum_sq_total {vaddq_f32(vsum_sq1, vaddq_f32(vsum_sq2, vaddq_f32(vsum_sq3, vaddq_f32(vsum_sq4, vaddq_f32(vsum_sq5, vaddq_f32(vsum_sq6, vaddq_f32(vsum_sq7, vsum_sq8)))))))};
-                sum = vaddvq_f32(vsum_total);
-                sum_sq = vaddvq_f32(vsum_sq_total);
+        #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
+
+        #elif defined(__AVX2__)
+            __m256 vsum1 {_mm256_setzero_ps()};
+            __m256 vsum2 {_mm256_setzero_ps()};
+            __m256 vsum3 {_mm256_setzero_ps()};
+            __m256 vsum4 {_mm256_setzero_ps()};
+            __m256 vsum5 {_mm256_setzero_ps()};
+            __m256 vsum6 {_mm256_setzero_ps()};
+            __m256 vsum7 {_mm256_setzero_ps()};
+            __m256 vsum8 {_mm256_setzero_ps()};
+            __m256 vsum_sq1 {_mm256_setzero_ps()};
+            __m256 vsum_sq2 {_mm256_setzero_ps()};
+            __m256 vsum_sq3 {_mm256_setzero_ps()};
+            __m256 vsum_sq4 {_mm256_setzero_ps()};
+            __m256 vsum_sq5 {_mm256_setzero_ps()};
+            __m256 vsum_sq6 {_mm256_setzero_ps()};
+            __m256 vsum_sq7 {_mm256_setzero_ps()};
+            __m256 vsum_sq8 {_mm256_setzero_ps()};
+            for (; i+64 <= numel; i += 64) {
+                __m256 v1 = _mm256_loadu_ps(p+i+8*0);
+                __m256 v2 = _mm256_loadu_ps(p+i+8*1);
+                __m256 v3 = _mm256_loadu_ps(p+i+8*2);
+                __m256 v4 = _mm256_loadu_ps(p+i+8*3);
+                __m256 v5 = _mm256_loadu_ps(p+i+8*4);
+                __m256 v6 = _mm256_loadu_ps(p+i+8*5);
+                __m256 v7 = _mm256_loadu_ps(p+i+8*6);
+                __m256 v8 = _mm256_loadu_ps(p+i+8*7);
+                vsum1 = _mm256_add_ps(vsum1, v1);
+                vsum2 = _mm256_add_ps(vsum2, v2);
+                vsum3 = _mm256_add_ps(vsum3, v3);
+                vsum4 = _mm256_add_ps(vsum4, v4);
+                vsum5 = _mm256_add_ps(vsum5, v5);
+                vsum6 = _mm256_add_ps(vsum6, v6);
+                vsum7 = _mm256_add_ps(vsum7, v7);
+                vsum8 = _mm256_add_ps(vsum8, v8);
+                vsum_sq1 = _mm256_fmadd_ps(v1, v1, vsum_sq1);
+                vsum_sq2 = _mm256_fmadd_ps(v2, v2, vsum_sq2);
+                vsum_sq3 = _mm256_fmadd_ps(v3, v3, vsum_sq3);
+                vsum_sq4 = _mm256_fmadd_ps(v4, v4, vsum_sq4);
+                vsum_sq5 = _mm256_fmadd_ps(v5, v5, vsum_sq5);
+                vsum_sq6 = _mm256_fmadd_ps(v6, v6, vsum_sq6);
+                vsum_sq7 = _mm256_fmadd_ps(v7, v7, vsum_sq7);
+                vsum_sq8 = _mm256_fmadd_ps(v8, v8, vsum_sq8);
+            }
+            __m256 vsum_total {_mm256_add_ps(vsum1, _mm256_add_ps(vsum2, _mm256_add_ps(vsum3, _mm256_add_ps(vsum4, _mm256_add_ps(vsum5, _mm256_add_ps(vsum6, _mm256_add_ps(vsum7, vsum8)))))))};
+            __m256 vsum_sq_total {_mm256_add_ps(vsum_sq1, _mm256_add_ps(vsum_sq2, _mm256_add_ps(vsum_sq3, _mm256_add_ps(vsum_sq4, _mm256_add_ps(vsum_sq5, _mm256_add_ps(vsum_sq6, _mm256_add_ps(vsum_sq7, vsum_sq8)))))))};
+            sum = avx2_hsum256(vsum_total);
+            sum_sq = avx2_hsum256(vsum_sq_total);
+        #elif defined(__SSE4_2__)
+            __m128 vsum1 {_mm_setzero_ps()};
+            __m128 vsum2 {_mm_setzero_ps()};
+            __m128 vsum3 {_mm_setzero_ps()};
+            __m128 vsum4 {_mm_setzero_ps()};
+            __m128 vsum5 {_mm_setzero_ps()};
+            __m128 vsum6 {_mm_setzero_ps()};
+            __m128 vsum7 {_mm_setzero_ps()};
+            __m128 vsum8 {_mm_setzero_ps()};
+            __m128 vsum_sq1 {_mm_setzero_ps()};
+            __m128 vsum_sq2 {_mm_setzero_ps()};
+            __m128 vsum_sq3 {_mm_setzero_ps()};
+            __m128 vsum_sq4 {_mm_setzero_ps()};
+            __m128 vsum_sq5 {_mm_setzero_ps()};
+            __m128 vsum_sq6 {_mm_setzero_ps()};
+            __m128 vsum_sq7 {_mm_setzero_ps()};
+            __m128 vsum_sq8 {_mm_setzero_ps()};
+            for (; i+32 <= numel; i += 32) {
+                __m128 v1 = _mm_loadu_ps(p+i+4*0);
+                __m128 v2 = _mm_loadu_ps(p+i+4*1);
+                __m128 v3 = _mm_loadu_ps(p+i+4*2);
+                __m128 v4 = _mm_loadu_ps(p+i+4*3);
+                __m128 v5 = _mm_loadu_ps(p+i+4*4);
+                __m128 v6 = _mm_loadu_ps(p+i+4*5);
+                __m128 v7 = _mm_loadu_ps(p+i+4*6);
+                __m128 v8 = _mm_loadu_ps(p+i+4*7);
+                vsum1 = _mm_add_ps(vsum1, v1);
+                vsum2 = _mm_add_ps(vsum2, v2);
+                vsum3 = _mm_add_ps(vsum3, v3);
+                vsum4 = _mm_add_ps(vsum4, v4);
+                vsum5 = _mm_add_ps(vsum5, v5);
+                vsum6 = _mm_add_ps(vsum6, v6);
+                vsum7 = _mm_add_ps(vsum7, v7);
+                vsum8 = _mm_add_ps(vsum8, v8);
+                vsum_sq1 = _mm_add_ps(vsum_sq1, _mm_mul_ps(v1, v1));
+                vsum_sq2 = _mm_add_ps(vsum_sq2, _mm_mul_ps(v2, v2));
+                vsum_sq3 = _mm_add_ps(vsum_sq3, _mm_mul_ps(v3, v3));
+                vsum_sq4 = _mm_add_ps(vsum_sq4, _mm_mul_ps(v4, v4));
+                vsum_sq5 = _mm_add_ps(vsum_sq5, _mm_mul_ps(v5, v5));
+                vsum_sq6 = _mm_add_ps(vsum_sq6, _mm_mul_ps(v6, v6));
+                vsum_sq7 = _mm_add_ps(vsum_sq7, _mm_mul_ps(v7, v7));
+                vsum_sq8 = _mm_add_ps(vsum_sq8, _mm_mul_ps(v8, v8));
+            }
+            __m128 vsum_total {_mm_add_ps(vsum1, _mm_add_ps(vsum2, _mm_add_ps(vsum3, _mm_add_ps(vsum4, _mm_add_ps(vsum5, _mm_add_ps(vsum6, _mm_add_ps(vsum7, vsum8)))))))};
+            __m128 vsum_sq_total {_mm_add_ps(vsum_sq1, _mm_add_ps(vsum_sq2, _mm_add_ps(vsum_sq3, _mm_add_ps(vsum_sq4, _mm_add_ps(vsum_sq5, _mm_add_ps(vsum_sq6, _mm_add_ps(vsum_sq7, vsum_sq8)))))))};
+            sum = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(vsum_total, vsum_total), vsum_total));
+            sum_sq = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(vsum_sq_total, vsum_sq_total), vsum_sq_total));
+        #elif defined(__aarch64__) && defined(__ARM_NEON__)
+            float32x4_t vsum1 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum2 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum3 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum4 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum5 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum6 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum7 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum8 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum_sq1 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum_sq2 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum_sq3 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum_sq4 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum_sq5 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum_sq6 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum_sq7 {vdupq_n_f32(0.0f)};
+            float32x4_t vsum_sq8 {vdupq_n_f32(0.0f)};
+            for (; i+32 <= numel; i += 32) {
+                float32x4_t v1 = vld1q_f32(p+i+4*0);
+                float32x4_t v2 = vld1q_f32(p+i+4*1);
+                float32x4_t v3 = vld1q_f32(p+i+4*2);
+                float32x4_t v4 = vld1q_f32(p+i+4*3);
+                float32x4_t v5 = vld1q_f32(p+i+4*4);
+                float32x4_t v6 = vld1q_f32(p+i+4*5);
+                float32x4_t v7 = vld1q_f32(p+i+4*6);
+                float32x4_t v8 = vld1q_f32(p+i+4*7);
+                vsum1 = vaddq_f32(vsum1, v1);
+                vsum2 = vaddq_f32(vsum2, v2);
+                vsum3 = vaddq_f32(vsum3, v3);
+                vsum4 = vaddq_f32(vsum4, v4);
+                vsum5 = vaddq_f32(vsum5, v5);
+                vsum6 = vaddq_f32(vsum6, v6);
+                vsum7 = vaddq_f32(vsum7, v7);
+                vsum8 = vaddq_f32(vsum8, v8);
+                vsum_sq1 = vmlaq_f32(vsum_sq1, v1, v1);
+                vsum_sq2 = vmlaq_f32(vsum_sq2, v2, v2);
+                vsum_sq3 = vmlaq_f32(vsum_sq3, v3, v3);
+                vsum_sq4 = vmlaq_f32(vsum_sq4, v4, v4);
+                vsum_sq5 = vmlaq_f32(vsum_sq5, v5, v5);
+                vsum_sq6 = vmlaq_f32(vsum_sq6, v6, v6);
+                vsum_sq7 = vmlaq_f32(vsum_sq7, v7, v7);
+                vsum_sq8 = vmlaq_f32(vsum_sq8, v8, v8);
+            }
+            float32x4_t vsum_total {vaddq_f32(vsum1, vaddq_f32(vsum2, vaddq_f32(vsum3, vaddq_f32(vsum4, vaddq_f32(vsum5, vaddq_f32(vsum6, vaddq_f32(vsum7, vsum8)))))))};
+            float32x4_t vsum_sq_total {vaddq_f32(vsum_sq1, vaddq_f32(vsum_sq2, vaddq_f32(vsum_sq3, vaddq_f32(vsum_sq4, vaddq_f32(vsum_sq5, vaddq_f32(vsum_sq6, vaddq_f32(vsum_sq7, vsum_sq8)))))))};
+            sum = vaddvq_f32(vsum_total);
+            sum_sq = vaddvq_f32(vsum_sq_total);
         #endif
         for (; i < numel; ++i) {
             float x {p[i]};

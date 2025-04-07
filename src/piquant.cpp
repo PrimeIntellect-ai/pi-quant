@@ -56,16 +56,9 @@ namespace piquant {
             return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 0xe0) == 0xe0;
         }
 
-        decl_quant_kernel_installer_fn(quant_amd64_sse42);
-        decl_quant_kernel_installer_fn(quant_amd64_avx2);
-        decl_quant_kernel_installer_fn(quant_amd64_avx512f);
-
-        static constexpr std::array<quant_kernel*, static_cast<std::size_t>(amd64_cpu_caps::num_)> quant_routines = {
-            &quant_generic,
-            &quant_amd64_sse42,
-            &quant_amd64_avx2,
-            &quant_amd64_avx512f
-        };
+        decl_quant_kernel_installer_fn(install_quant_amd64_sse42);
+        decl_quant_kernel_installer_fn(install_quant_amd64_avx2);
+        decl_quant_kernel_installer_fn(install_quant_amd64_avx512f);
 
     #endif
 
@@ -120,14 +113,10 @@ namespace piquant {
         auto operator ()(std::span<const float> x, std::int64_t t_max) -> std::pair<float, std::int32_t>;
         auto operator ()(std::span<const double> x, std::int64_t t_max) const -> std::pair<float, std::int32_t>;
         auto job_entry(payload& pl, const quant_descriptor& cmd) const -> void;
-
-        #ifdef __x86_64__
-            amd64_cpu_caps cpu_caps {};
-        #endif
     };
 
     auto context::pimpl::job_entry(payload& pl, const quant_descriptor& cmd) const -> void {
-        const std::int64_t tc {std::max(1ll, pl.tc)};
+        const std::int64_t tc {std::max(1l, pl.tc)};
         const std::int64_t ti {pl.ti};
         const auto partition_row {[&] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
             if (dtype_info_of(cmd.dt_out).bit_size < 8) {       // Subbyte granularity requires special handling to not split packed bit pairs
@@ -147,15 +136,8 @@ namespace piquant {
             return {{ra, ra, rb-ra}};
         }};
         const auto dispatch_quant {[&](const std::int64_t oa, const std::int64_t ob, const std::int64_t range, const context::quant_descriptor& cmd) noexcept -> void {
-            #ifdef __x86_64__
-                const auto level {static_cast<std::size_t>(pimpl->cpu_caps)};
-                piquant_assert2(level < quant_routines.size());
-                auto* const kernel {quant_routines[level]};
-                piquant_assert2(kernel != nullptr);
-            #else
-                auto* const kernel {&registry.quant_kernel};
-                piquant_assert2(kernel != nullptr);
-            #endif
+            auto* const kernel {&registry.quant_kernel};
+            piquant_assert2(kernel != nullptr);
             const auto si {dtype_info_of(cmd.dt_in).stride};
             const auto so {cmd.type == context::command_type::quant_dequant ? si : dtype_info_of(cmd.dt_out).stride};
             (*kernel)(
@@ -179,10 +161,10 @@ namespace piquant {
             m_num_threads{std::max<std::size_t>(1, num_threads)} {
         registry = install_quant_generic();
         #ifdef __x86_64__
-            if (check_avx512f_support()) cpu_caps = amd64_cpu_caps::avx512;
-            else if (check_avx2_support()) cpu_caps = amd64_cpu_caps::avx2;
-            else if (check_sse42_support()) cpu_caps = amd64_cpu_caps::sse_4_2;
-            else cpu_caps = amd64_cpu_caps::none;
+            if (check_avx512f_support()) registry = install_quant_amd64_avx512f();
+            else if (check_avx2_support()) registry = install_quant_amd64_avx2();
+            else if (check_sse42_support())  registry = install_quant_amd64_sse42();
+
         #endif
         m_pool.startup();
     }

@@ -17,17 +17,6 @@ namespace piquant {
     }
     #define piquant_assert2(expr) piquant_assert(expr, "")
 
-    #ifdef __x86_64__
-        enum class amd64_cpu_caps {
-            none=0,
-            sse_4_2,
-            avx2,
-            avx512,
-
-            num_
-        };
-    #endif
-
     struct prng_state final {
         // Mersenne-Twister 64
         std::uint32_t remaining{};
