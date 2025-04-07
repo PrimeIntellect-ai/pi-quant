@@ -116,7 +116,7 @@ namespace piquant {
     };
 
     auto context::pimpl::job_entry(payload& pl, const quant_descriptor& cmd) const -> void {
-        const std::int64_t tc {std::max(1l, pl.tc)};
+        const std::int64_t tc {std::max(std::int64_t{1}, pl.tc)};
         const std::int64_t ti {pl.ti};
         const auto partition_row {[&] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
             if (dtype_info_of(cmd.dt_out).bit_size < 8) {       // Subbyte granularity requires special handling to not split packed bit pairs
