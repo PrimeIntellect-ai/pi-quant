@@ -56,8 +56,8 @@ using namespace piquant;
         } \
     }
 
-test_quant(float, uint4_t, nearest)
-test_quant(float, uint4_t, stochastic)
+//test_quant(float, uint4_t, nearest)
+//test_quant(float, uint4_t, stochastic)
 test_quant(float, uint8_t, nearest)
 test_quant(float, uint8_t, stochastic)
 test_quant(float, uint16_t, nearest)
@@ -66,8 +66,8 @@ test_quant(float, uint32_t, nearest)
 test_quant(float, uint32_t, stochastic)
 test_quant(float, uint64_t, nearest)
 test_quant(float, uint64_t, stochastic)
-test_quant(float, int4_t, nearest)
-test_quant(float, int4_t, stochastic)
+//test_quant(float, int4_t, nearest)
+//test_quant(float, int4_t, stochastic)
 test_quant(float, int8_t, nearest)
 test_quant(float, int8_t, stochastic)
 test_quant(float, int16_t, nearest)

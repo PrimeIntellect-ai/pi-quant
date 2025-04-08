@@ -374,11 +374,16 @@ struct dtype_limits final {
                 0,1,2,3, 8,9,10,11, 4,5,6,7, 12,13,14,15,
                 0,1,2,3, 8,9,10,11, 4,5,6,7, 12,13,14,15
             )};
+            for (; i < numel && ((std::bit_cast<std::uintptr_t>(&x[i])&31) != 0); ++i) {
+                float rnd {std::round(x[i]*scale)};
+                std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
+                o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
+            }
             for (; i+31 < numel; i += 32) {
-                __m256 xf0 {_mm256_loadu_ps(x+i+(0<<3))};
-                __m256 xf1 {_mm256_loadu_ps(x+i+(1<<3))};
-                __m256 xf2 {_mm256_loadu_ps(x+i+(2<<3))};
-                __m256 xf3 {_mm256_loadu_ps(x+i+(3<<3))};
+                __m256 xf0 {_mm256_cvtepi32_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(0<<3))))};
+                __m256 xf1 {_mm256_cvtepi32_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(1<<3))))};
+                __m256 xf2 {_mm256_cvtepi32_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(2<<3))))};
+                __m256 xf3 {_mm256_cvtepi32_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(3<<3))))};
                 __m256 prod0 {_mm256_mul_ps(xf0, vinv_scale)};
                 __m256 prod1 {_mm256_mul_ps(xf1, vinv_scale)};
                 __m256 prod2 {_mm256_mul_ps(xf2, vinv_scale)};
@@ -407,12 +412,9 @@ struct dtype_limits final {
                 xi1 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, xi1));
                 xi2 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, xi2));
                 xi3 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, xi3));
-                __m256i pack16_0 {_mm256_packus_epi32(xi0, xi1)};
-                __m256i pack16_1 {_mm256_packus_epi32(xi2, xi3)};
-                __m256i result {_mm256_packus_epi16(pack16_0, pack16_1)};
-                result = _mm256_permute4x64_epi64(result, 0xD8);
-                __m256i final {_mm256_shuffle_epi8(result, shuffle_matrix)};
-                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i), final);
+                __m256i packed {_mm256_permute4x64_epi64(_mm256_packus_epi16(_mm256_packus_epi32(xi0, xi1), _mm256_packus_epi32(xi2, xi3)), 0xd8)};
+                __m256i shuffled {_mm256_shuffle_epi8(packed, shuffle_matrix)};
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i), shuffled);
             }
         #elif defined(__SSE4_2__)
             const __m128 vinv_scale {_mm_set1_ps(scale)};
