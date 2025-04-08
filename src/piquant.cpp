@@ -212,7 +212,7 @@ namespace piquant {
         piquant_assert(!dti.is_quant, "input dtype must be a dequantized type");
         piquant_assert(dto.is_quant, "output dtype must be a quantized type");
         if (dto.bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
-            piquant_assert(out.size()/(dto.bit_size>>3) == (in.size()/(dti.bit_size>>3)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
+            piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
         } else {
             piquant_assert(in.size()/(dti.bit_size>>3) == out.size()/(dto.bit_size>>3), "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
         }

@@ -23,14 +23,10 @@ auto main() -> int {
     std::mt19937 gen {rd()};
     std::uniform_real_distribution dist {-1.0f, 1.0f};
     std::ranges::generate(data_in, [&] { return dist(gen); });
-
     ankerl::nanobench::Bench bench {};
-
     piquant::context ctx {nt};
     bench.run("quantize", [&] {
-        auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, piquant::dtype::uint8)};
-        ankerl::nanobench::doNotOptimizeAway(zero_point);
-        ankerl::nanobench::doNotOptimizeAway(scale);
+        ctx.quantize_generic<float, std::uint8_t>(data_in, data_out, 0.2f, 127, piquant::round_mode::nearest);
     });
     return 0;
 }
