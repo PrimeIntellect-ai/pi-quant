@@ -1,6 +1,8 @@
 import os
 import timeit
 
+from src.piquant import QuantDtype
+
 os.environ["CUDA_VISIBLE_DEVICES"]="" # Force CPU usage
 
 import torch
@@ -21,7 +23,8 @@ def quantize_fast(tensor, scale, zero_point):
     return piquant.quantize_torch(tensor, config=piquant.QuantConfig(output_dtype=piquant.QuantDtype.UINT8, scale=scale, zero_point=zero_point))
 
 tensor = torch.rand(numel, device='cpu')
-scale, zero_point = piquant.compute_quant_config_torch_f32(tensor)
+scale, zero_point = piquant.compute_quant_config_torch(tensor, target_quant_dtype=QuantDtype.UINT8)
+zero_point = 128
 
 def benchmark_torch_fx_quant():
     quantize_torch_fx(tensor, scale, zero_point)
