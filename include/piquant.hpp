@@ -135,7 +135,7 @@ namespace piquant {
             std::span<std::byte> out,
             dtype dtype_out,
             float scale,
-            std::int32_t zero_point,
+            std::int64_t zero_point,
             round_mode mode
         ) const -> void;
 
@@ -149,7 +149,7 @@ namespace piquant {
             std::span<const IN> in,
             std::span<OUT> out,
             float scale,
-            std::int32_t zero_point,
+            std::int64_t zero_point,
             round_mode mode
         ) -> void {
             quantize(
@@ -169,7 +169,7 @@ namespace piquant {
             std::span<std::byte> out,
             dtype dtype_out,
             float scale,
-            std::int32_t zero_point,
+            std::int64_t zero_point,
             reduce_op op
         ) const -> void;
 
@@ -183,7 +183,7 @@ namespace piquant {
             std::span<const IN> in,
             std::span<OUT> out,
             float scale,
-            std::int32_t zero_point,
+            std::int64_t zero_point,
             reduce_op op
         ) -> void {
             dequantize(
@@ -203,7 +203,7 @@ namespace piquant {
             std::span<std::byte> out,
             dtype quant_type,
             float scale,
-            std::int32_t zero_point,
+            std::int64_t zero_point,
             round_mode mode,
             reduce_op op
         ) const -> void;
@@ -217,7 +217,7 @@ namespace piquant {
             std::span<const INOUT> in,
             std::span<INOUT> out,
             float scale,
-            std::int32_t zero_point,
+            std::int64_t zero_point,
             round_mode mode,
             reduce_op op
         ) -> void {
@@ -250,7 +250,7 @@ namespace piquant {
             std::byte* out{};
             std::int64_t numel{};
             float scale{};
-            std::int32_t zero_point{};
+            std::int64_t zero_point{};
             dtype dt_in{};
             dtype dt_out{};
             round_mode rnd_mode{};

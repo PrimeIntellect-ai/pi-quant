@@ -662,7 +662,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         double stddev {std::sqrt(variance)};
         double scale {(stddev_scale*stddev / static_cast<double>(tmax))};
         if (scale == 0.0) [[unlikely]] {
-            scale = 1e-8;
+           return {1.0f, (tmax+1)>>1};
         }
         std::int64_t zp {((tmax+1)>>1) - static_cast<std::int64_t>(std::round(mean / scale))};
         return {static_cast<float>(scale), zp};

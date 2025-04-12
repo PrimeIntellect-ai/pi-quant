@@ -204,7 +204,7 @@ namespace piquant {
         const std::span<std::byte> out,
         const dtype dtype_out,
         const float scale,
-        const std::int32_t zero_point,
+        const std::int64_t zero_point,
         const round_mode mode
     ) const -> void {
         const auto& dti {dtype_info_of(dtype_in)};
@@ -236,7 +236,7 @@ namespace piquant {
         const std::span<std::byte> out,
         const dtype dtype_out,
         const float scale,
-        const std::int32_t zero_point,
+        const std::int64_t zero_point,
         const reduce_op op
     ) const -> void {
         const auto& dti {dtype_info_of(dtype_in)};
@@ -268,7 +268,7 @@ namespace piquant {
         const std::span<std::byte> out,
         const dtype quant_type,
         const float scale,
-        const std::int32_t zero_point,
+        const std::int64_t zero_point,
         const round_mode mode,
         const reduce_op op
     ) const -> void {
