@@ -481,6 +481,9 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         ))};
         T std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
         T scale {static_cast<T>(stddev_scale*std/static_cast<T>(tmax))};
+        if (scale == 0.0) [[unlikely]] {
+            return {1.0f, (tmax+1)>>1};
+        }
         std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
         return {scale, zp};
     }
