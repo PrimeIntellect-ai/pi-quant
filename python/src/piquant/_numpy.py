@@ -1,5 +1,5 @@
 import importlib
-from typing import TYPE_CHECKING, Tuple, Dict
+from typing import TYPE_CHECKING, Dict
 from piquant._quant import *
 
 if TYPE_CHECKING:

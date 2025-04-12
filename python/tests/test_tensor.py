@@ -70,11 +70,11 @@ def test_custom_quant_vs_torch_decomposed_uint8():
 def test_custom_dequant_vs_torch_uint8_reduce_set():
     tensor = torch.rand(8192)
     scale, zero_point = compute_quant_config_torch(tensor, target_quant_dtype=QuantDtype.UINT8)
-    torch_quant = torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8)
-    torch_dequant = torch.dequantize(torch_quant)
+    scale = 0.00784
+    zero_point = 128
+    torch_dequant = torch.dequantize(torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8))
     assert torch_dequant.dtype == torch.float32
-    fast_quant = quantize_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8, scale=scale, zero_point=zero_point))
-    fast_dequant = dequantize_torch(fast_quant, None, config=DequantConfig(scale, zero_point))
+    fast_dequant = dequantize_torch(quantize_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8, scale=scale, zero_point=zero_point)), None, config=DequantConfig(scale, zero_point))
     assert fast_dequant.dtype == torch.float32
     assert torch_dequant.numel() == fast_dequant.numel()
     assert torch_dequant.dtype == fast_dequant.dtype

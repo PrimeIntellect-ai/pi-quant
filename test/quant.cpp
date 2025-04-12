@@ -96,3 +96,29 @@ test_quant(double, int32_t, nearest)
 test_quant(double, int32_t, stochastic)
 test_quant(double, int64_t, nearest)
 test_quant(double, int64_t, stochastic)
+
+TEST(quantize, requantize_float_to_uint8_identity_data) {
+    std::random_device rd {};
+    std::mt19937 gen {rd()};
+    std::uniform_real_distribution<float> dist {-1.0, 1.0};
+   
+    for (std::size_t n {}; n < iters; ++n) {
+        std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)};
+        std::size_t numel_out {numel};
+       
+        std::vector<float> data_in {};
+        std::vector<std::uint8_t> quantized {};
+        data_in.resize(numel);
+        quantized.resize(numel_out);
+        std::ranges::fill(data_in, dist(gen));
+        context ctx {std::max(1u, std::thread::hardware_concurrency())};
+        auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<std::uint8_t>::ty)};
+        ctx.quantize_generic<float, std::uint8_t>(data_in, quantized, scale, zero_point, round_mode::nearest);
+        std::vector<float> dequantized {};
+        dequantized.resize(numel);
+        ctx.dequantize_generic<std::uint8_t, float>(quantized, dequantized, scale, zero_point, reduce_op::set);
+        for (std::size_t i {}; i < numel; ++i) {
+            ASSERT_NEAR(data_in[i], dequantized[i], 1e-6f);
+        }
+    } 
+}

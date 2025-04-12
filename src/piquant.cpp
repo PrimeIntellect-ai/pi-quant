@@ -293,11 +293,15 @@ namespace piquant {
 
     auto context::compute_quant_config_from_data(std::span<const float> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
         auto t_max {static_cast<std::int64_t>((1ull<<dtype_info_of(quant_dst_dtype).bit_size)-1)};
-        return (*this->m_pimpl)(x, t_max);
+        auto result {(*this->m_pimpl)(x, t_max>>1)};
+        piquant_assert(!std::isnan(result.first) && result.first >= 0.0f, "scale must be positive");
+        return result;
     }
 
     auto context::compute_quant_config_from_data(std::span<const double> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
         auto t_max {static_cast<std::int64_t>((1ull<<dtype_info_of(quant_dst_dtype).bit_size)-1)};
-        return (*this->m_pimpl)(x, t_max);
+        auto result {(*this->m_pimpl)(x, t_max>>1)};
+        piquant_assert(result.first >= 0.0f, "scale must be positive");
+        return result;
     }
 }

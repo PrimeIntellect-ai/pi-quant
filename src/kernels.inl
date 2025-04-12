@@ -651,25 +651,30 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             sum = vaddvq_f32(vsum_total);
             sum_sq = vaddvq_f32(vsum_sq_total);
         #endif
-        for (; i < numel; ++i) {
-            float x {p[i]};
-            sum += x;
-            sum_sq += x*x;
+        double mean {};
+        double m2k {};
+        for (std::int64_t i=0; i < numel; ++i) {
+            double x {p[i]};
+            double delta {x - mean};
+            mean += delta/static_cast<double>(i + 1);
+            m2k += delta*(x - mean);
         }
-        float mean {sum / static_cast<float>(numel)};
-        float variance {(sum_sq - sum*sum / static_cast<float>(numel)) / static_cast<float>(numel - 1)};
-        float stddev {std::sqrt(variance)};
-        float scale {static_cast<float>(stddev_scale*stddev / static_cast<float>(tmax))};
+        double variance {(numel > 1) ? (m2k/static_cast<double>(numel - 1)) : 0.0};
+        double stddev {std::sqrt(variance)};
+        double scale {(stddev_scale*stddev / static_cast<double>(tmax))};
+        if (scale == 0.0) [[unlikely]] {
+            scale = 1e-8;
+        }
         std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean / scale))};
-        return {scale, zp};
+        return {static_cast<float>(scale), zp};
     }
 
     static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t> {
-        return compute_quant_config_from_data(x.data(), x.size(), tmax>>1);
+        return compute_quant_config_from_data(x.data(), x.size(), tmax);
     }
 
     static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t> {
-        return compute_quant_config_from_data(x.data(), x.size(), tmax>>1);
+        return compute_quant_config_from_data(x.data(), x.size(), tmax);
     }
 };
 
