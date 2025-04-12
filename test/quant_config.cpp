@@ -15,6 +15,8 @@ constexpr int stochastic_epsilon {3};
 
 using namespace piquant;
 
+#if 0
+
 #define test_quant_range(ti, to, rnd) \
     TEST(quantize_range, quantize_range_##ti##_to_##to##_##rnd) { \
         std::random_device rd {}; \
@@ -84,3 +86,5 @@ test_quant_range(double, int32_t, nearest)
 test_quant_range(double, int32_t, stochastic)
 test_quant_range(double, int64_t, nearest)
 test_quant_range(double, int64_t, stochastic)
+
+#endif

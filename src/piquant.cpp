@@ -209,8 +209,8 @@ namespace piquant {
     ) const -> void {
         const auto& dti {dtype_info_of(dtype_in)};
         const auto& dto {dtype_info_of(dtype_out)};
-        piquant_assert(!dti.is_quant, "input dtype must be a dequantized type");
-        piquant_assert(dto.is_quant, "output dtype must be a quantized type");
+        piquant_assert(!(dti.flags & dtype_flags::is_quant), "input dtype must be a dequantized type");
+        piquant_assert(dto.flags & dtype_flags::is_quant, "output dtype must be a quantized type");
         if (dto.bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
             piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
         } else {
@@ -241,8 +241,8 @@ namespace piquant {
     ) const -> void {
         const auto& dti {dtype_info_of(dtype_in)};
         const auto& dto {dtype_info_of(dtype_out)};
-        piquant_assert(dti.is_quant, "input dtype must be a quantized type");
-        piquant_assert(!dto.is_quant, "output dtype must be a dequantized type");
+        piquant_assert(dti.flags & dtype_flags::is_quant, "input dtype must be a quantized type");
+        piquant_assert(!(dto.flags & dtype_flags::is_quant), "output dtype must be a dequantized type");
         if (dti.bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
             piquant_assert(in.size()/(dti.bit_size>>3) == (out.size()/(dto.bit_size>>3)+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
         } else {
@@ -273,8 +273,8 @@ namespace piquant {
         const reduce_op op
     ) const -> void {
         const auto& dti{dtype_info_of(dtype_in_out)};
-        piquant_assert(!dti.is_quant, "input dtype must be a dequantized type");
-        piquant_assert(dtype_info_of(quant_type).is_quant, "quant dtype must be a quantized type");
+        piquant_assert(!(dti.flags & dtype_flags::is_quant), "input dtype must be a dequantized type");
+        piquant_assert(dtype_info_of(quant_type).flags & dtype_flags::is_quant, "quant dtype must be a quantized type");
         piquant_assert(in.size() == out.size(), "input and output spans must have the same length, but %zu != %zu", in.size(), out.size());
         quant_descriptor info {
             .type = command_type::quant_dequant,
@@ -291,16 +291,23 @@ namespace piquant {
         (*this->m_pimpl)(info);
     }
 
+    [[nodiscard]] static auto compute_type_max(dtype dt) noexcept -> std::int64_t {
+        std::size_t width {dtype_info_of(dt).bit_size};
+        piquant_assert2(width > 0 && width <= 64);
+        std::uint64_t max {std::uint64_t{1} << width};
+        --max;
+        if (dtype_info_of(dt).flags & dtype_flags::is_signed) max >>= 1;
+        return static_cast<std::int64_t>(max);
+    }
+
     auto context::compute_quant_config_from_data(std::span<const float> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
-        auto t_max {static_cast<std::int64_t>((1ull<<dtype_info_of(quant_dst_dtype).bit_size)-1)};
-        auto result {(*this->m_pimpl)(x, t_max>>1)};
+        auto result {(*this->m_pimpl)(x, compute_type_max(quant_dst_dtype))};
         piquant_assert(!std::isnan(result.first) && result.first >= 0.0f, "scale must be positive");
         return result;
     }
 
     auto context::compute_quant_config_from_data(std::span<const double> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
-        auto t_max {static_cast<std::int64_t>((1ull<<dtype_info_of(quant_dst_dtype).bit_size)-1)};
-        auto result {(*this->m_pimpl)(x, t_max>>1)};
+        auto result {(*this->m_pimpl)(x, compute_type_max(quant_dst_dtype))};
         piquant_assert(result.first >= 0.0f, "scale must be positive");
         return result;
     }

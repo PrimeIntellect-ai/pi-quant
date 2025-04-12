@@ -50,27 +50,45 @@ namespace piquant {
     enum class uint4_t : std::uint8_t {};
     enum class int4_t : std::uint8_t {};
 
+    struct dtype_flags final {
+        enum $ {
+            none = 0,
+            is_quant = 1<<0,
+            is_float = 1<<1,
+            is_int = 1<<2,
+            is_signed = 1<<3,
+            is_packed = 1<<4,
+        };
+    };
+
     struct dtype_info final {
         std::size_t stride;
         std::size_t bit_size;
-        bool is_quant;
+        std::underlying_type_t<dtype_flags::$> flags;
     };
 
     constexpr std::array dtype_infos {
-        dtype_info{.stride=1, .bit_size=4, .is_quant=true}, // uint4
-        dtype_info{.stride=1, .bit_size=4, .is_quant=true}, // int4
-        dtype_info{.stride=1, .bit_size=8, .is_quant=true}, // uint8
-        dtype_info{.stride=1, .bit_size=8, .is_quant=true}, // int8
-        dtype_info{.stride=2, .bit_size=16, .is_quant=true}, // uint16
-        dtype_info{.stride=2, .bit_size=16, .is_quant=true}, // int16
-        dtype_info{.stride=4, .bit_size=32, .is_quant=true}, // uint32
-        dtype_info{.stride=4, .bit_size=32, .is_quant=true}, // int32
-        dtype_info{.stride=8, .bit_size=64, .is_quant=true}, // uint64
-        dtype_info{.stride=8, .bit_size=64, .is_quant=true}, // int64
-        dtype_info{.stride=4, .bit_size=32, .is_quant=false}, // f32
-        dtype_info{.stride=8, .bit_size=64, .is_quant=false}, // f64
+        dtype_info{.stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                           // uint4
+        dtype_info{.stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed+dtype_flags::is_signed},    // int4
+        dtype_info{.stride=1, .bit_size=8,  .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint8
+        dtype_info{.stride=1, .bit_size=8,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                           // int8
+        dtype_info{.stride=2, .bit_size=16, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint16
+        dtype_info{.stride=2, .bit_size=16, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                           // int16
+        dtype_info{.stride=4, .bit_size=32, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint32
+        dtype_info{.stride=4, .bit_size=32, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                           // int32
+        dtype_info{.stride=8, .bit_size=64, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint64
+        dtype_info{.stride=8, .bit_size=64, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                           // int64
+        dtype_info{.stride=4, .bit_size=32, .flags=dtype_flags::is_float+dtype_flags::is_signed},                                               // f32
+        dtype_info{.stride=8, .bit_size=64, .flags=dtype_flags::is_float+dtype_flags::is_signed},                                               // f64
     };
-    [[nodiscard]] constexpr auto dtype_info_of(dtype dtype) noexcept -> const dtype_info & { return dtype_infos[static_cast<std::size_t>(dtype)]; }
+    static_assert([]() -> bool {
+        for (auto&& info : dtype_infos) {
+            if (!info.bit_size) return false;
+            if (!((info.flags & dtype_flags::is_float) ^ (info.flags & dtype_flags::is_int))) return false;
+        }
+        return true;
+    }());
+    [[nodiscard]] constexpr auto dtype_info_of(dtype dtype) noexcept -> const dtype_info& { return dtype_infos[static_cast<std::size_t>(dtype)]; }
 
     template <typename T> struct dtype_limits final {
         static constexpr T min{std::numeric_limits<T>::min()};
@@ -124,8 +142,8 @@ namespace piquant {
         template<typename IN, typename OUT> requires requires {
             requires is_dtype<IN>;
             requires is_dtype<OUT>;
-            dtype_info_of(dtype_traits<IN>::ty).is_quant == true;
-            dtype_info_of(dtype_traits<OUT>::ty).is_quant == false;
+            dtype_info_of(dtype_traits<IN>::ty).flags & dtype_flags::is_quant;
+            !(dtype_info_of(dtype_traits<OUT>::ty).flags & dtype_flags::is_quant);
         }
         auto quantize_generic(
             std::span<const IN> in,
@@ -158,8 +176,8 @@ namespace piquant {
         template<typename IN, typename OUT> requires requires {
             requires is_dtype<IN>;
             requires is_dtype<OUT>;
-            dtype_info_of(dtype_traits<IN>::ty).is_quant == false;
-            dtype_info_of(dtype_traits<OUT>::ty).is_quant == true;
+            !(dtype_info_of(dtype_traits<IN>::ty).flags & dtype_flags::is_quant);
+            dtype_info_of(dtype_traits<OUT>::ty).flags & dtype_flags::is_quant;
         }
         auto dequantize_generic(
             std::span<const IN> in,
@@ -192,8 +210,8 @@ namespace piquant {
 
         template<typename INOUT, typename QUANT> requires requires {
             requires is_dtype<INOUT>;
-            dtype_info_of(dtype_traits<INOUT>::ty).is_quant == false;
-            dtype_info_of(dtype_traits<QUANT>::ty).is_quant == true;
+            !(dtype_info_of(dtype_traits<INOUT>::ty).flags & dtype_flags::is_quant);
+            dtype_info_of(dtype_traits<QUANT>::ty).flags & dtype_flags::is_quant;
         }
         auto quantize_dequantize_fused_generic(
             std::span<const INOUT> in,

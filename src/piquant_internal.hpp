@@ -24,7 +24,7 @@ namespace piquant {
           std::int64_t numel,
           const context::quant_descriptor& desc
         ) noexcept -> void;
-        auto (*quant_config_kernel_f32)(std::span<const float> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t>;
-        auto (*quant_config_kernel_f64)(std::span<const double> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t>;
+        auto (*quant_config_kernel_f32)(std::span<const float> x, std::int64_t tmax) noexcept -> std::pair<float, std::int64_t>;
+        auto (*quant_config_kernel_f64)(std::span<const double> x, std::int64_t tmax) noexcept -> std::pair<float, std::int64_t>;
     };
 }

@@ -364,7 +364,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     template <const round_mode RND, typename IN, typename OUT, typename... Args>
          requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>)
              && std::is_same_v<std::common_type_t<Args...>, IN> && sizeof...(Args) != 0)
-    static auto PIQUANT_AINLINE quant_step(double inv_scale, std::int32_t zp, Args... args) noexcept -> OUT {
+    static auto PIQUANT_AINLINE quant_step(double inv_scale, std::int64_t zp, Args... args) noexcept -> OUT {
         if constexpr (RND == round_mode::stochastic) {
             const auto Q{[&](const IN x) noexcept -> OUT {
                 double rnd {x * inv_scale};
@@ -419,8 +419,8 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     template <typename IN, typename OUT>
           requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
-    static auto PIQUANT_AINLINE dequant_step(double scale, std::int32_t zp, const IN x) noexcept -> OUT {
-        return static_cast<OUT>(static_cast<std::make_signed_t<IN>>(x) - zp)*scale;
+    static auto PIQUANT_AINLINE dequant_step(double scale, std::int64_t zp, const IN x) noexcept -> OUT {
+        return static_cast<OUT>(static_cast<std::int64_t>(x) - zp)*scale;
     }
 
     template <typename IN, typename OUT, const reduce_op RDO>
@@ -501,8 +501,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     #endif
 
     template <>
-    [[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel, std::int64_t tmax)
-    -> std::pair<float, std::int64_t> {
+    [[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel, std::int64_t tmax) -> std::pair<float, std::int64_t> {
         if (!numel) [[unlikely]] return {0.0f, 0.0};
         float sum {};
         float sum_sq {};
@@ -665,15 +664,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         if (scale == 0.0) [[unlikely]] {
             scale = 1e-8;
         }
-        std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean / scale))};
+        std::int64_t zp {((tmax+1)>>1) - static_cast<std::int64_t>(std::round(mean / scale))};
         return {static_cast<float>(scale), zp};
     }
 
-    static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t> {
+    static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> x, std::int64_t tmax) noexcept -> std::pair<float, std::int64_t> {
         return compute_quant_config_from_data(x.data(), x.size(), tmax);
     }
 
-    static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> x, std::int64_t tmax) noexcept -> std::pair<float, std::int32_t> {
+    static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> x, std::int64_t tmax) noexcept -> std::pair<float, std::int64_t> {
         return compute_quant_config_from_data(x.data(), x.size(), tmax);
     }
 };
@@ -696,8 +695,8 @@ namespace piquant {
         const dtype_info& dt_out {dtype_info_of(desc.dt_out)};
         switch (desc.type) {
             case context::command_type::quant:  // out[i] = quantize(in[i])
-                piquant_assert2(!dt_in.is_quant);
-                piquant_assert2(dt_out.is_quant);
+                piquant_assert2(!(dt_in.flags & dtype_flags::is_quant));
+                piquant_assert2(dt_out.flags & dtype_flags::is_quant);
                 #define impl_quant_perm(dti, dto, ti, to) \
                     case make_pair_perm(dti, dto): \
                         if (desc.rnd_mode == round_mode::stochastic) \
@@ -731,8 +730,8 @@ namespace piquant {
             #undef impl_quant_perm
             return;
             case context::command_type::dequant:    // out[i] = dequantize(in[i])
-                piquant_assert2(dt_in.is_quant);
-                piquant_assert2(!dt_out.is_quant);
+                piquant_assert2(dt_in.flags & dtype_flags::is_quant);
+                piquant_assert2(!(dt_out.flags & dtype_flags::is_quant));
                 #define impl_dequant_perm(dti, dto, ti, to) \
                     case make_pair_perm(dti, dto): \
                         switch (desc.reduce) { \
@@ -766,8 +765,8 @@ namespace piquant {
                 }
             return;
             case context::command_type::quant_dequant:  // out[i] = dequantize(quantize(in[i])))
-                piquant_assert2(!dt_in.is_quant);
-                piquant_assert2(dt_out.is_quant); // dt_out acts as the quantized type, but dtype in == dtype out
+                piquant_assert2(!(dt_in.flags & dtype_flags::is_quant));
+                piquant_assert2(dt_out.flags & dtype_flags::is_quant); // dt_out acts as the quantized type, but dtype in == dtype out
                #define impl_quant_perm(dti, dto, ti, to) \
                     case make_pair_perm(dti, dto): \
                         if (desc.reduce == reduce_op::set) \

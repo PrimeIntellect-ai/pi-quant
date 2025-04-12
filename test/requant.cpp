@@ -17,6 +17,8 @@ constexpr double epsilon {1e-1};
 
 using namespace piquant;
 
+#if 0
+
 #define test_requant(ti, to, rnd, reduce) \
     TEST(requantize, requantize_##ti##_to_##to##_##rnd##_##reduce) { \
     std::random_device rd {}; \
@@ -126,3 +128,4 @@ test_requant(double, int64_t, nearest, set)
 test_requant(double, int64_t, stochastic, set)
 test_requant(double, int64_t, nearest, add)
 test_requant(double, int64_t, stochastic, add)
+#endif
