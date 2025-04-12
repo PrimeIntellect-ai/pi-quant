@@ -12,7 +12,7 @@ description = "Multithreaded SIMD int8 and int4 quantization kernels."
 dependencies = ["cffi"]
 
 [project.optional-dependencies]
-dev = ["pytest","torch","numpy","pre-commit","ruff"]
+dev = ["pytest","torch","numpy","pre-commit","ruff", "matplotlib"]
 
 [tool.ruff]
 line-length = 120

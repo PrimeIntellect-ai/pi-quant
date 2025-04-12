@@ -6,32 +6,32 @@ from functools import lru_cache
 
 from piquant._loader import load_native_module
 
-ffi, C = load_native_module()
+_ffi, _C = load_native_module()
 
 @unique
 class RoundMode(Enum):
-    NEAREST = C.PIQUANT_NEAREST
-    STOCHASTIC = C.PIQUANT_STOCHASTIC
+    NEAREST = _C.PIQUANT_NEAREST
+    STOCHASTIC = _C.PIQUANT_STOCHASTIC
 
 @unique
 class ReduceOp(Enum):
-    SET = C.PIQUANT_REDUCE_OP_SET
-    ADD = C.PIQUANT_REDUCE_OP_ADD
+    SET = _C.PIQUANT_REDUCE_OP_SET
+    ADD = _C.PIQUANT_REDUCE_OP_ADD
 
 @unique
 class QuantDtype(Enum):
-    UINT4 = C.PIQUANT_DTYPE_UINT4
-    INT4 = C.PIQUANT_DTYPE_INT4
-    UINT8 = C.PIQUANT_DTYPE_UINT8
-    INT8 = C.PIQUANT_DTYPE_INT8
-    UINT16 = C.PIQUANT_DTYPE_UINT16
-    INT16 = C.PIQUANT_DTYPE_INT16
-    UINT32 = C.PIQUANT_DTYPE_UINT32
-    INT32 = C.PIQUANT_DTYPE_INT32
-    UINT64 = C.PIQUANT_DTYPE_UINT64
-    INT64 = C.PIQUANT_DTYPE_INT64
-    F32 = C.PIQUANT_DTYPE_F32
-    F64 = C.PIQUANT_DTYPE_F64
+    UINT4 = _C.PIQUANT_DTYPE_UINT4
+    INT4 = _C.PIQUANT_DTYPE_INT4
+    UINT8 = _C.PIQUANT_DTYPE_UINT8
+    INT8 = _C.PIQUANT_DTYPE_INT8
+    UINT16 = _C.PIQUANT_DTYPE_UINT16
+    INT16 = _C.PIQUANT_DTYPE_INT16
+    UINT32 = _C.PIQUANT_DTYPE_UINT32
+    INT32 = _C.PIQUANT_DTYPE_INT32
+    UINT64 = _C.PIQUANT_DTYPE_UINT64
+    INT64 = _C.PIQUANT_DTYPE_INT64
+    F32 = _C.PIQUANT_DTYPE_F32
+    F64 = _C.PIQUANT_DTYPE_F64
 
     def bit_size(self) -> int:
         if self in (QuantDtype.UINT4, QuantDtype.INT4):
@@ -69,10 +69,10 @@ class Context:
         if num_threads is None:
             num_threads = max(multiprocessing.cpu_count()-1, 1)
         self.__num_threads = num_threads
-        self._ctx = C.piquant_context_create(self.__num_threads)
+        self._ctx = _C.piquant_context_create(self.__num_threads)
 
     def __del__(self) -> None:
-        C.piquant_context_destroy(self._ctx)
+        _C.piquant_context_destroy(self._ctx)
 
     @staticmethod
     @lru_cache(maxsize=1)
@@ -96,9 +96,9 @@ class Context:
     ) -> None:
         assert ptr_in != 0, 'Input tensor pointer must not be null'
         assert ptr_out != 0, 'Output tensor pointer must not be null'
-        ptr_in: ffi.CData = ffi.cast('const void*', ptr_in)
-        ptr_out: ffi.CData = ffi.cast('void*', ptr_out)
-        C.piquant_quantize(
+        ptr_in: _ffi.CData = _ffi.cast('const void*', ptr_in)
+        ptr_out: _ffi.CData = _ffi.cast('void*', ptr_out)
+        _C.piquant_quantize(
             self._ctx,
             ptr_in,
             dtype_in.value,
@@ -123,9 +123,9 @@ class Context:
     ) -> None:
         assert ptr_in != 0, 'Input tensor pointer must not be null'
         assert ptr_out != 0, 'Output tensor pointer must not be null'
-        ptr_in: ffi.CData = ffi.cast('const void*', ptr_in)
-        ptr_out: ffi.CData = ffi.cast('void*', ptr_out)
-        C.piquant_dequantize(
+        ptr_in: _ffi.CData = _ffi.cast('const void*', ptr_in)
+        ptr_out: _ffi.CData = _ffi.cast('void*', ptr_out)
+        _C.piquant_dequantize(
             self._ctx,
             ptr_in,
             dtype_in.value,
@@ -140,12 +140,11 @@ class Context:
     def compute_quant_config_raw_ptr(self, ptr: int, target_quant_dtype: QuantDtype, numel: int) -> Tuple[float, int]:
         """
             Compute the scale and zero point of a tensor.
-            :param ptr: p input tensor data pointer (must point to a valid, contiguous memory region of type float (in C float*))
+            :param ptr: p input tensor data pointer (must point to a valid, contiguous memory region of type float (in _C float*))
             :param numel: number of elements in the tensor
         """
-        ptr: ffi.CData = ffi.cast('float*', ptr)
-        scale: ffi.CData = ffi.new('float*')
-        zero_point: ffi.CData = ffi.new('int64_t*')
-        bs: int = target_quant_dtype.bit_size()
-        C.piquant_compute_quant_config_from_data(self._ctx, ptr, numel, ((1<<bs)-1), scale, zero_point)
+        ptr: _ffi.CData = _ffi.cast('float*', ptr)
+        scale: _ffi.CData = _ffi.new('float*')
+        zero_point: _ffi.CData = _ffi.new('int64_t*')
+        _C.piquant_compute_quant_config_from_data(self._ctx, ptr, numel, target_quant_dtype.value, scale, zero_point)
         return scale[0], zero_point[0]

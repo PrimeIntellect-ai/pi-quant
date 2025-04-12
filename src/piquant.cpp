@@ -293,7 +293,7 @@ namespace piquant {
 
     [[nodiscard]] static auto compute_type_max(dtype dt) noexcept -> std::int64_t {
         std::size_t width {dtype_info_of(dt).bit_size};
-        piquant_assert2(width > 0 && width <= 64);
+        piquant_assert(width > 0 && width <= 64, "invalid width %zu for type %s", width, dtype_info_of(dt).name.data());
         std::uint64_t max {std::uint64_t{1} << width};
         --max;
         if (dtype_info_of(dt).flags & dtype_flags::is_signed) max >>= 1;

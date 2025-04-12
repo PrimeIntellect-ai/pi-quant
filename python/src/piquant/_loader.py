@@ -86,6 +86,6 @@ def load_native_module() -> Tuple[FFI, object]:
     assert lib_path.exists(), f'piquant shared library not found: {lib_path}'
 
     ffi = FFI()
-    ffi.cdef(DECLS)  # Define the C declarations
+    ffi.cdef(DECLS)  # Define the _C declarations
     lib = ffi.dlopen(str(lib_path))  # Load the shared library
     return ffi, lib

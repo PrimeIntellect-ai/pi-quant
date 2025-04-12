@@ -62,24 +62,25 @@ namespace piquant {
     };
 
     struct dtype_info final {
+        std::string_view name;
         std::size_t stride;
         std::size_t bit_size;
         std::underlying_type_t<dtype_flags::$> flags;
     };
 
     constexpr std::array dtype_infos {
-        dtype_info{.stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                           // uint4
-        dtype_info{.stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed+dtype_flags::is_signed},    // int4
-        dtype_info{.stride=1, .bit_size=8,  .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint8
-        dtype_info{.stride=1, .bit_size=8,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                           // int8
-        dtype_info{.stride=2, .bit_size=16, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint16
-        dtype_info{.stride=2, .bit_size=16, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                           // int16
-        dtype_info{.stride=4, .bit_size=32, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint32
-        dtype_info{.stride=4, .bit_size=32, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                           // int32
-        dtype_info{.stride=8, .bit_size=64, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint64
-        dtype_info{.stride=8, .bit_size=64, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                           // int64
-        dtype_info{.stride=4, .bit_size=32, .flags=dtype_flags::is_float+dtype_flags::is_signed},                                               // f32
-        dtype_info{.stride=8, .bit_size=64, .flags=dtype_flags::is_float+dtype_flags::is_signed},                                               // f64
+        dtype_info{.name="uint4", .stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                            // uint4
+        dtype_info{.name="int4", .stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed+dtype_flags::is_signed},      // int4
+        dtype_info{.name="uint8", .stride=1, .bit_size=8,  .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                   // uint8
+        dtype_info{.name="int8", .stride=1, .bit_size=8,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                             // int8
+        dtype_info{.name="uint16", .stride=2, .bit_size=16, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint16
+        dtype_info{.name="int16", .stride=2, .bit_size=16, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                            // int16
+        dtype_info{.name="uint32", .stride=4, .bit_size=32, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint32
+        dtype_info{.name="int32", .stride=4, .bit_size=32, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                            // int32
+        dtype_info{.name="uint64", .stride=8, .bit_size=64, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint64
+        dtype_info{.name="int64", .stride=8, .bit_size=64, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                            // int64
+        dtype_info{.name="f32", .stride=4, .bit_size=32, .flags=dtype_flags::is_float+dtype_flags::is_signed},                                                  // f32
+        dtype_info{.name="f64", .stride=8, .bit_size=64, .flags=dtype_flags::is_float+dtype_flags::is_signed},                                                  // f64
     };
     static_assert([]() -> bool {
         for (auto&& info : dtype_infos) {
