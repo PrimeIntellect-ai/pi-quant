@@ -176,7 +176,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         std::int64_t numel,
         float scale,
         std::int32_t zp
-   ) noexcept -> void {
+    ) noexcept -> void {
         scale = 1.0f / scale; /* We multiply by reciprocal */
         std::int64_t i {};
         #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
@@ -206,25 +206,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         scale = 1.0f / scale; /* We multiply by reciprocal */
         std::int64_t i {};
         #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
-            __m512 vinv_scale {_mm512_set1_ps(inv_scale)};
-            __m512i vzero_point {_mm512_set1_epi32(zp)};
-            __m512i vmin {_mm512_setzero_si512()};
-            __m512i vmax {_mm512_set1_epi32(0xff)};
-            constexpr auto k_round_mode {_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC};
-            for (; i+63 < numel; i += 64) {
-                __m512 xf0 {_mm512_loadu_ps(x+i+(0<<4))};
-                __m512 xf1 {_mm512_loadu_ps(x+i+(1<<4))};
-                __m512 xf2 {_mm512_loadu_ps(x+i+(2<<4))};
-                __m512 xf3 {_mm512_loadu_ps(x+i+(3<<4))};
-                __m512i xi0 {_mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf0, vinv_scale), k_round_mode)), vzero_point)))};
-                __m512i xi1 {_mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf1, vinv_scale), k_round_mode)), vzero_point)))};
-                __m512i xi2 {_mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf2, vinv_scale), k_round_mode)), vzero_point)))};
-                __m512i xi3 {_mm512_max_epi32(vmin, _mm512_min_epi32(vmax, _mm512_add_epi32(_mm512_cvtps_epi32(_mm512_roundscale_ps(_mm512_mul_ps(xf3, vinv_scale), k_round_mode)),vzero_point)))};
-                __m512i pack16_0 {_mm512_packus_epi32(xi0, xi1)};
-                __m512i pack16_1 {_mm512_packus_epi32(xi2, xi3)};
-                __m512i result {_mm512_packus_epi16(pack16_0, pack16_1)};
-                _mm512_storeu_si512(reinterpret_cast<__m512i*>(o+i), result);
-            }
+
         #elif defined(__AVX2__)
             __m256 vinv_scale {_mm256_set1_ps(scale)};
             __m256 vhalf {_mm256_set1_ps(0.5f)};
@@ -361,6 +343,70 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         }
     }
 
+    template <const bool SUM>
+    static auto PIQUANT_HOT dequant_uint8_to_f32(
+        const std::uint8_t* PIQUANT_RESTRICT x,
+        float* PIQUANT_RESTRICT o,
+        std::int64_t numel,
+        float scale,
+        std::int32_t zp
+    ) noexcept -> void {
+        std::int64_t i {};
+        #if defined(__AVX512F__) && defined(__AVX512BW__)
+
+        #elif defined(__AVX2__)
+        #elif defined(__SSE4_2__)
+
+        #elif defined(__aarch64__) && defined(__ARM_NEON__)
+            int32x4_t vzp {vdupq_n_s32(zp)};
+            float32x4_t vscale {vdupq_n_f32(scale)};
+            for (; i+15 <= numel; i += 16) {
+                uint8x16_t u8vec {vld1q_u8(x+i)};
+                uint16x8_t u16low {vmovl_u8(vget_low_u8(u8vec))};
+                uint16x8_t u16high {vmovl_u8(vget_high_u8(u8vec))};
+                uint16x4_t u16_low_low {vget_low_u16(u16low)};
+                uint16x4_t u16_low_high {vget_high_u16(u16low)};
+                uint16x4_t u16_high_low {vget_low_u16(u16high)};
+                uint16x4_t u16_high_high {vget_high_u16(u16high)};
+                int32x4_t xi0 {vreinterpretq_s32_u32(vmovl_u16(u16_low_low))};
+                int32x4_t xi1 {vreinterpretq_s32_u32(vmovl_u16(u16_low_high))};
+                int32x4_t xi2 {vreinterpretq_s32_u32(vmovl_u16(u16_high_low))};
+                int32x4_t xi3 {vreinterpretq_s32_u32(vmovl_u16(u16_high_high))};
+                xi0 = vsubq_s32(xi0, vzp);
+                xi1 = vsubq_s32(xi1, vzp);
+                xi2 = vsubq_s32(xi2, vzp);
+                xi3 = vsubq_s32(xi3, vzp);
+                float32x4_t xf0 {vcvtq_f32_s32(xi0)};
+                float32x4_t xf1 {vcvtq_f32_s32(xi1)};
+                float32x4_t xf2 {vcvtq_f32_s32(xi2)};
+                float32x4_t xf3 {vcvtq_f32_s32(xi3)};
+                xf0 = vmulq_f32(xf0, vscale);
+                xf1 = vmulq_f32(xf1, vscale);
+                xf2 = vmulq_f32(xf2, vscale);
+                xf3 = vmulq_f32(xf3, vscale);
+                if constexpr (SUM) {
+                    float32x4_t out0 {vld1q_f32(o+i+(0<<2))};
+                    float32x4_t out1 {vld1q_f32(o+i+(1<<2))};
+                    float32x4_t out2 {vld1q_f32(o+i+(2<<2))};
+                    float32x4_t out3 {vld1q_f32(o+i+(3<<2))};
+                    xf0 = vaddq_f32(xf0, out0);
+                    xf1 = vaddq_f32(xf1, out1);
+                    xf2 = vaddq_f32(xf2, out2);
+                    xf3 = vaddq_f32(xf3, out3);
+                }
+                vst1q_f32(o+i+(0<<2), xf0);
+                vst1q_f32(o+i+(1<<2), xf1);
+                vst1q_f32(o+i+(2<<2), xf2);
+                vst1q_f32(o+i+(3<<2), xf3);
+            }
+        #endif
+        for (; i < numel; ++i) {
+            float dq {static_cast<float>(static_cast<std::int32_t>(x[i]) - zp)*scale};
+            if constexpr (SUM) o[i] += dq;
+            else o[i] = dq;
+        }
+    }
+
     template <const round_mode RND, typename IN, typename OUT, typename... Args>
          requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>)
              && std::is_same_v<std::common_type_t<Args...>, IN> && sizeof...(Args) != 0)
@@ -434,6 +480,16 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     ) noexcept -> void {
         const auto* PIQUANT_RESTRICT x {static_cast<const IN*>(in)};
         auto* PIQUANT_RESTRICT o {static_cast<OUT*>(out)};
+        // Use SIMD optimized kernels for some dtype permutations
+        if constexpr (std::is_same_v<IN, std::uint8_t> && std::is_same_v<OUT, float>) {
+            if constexpr (RDO == reduce_op::set) {
+                dequant_uint8_to_f32<false>(static_cast<const std::uint8_t*>(in), static_cast<float*>(out), numel, static_cast<float>(scale), static_cast<std::int32_t>(zp));
+                return;
+            } else if constexpr (RDO == reduce_op::add) {
+                dequant_uint8_to_f32<true>(static_cast<const std::uint8_t*>(in), static_cast<float*>(out), numel, static_cast<float>(scale), static_cast<std::int32_t>(zp));
+                return;
+            }
+        }
         if constexpr (RDO == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
                 o[i] = dequant_step<IN, OUT>(scale, zp, x[i]);
