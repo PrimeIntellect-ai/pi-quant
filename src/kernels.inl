@@ -357,7 +357,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         #elif defined(__AVX2__)
         #elif defined(__SSE4_2__)
 
-        #elif defined(__aarch64__) && defined(__ARM_NEON__)
+        #elif defined(__aarch64__) && defined(__ARM_NEON__) && 0
             int32x4_t vzp {vdupq_n_s32(zp)};
             float32x4_t vscale {vdupq_n_f32(scale)};
             for (; i+15 <= numel; i += 16) {
