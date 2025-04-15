@@ -1,23 +1,19 @@
-import numpy as np
 import pytest
+import math
 import torch
 from piquant import *
 
-def test_ptr_dequant_config_compute():
-    tensor = torch.rand(32)
+assert torch is not None, "Torch is not installed. Please install torch to run these tests."
 
-    ctx = Context()
-    scale, zero_point = ctx.compute_quant_config_raw_ptr(tensor.data_ptr(), QuantDtype.UINT8, tensor.numel())
-    assert scale > 0
-    assert zero_point >= 0
-
-def test_torch_dequant_config_compute():
+def test_dequant_config_compute_torch():
     tensor = torch.rand(8192)
     scale, zero_point = compute_quant_config_torch(tensor, target_quant_dtype=QuantDtype.UINT8)
     assert scale > 0
     assert zero_point >= 0
+    assert not math.isnan(scale)
+    assert not math.isinf(scale)
 
-def test_ptr_quant_int8():
+def test_ptr_quant_int8_torch():
     tensor = torch.rand(32)
 
     ctx = Context()
@@ -28,23 +24,23 @@ def test_ptr_quant_int8():
                     zero_point=zero_point, round_mode=RoundMode.NEAREST)
 
 def test_quant_torch():
-    tensor = torch.rand(32)
-    
-    quantized_tensor = quantize_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8))
-    
-    assert quantized_tensor.dtype == torch.uint8
-    assert quantized_tensor.numel() == tensor.numel()
-    
-@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
-def test_quant_torch_half_precision(dtype):
-    tensor = torch.rand(32).bfloat16()
+    tensor = torch.rand(8192)
     
     quantized_tensor = quantize_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8))
     
     assert quantized_tensor.dtype == torch.uint8
     assert quantized_tensor.numel() == tensor.numel()
 
-def test_custom_quant_vs_torch_uint8():
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+def test_quant_torch_half_precision(dtype):
+    tensor = torch.rand(32).bfloat16()
+
+    quantized_tensor = quantize_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8))
+
+    assert quantized_tensor.dtype == torch.uint8
+    assert quantized_tensor.numel() == tensor.numel()
+
+def test_quant_vs_torch_uint8():
     tensor = torch.rand(8192)
     scale, zero_point = compute_quant_config_torch(tensor, target_quant_dtype=QuantDtype.UINT8)
     torch_quant = torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8).int_repr()
@@ -55,7 +51,7 @@ def test_custom_quant_vs_torch_uint8():
     for i in range(tensor.numel()):
         assert torch_quant[i].item() == fast_quant[i].item()
 
-def test_custom_quant_vs_torch_decomposed_uint8():
+def test_quant_vs_torch_decomposed_uint8():
     from torch.ao.quantization.fx._decomposed import quantize_per_tensor
     tensor = torch.rand(8192)
     scale, zero_point = compute_quant_config_torch(tensor, target_quant_dtype=QuantDtype.UINT8)
@@ -67,11 +63,9 @@ def test_custom_quant_vs_torch_decomposed_uint8():
     for i in range(tensor.numel()):
         assert torch_quant[i].item() == fast_quant[i].item()
 
-def test_custom_dequant_vs_torch_uint8_reduce_set():
+def test_dequant_vs_torch_uint8_reduce_set():
     tensor = torch.rand(8192)
     scale, zero_point = compute_quant_config_torch(tensor, target_quant_dtype=QuantDtype.UINT8)
-    scale = 0.00784
-    zero_point = 128
     torch_dequant = torch.dequantize(torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8))
     assert torch_dequant.dtype == torch.float32
     fast_dequant = dequantize_torch(quantize_torch(tensor, config=QuantConfig(output_dtype=QuantDtype.UINT8, scale=scale, zero_point=zero_point)), None, config=DequantConfig(scale, zero_point))
@@ -81,7 +75,7 @@ def test_custom_dequant_vs_torch_uint8_reduce_set():
     for i in range(tensor.numel()):
         assert torch_dequant[i].item() == fast_dequant[i].item()
 
-def test_custom_dequant_vs_torch_uint8_reduce_add():
+def test_dequant_vs_torch_uint8_reduce_add():
     tensor = torch.rand(8192)
     scale, zero_point = compute_quant_config_torch(tensor, target_quant_dtype=QuantDtype.UINT8)
     torch_quant = torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8)

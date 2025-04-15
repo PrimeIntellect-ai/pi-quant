@@ -94,8 +94,8 @@ class Context:
         zero_point: int,
         round_mode: RoundMode
     ) -> None:
-        assert ptr_in != 0, 'Input tensor pointer must not be null'
-        assert ptr_out != 0, 'Output tensor pointer must not be null'
+        assert ptr_in != 0, 'Input arr pointer must not be null'
+        assert ptr_out != 0, 'Output arr pointer must not be null'
         ptr_in: _ffi.CData = _ffi.cast('const void*', ptr_in)
         ptr_out: _ffi.CData = _ffi.cast('void*', ptr_out)
         _C.piquant_quantize(
@@ -121,8 +121,8 @@ class Context:
         zero_point: int,
         reduce_op: ReduceOp
     ) -> None:
-        assert ptr_in != 0, 'Input tensor pointer must not be null'
-        assert ptr_out != 0, 'Output tensor pointer must not be null'
+        assert ptr_in != 0, 'Input arr pointer must not be null'
+        assert ptr_out != 0, 'Output arr pointer must not be null'
         ptr_in: _ffi.CData = _ffi.cast('const void*', ptr_in)
         ptr_out: _ffi.CData = _ffi.cast('void*', ptr_out)
         _C.piquant_dequantize(
@@ -139,9 +139,9 @@ class Context:
 
     def compute_quant_config_raw_ptr(self, ptr: int, target_quant_dtype: QuantDtype, numel: int) -> Tuple[float, int]:
         """
-            Compute the scale and zero point of a tensor.
-            :param ptr: p input tensor data pointer (must point to a valid, contiguous memory region of type float (in _C float*))
-            :param numel: number of elements in the tensor
+            Compute the scale and zero point of a arr.
+            :param ptr: p input arr data pointer (must point to a valid, contiguous memory region of type float (in _C float*))
+            :param numel: number of elements in the arr
         """
         ptr: _ffi.CData = _ffi.cast('float*', ptr)
         scale: _ffi.CData = _ffi.new('float*')
