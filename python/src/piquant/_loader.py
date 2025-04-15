@@ -75,6 +75,7 @@ extern  void piquant_compute_quant_config_from_data(
 );
 """
 
+
 def load_native_module() -> Tuple[FFI, object]:
     platform = sys.platform
     lib_name = next((lib for os, lib in MAG_LIBS if platform.startswith(os)), None)

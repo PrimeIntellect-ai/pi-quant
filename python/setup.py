@@ -6,7 +6,7 @@ from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 
 CMAKE_ROOT: str = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..")  # Go up one directory to find CMakeLists.txt
+    os.path.join(os.path.dirname(__file__), '..')  # Go up one directory to find CMakeLists.txt
 )
 NUM_JOBS: int = max(multiprocessing.cpu_count() - 1, 1)  # Use all but one core
 
@@ -41,9 +41,10 @@ class CMakeBuildExecutor(build_ext):
     def build_extension(self, ext):
         if os.path.exists(self.build_temp):
             import shutil
+
             shutil.rmtree(self.build_temp)
         os.makedirs(self.build_temp)
-        
+
         cmake_args = [
             f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={os.path.abspath(os.path.join(self.build_lib, "piquant"))}',
             '-DCMAKE_BUILD_TYPE=Release',
@@ -53,17 +54,10 @@ class CMakeBuildExecutor(build_ext):
             f'-j{NUM_JOBS}',
             '-v',
         ]
-        print(
-            subprocess.check_call(
-                ['cmake', ext.root_dir] + cmake_args, cwd=self.build_temp
-            )
-        )
-        print(
-            subprocess.check_call(
-                ['cmake', '--build', '.'] + build_args, cwd=self.build_temp
-            )
-        )
-        
+        print(subprocess.check_call(['cmake', ext.root_dir] + cmake_args, cwd=self.build_temp))
+        print(subprocess.check_call(['cmake', '--build', '.'] + build_args, cwd=self.build_temp))
+
+
 setup(
     name='piquant',
     packages=['piquant'],
@@ -76,5 +70,5 @@ setup(
     cmdclass={
         'build_ext': CMakeBuildExecutor,
     },
-    zip_safe=False
+    zip_safe=False,
 )

@@ -9,20 +9,23 @@ else:
     if importlib.util.find_spec('numpy') is not None:
         import numpy
 
+
 def _get_data_ptr(arr: 'numpy.ndarray') -> int:
     if numpy is None:
         raise ImportError('numpy is not installed')
     return arr.__array_interface__['data'][0]
+
 
 def _is_cont(arr: 'numpy.ndarray') -> bool:
     if numpy is None:
         raise ImportError('numpy is not installed')
     return arr.flags['C_CONTIGUOUS']
 
+
 def _numpy_to_piquant_dtype(dtype: 'numpy.dtype') -> QuantDtype:
     if numpy is None:
         raise ImportError('numpy is not installed')
-    if dtype == numpy.uint8: # For some reason a dict is not working here
+    if dtype == numpy.uint8:  # For some reason a dict is not working here
         return QuantDtype.UINT8
     elif dtype == numpy.int8:
         return QuantDtype.INT8
@@ -45,7 +48,10 @@ def _numpy_to_piquant_dtype(dtype: 'numpy.dtype') -> QuantDtype:
     else:
         raise ValueError(f'Unsupported numpy dtype: {dtype}')
 
-def compute_quant_config_numpy(arr: 'numpy.ndarray', *, target_quant_dtype: QuantDtype, ctx: Union[Context, None] = None) -> Tuple[float, int]:
+
+def compute_quant_config_numpy(
+    arr: 'numpy.ndarray', *, target_quant_dtype: QuantDtype, ctx: Union[Context, None] = None
+) -> Tuple[float, int]:
     """
     Compute the scale and zero point of a tensor.
         :param arr: Input array, must be of type float32.
@@ -61,12 +67,13 @@ def compute_quant_config_numpy(arr: 'numpy.ndarray', *, target_quant_dtype: Quan
     assert arr.dtype == numpy.float32, f'Expected arr of type float32, got {arr.dtype}'
     return ctx.compute_quant_config_raw_ptr(_get_data_ptr(arr), target_quant_dtype, arr.size)
 
+
 def quantize_numpy(
     in_array: 'numpy.ndarray',
     out_array: Union['numpy.ndarray', None] = None,
     *,
     config: QuantConfig = QuantConfig(),
-    ctx: Union[Context, None] = None
+    ctx: Union[Context, None] = None,
 ) -> 'numpy.ndarray':
     """
     Quantize a numpy array using the given configuration.
@@ -103,16 +110,17 @@ def quantize_numpy(
         numel=in_array.size,
         scale=config.scale,
         zero_point=config.zero_point,
-        round_mode=config.mode
+        round_mode=config.mode,
     )
     return out_array
+
 
 def dequantize_numpy(
     in_array: 'numpy.ndarray',
     out_array: Union['numpy.ndarray', None] = None,
     *,
     config: DequantConfig = DequantConfig(),
-    ctx: Union[Context, None] = None
+    ctx: Union[Context, None] = None,
 ) -> 'numpy.ndarray':
     """
     Dequantize a numpy array using the given configuration.
@@ -139,7 +147,9 @@ def dequantize_numpy(
         out_array = numpy.ascontiguousarray(out_array)
 
     if in_array.size != out_array.size:
-        raise ValueError(f'Input and output arrays must have the same number of elements: {in_array.size} != {out_array.size}')
+        raise ValueError(
+            f'Input and output arrays must have the same number of elements: {in_array.size} != {out_array.size}'
+        )
 
     ctx.dequantize_raw_ptr(
         _get_data_ptr(in_array),
@@ -149,7 +159,6 @@ def dequantize_numpy(
         numel=in_array.size,
         scale=config.scale,
         zero_point=config.zero_point,
-        reduce_op=config.reduce_op
+        reduce_op=config.reduce_op,
     )
     return out_array
-

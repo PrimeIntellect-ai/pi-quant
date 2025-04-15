@@ -9,6 +9,7 @@ else:
     if importlib.util.find_spec('torch') is not None:
         import torch
 
+
 def _torch_to_piquant_dtype(dtype: 'torch.target_quant_dtype') -> QuantDtype:
     if torch is None:
         raise ImportError('torch is not installed')
@@ -22,13 +23,16 @@ def _torch_to_piquant_dtype(dtype: 'torch.target_quant_dtype') -> QuantDtype:
         torch.uint64: QuantDtype.UINT64,
         torch.int64: QuantDtype.INT64,
         torch.float32: QuantDtype.F32,
-        torch.float64: QuantDtype.F64
+        torch.float64: QuantDtype.F64,
     }
     if not dtype in _dtype_map:
         raise ValueError(f'Unsupported target_quant_dtype: {dtype}')
     return _dtype_map[dtype]
 
-def compute_quant_config_torch(tensor: 'torch.Tensor', *, target_quant_dtype: QuantDtype, ctx: Union[Context, None] = None) -> Tuple[float, int]:
+
+def compute_quant_config_torch(
+    tensor: 'torch.Tensor', *, target_quant_dtype: QuantDtype, ctx: Union[Context, None] = None
+) -> Tuple[float, int]:
     """
     Compute the scale and zero point of a arr.
         :param tensor: Input arr, must be of type float32.
@@ -44,12 +48,13 @@ def compute_quant_config_torch(tensor: 'torch.Tensor', *, target_quant_dtype: Qu
     assert tensor.dtype == torch.float32, f'Expected arr of type float32, got {tensor.dtype}'
     return ctx.compute_quant_config_raw_ptr(tensor.data_ptr(), target_quant_dtype, tensor.numel())
 
+
 def quantize_torch(
     in_tensor: 'torch.Tensor',
     out_tensor: Union['torch.Tensor', None] = None,
     *,
     config: QuantConfig = QuantConfig(),
-    ctx: Union[Context, None] = None
+    ctx: Union[Context, None] = None,
 ) -> 'torch.Tensor':
     """
     Quantize a tensor using the given configuration.
@@ -78,7 +83,9 @@ def quantize_torch(
         out_tensor = out_tensor.contiguous()
 
     if in_tensor.numel() != out_tensor.numel():
-        raise ValueError(f'Input and output tensors must have the same number of elements: {in_tensor.numel()} != {out_tensor.numel()}')
+        raise ValueError(
+            f'Input and output tensors must have the same number of elements: {in_tensor.numel()} != {out_tensor.numel()}'
+        )
 
     ctx.quantize_raw_ptr(
         in_tensor.data_ptr(),
@@ -88,7 +95,7 @@ def quantize_torch(
         numel=in_tensor.numel(),
         scale=config.scale,
         zero_point=config.zero_point,
-        round_mode=config.mode
+        round_mode=config.mode,
     )
     return out_tensor
 
@@ -98,7 +105,7 @@ def dequantize_torch(
     out_tensor: Union['torch.Tensor', None] = None,
     *,
     config: DequantConfig = DequantConfig(),
-    ctx: Union[Context, None] = None
+    ctx: Union[Context, None] = None,
 ) -> 'torch.Tensor':
     """
     Dequantize a tensor using the given configuration.
@@ -125,7 +132,9 @@ def dequantize_torch(
         out_tensor = out_tensor.contiguous()
 
     if in_tensor.numel() != out_tensor.numel():
-        raise ValueError(f'Input and output tensors must have the same number of elements: {in_tensor.numel()} != {out_tensor.numel()}')
+        raise ValueError(
+            f'Input and output tensors must have the same number of elements: {in_tensor.numel()} != {out_tensor.numel()}'
+        )
 
     ctx.dequantize_raw_ptr(
         in_tensor.data_ptr(),
@@ -135,6 +144,6 @@ def dequantize_torch(
         numel=in_tensor.numel(),
         scale=config.scale,
         zero_point=config.zero_point,
-        reduce_op=config.reduce_op
+        reduce_op=config.reduce_op,
     )
     return out_tensor
