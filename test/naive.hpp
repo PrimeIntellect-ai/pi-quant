@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <numeric>
 #include <thread>
 #include <vector>
 #include <algorithm>

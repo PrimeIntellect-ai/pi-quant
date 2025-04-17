@@ -3,6 +3,7 @@
 #include <array>
 #include <span>
 #include <cstdint>
+#include <string_view>
 #include <memory>
 
 #ifdef _MSC_VER

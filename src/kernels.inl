@@ -139,7 +139,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         #endif
     };
 
-    static thread_local constinit xs128p_state s_sprng {0x123456789abcdef0, 0x0fedcba987654321};
+    static thread_local xs128p_state s_sprng {0x123456789abcdef0, 0x0fedcba987654321};
 
     template <typename T>
     struct dtype_limits final {
