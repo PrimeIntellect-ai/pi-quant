@@ -105,8 +105,8 @@ namespace piquant {
         BS::thread_pool<> m_pool {};
 
         auto operator ()(const quant_descriptor& desc) -> void;
-        auto operator ()(std::span<const float> x, std::int64_t t_max) -> std::pair<float, std::int32_t>;
-        auto operator ()(std::span<const double> x, std::int64_t t_max) const -> std::pair<float, std::int32_t>;
+        auto operator ()(std::span<const float> x, std::int64_t type_max) -> std::pair<float, std::int32_t>;
+        auto operator ()(std::span<const double> x, std::int64_t type_max) -> std::pair<float, std::int32_t>;
         auto job_entry(partition& pl, const quant_descriptor& cmd) const -> void;
     };
 
@@ -175,12 +175,48 @@ namespace piquant {
         jobs.wait();
     }
 
-    auto context::pimpl::operator()(std::span<const float> x, std::int64_t t_max) -> std::pair<float, std::int32_t> {
-        return (*registry.quant_config_kernel_f32)(x, t_max);
+    template <typename T, typename F> requires std::is_floating_point_v<T>
+    static auto compute_quant_config(
+        BS::thread_pool<>& pool,
+        F&& kernel,
+        std::span<const T> x,
+        std::int64_t type_max
+    ) -> std::pair<float, std::int32_t> {
+        const auto* base {x.data()};
+        BS::multi_future<std::array<T, 2>> jobs {pool.submit_blocks(0u, x.size(), [base, &kernel](std::size_t start, std::size_t end) -> std::array<T, 2> {
+            std::int64_t numel {static_cast<std::int64_t>(end) - static_cast<std::int64_t>(start)};
+            if (numel <= 0) return {0.0, 0.0};
+            std::span<const T> x {base + start, static_cast<std::size_t>(numel)};
+            return std::invoke(kernel, x);
+        })};
+        jobs.wait();
+        double sum {};
+        double sum_sq {};
+        for (auto& job : jobs) {
+            auto [s, ss] {job.get()};
+            sum += static_cast<double>(s);
+            sum_sq += static_cast<double>(ss);
+        }
+        double fnumel {static_cast<double>(x.size())};
+        double mean {sum / fnumel};
+        double variance {(sum_sq - sum*sum / fnumel) / (fnumel-1.0)};
+        double stddev {std::sqrt(variance)};
+        double scale {static_cast<float>(stddev_scale*stddev / static_cast<float>(type_max))};
+        if (scale == 0.0) [[unlikely]] {
+            return {1.0f, (type_max+1)>>1};
+        }
+        std::int64_t zp {((type_max+1)>>1) - static_cast<std::int64_t>(std::round(mean / scale))};
+        return {scale, zp};
     }
 
-    auto context::pimpl::operator()(std::span<const double> x, std::int64_t t_max) const -> std::pair<float, std::int32_t> {
-        return (*registry.quant_config_kernel_f64)(x, t_max);
+    auto context::pimpl::operator()(std::span<const float> x, std::int64_t type_max) -> std::pair<float, std::int32_t> {
+        auto& kernel {(*registry.quant_config_kernel_f32)};
+        return compute_quant_config(m_pool, kernel, x, type_max);
+    }
+
+    auto context::pimpl::operator()(std::span<const double> x, std::int64_t type_max) -> std::pair<float, std::int32_t> {
+        auto& kernel {(*registry.quant_config_kernel_f64)};
+        return compute_quant_config(m_pool, kernel, x, type_max);
     }
 
     context::context(std::size_t num_threads) {

@@ -523,25 +523,16 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     }
 
     template <typename T> requires std::is_floating_point_v<T>
-    [[nodiscard]] auto compute_quant_config_from_data(const T* p, std::int64_t numel, std::int64_t tmax) -> std::pair<T, std::int64_t> {
+    [[nodiscard]] auto compute_quant_config_from_data(const T* p, std::int64_t numel) -> std::array<T, 2> {
         if (!numel) [[unlikely]] return {0.0, 0.0};
-        T mean {static_cast<T>(std::accumulate(p, p+numel, 0.0) / static_cast<T>(numel))};
-        const auto sq_delta {static_cast<T>(std::transform_reduce(
-            p, p+numel,
-            0.0,
-            std::plus{},
-            [mean](const T value) noexcept -> T {
-                T delta {value - mean};
-                return delta*delta;
-            }
-        ))};
-        T std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
-        T scale {static_cast<T>(stddev_scale*std/static_cast<T>(tmax))};
-        if (scale == 0.0) [[unlikely]] {
-            return {1.0f, (tmax+1)>>1};
+        T sum {};
+        T sum_sq {};
+        for (std::int64_t i {}; i < numel; ++i) {
+            T x {p[i]};
+            sum += x;
+            sum_sq += x*x;
         }
-        std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
-        return {scale, zp};
+        return {sum, sum_sq};
     }
 
     #ifdef __AVX2__
@@ -560,7 +551,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     #endif
 
     template <>
-    [[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel, std::int64_t tmax) -> std::pair<float, std::int64_t> {
+    [[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel) -> std::array<float, 2> {
         if (!numel) [[unlikely]] return {0.0f, 0.0};
         float sum {};
         float sum_sq {};
@@ -714,23 +705,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             sum += x;
             sum_sq += x*x;
         }
-        float mean {sum / static_cast<float>(numel)};
-        float variance {(sum_sq - sum*sum / static_cast<float>(numel)) / static_cast<float>(numel - 1)};
-        float stddev {std::sqrt(variance)};
-        float scale {static_cast<float>(stddev_scale*stddev / static_cast<float>(tmax))};
-        if (scale == 0.0) [[unlikely]] {
-           return {1.0f, (tmax+1)>>1};
-        }
-        std::int64_t zp {((tmax+1)>>1) - static_cast<std::int64_t>(std::round(mean / scale))};
-        return {scale, zp};
+        return {sum, sum_sq};
     }
 
-    static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> x, std::int64_t tmax) noexcept -> std::pair<float, std::int64_t> {
-        return compute_quant_config_from_data(x.data(), x.size(), tmax);
+    static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> x) noexcept -> std::array<float, 2> {
+        return compute_quant_config_from_data(x.data(), static_cast<std::int64_t>(x.size()));
     }
 
-    static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> x, std::int64_t tmax) noexcept -> std::pair<float, std::int64_t> {
-        return compute_quant_config_from_data(x.data(), x.size(), tmax);
+    static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> x) noexcept -> std::array<double, 2> {
+        return compute_quant_config_from_data(x.data(), static_cast<std::int64_t>(x.size()));
     }
 };
 
