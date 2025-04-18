@@ -124,7 +124,7 @@ namespace piquant {
 
     class QUANT_EXPORT context final {
     public:
-        explicit context(std::size_t num_threads, std::size_t task_queue_size = 8192);
+        explicit context(std::size_t num_threads);
         context(const context&) = delete;
         context(context&&) = delete;
         auto operator=(const context&) -> context& = delete;

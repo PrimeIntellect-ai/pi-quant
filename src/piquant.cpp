@@ -11,7 +11,7 @@
 #include <numeric>
 #include <condition_variable>
 
-#include <pithreadpool/threadpool.hpp>
+#include "BS_thread_pool.hpp"
 
 namespace piquant {
     #define decl_quant_kernel_installer_fn(impl) \
@@ -87,15 +87,14 @@ namespace piquant {
         #endif
     };
 
-    struct payload {
+    struct partition {
         std::int64_t ti {}; // thread index
         std::int64_t tc {}; // thread count
-        std::uint64_t phase {};
     };
 
     class context::pimpl final {
     public:
-        explicit pimpl(std::size_t num_threads, std::size_t task_queue_size);
+        explicit pimpl(std::size_t num_threads);
         pimpl(const pimpl&) = delete;
         pimpl(pimpl&&) = delete;
         auto operator = (const pimpl&) -> pimpl& = delete;
@@ -103,16 +102,15 @@ namespace piquant {
         ~pimpl();
 
         kernel_registry registry {};
-        pi::threadpool::ThreadPool m_pool;
-        std::size_t m_num_threads {};
+        BS::thread_pool<> m_pool {};
 
         auto operator ()(const quant_descriptor& desc) -> void;
         auto operator ()(std::span<const float> x, std::int64_t t_max) -> std::pair<float, std::int32_t>;
         auto operator ()(std::span<const double> x, std::int64_t t_max) const -> std::pair<float, std::int32_t>;
-        auto job_entry(payload& pl, const quant_descriptor& cmd) const -> void;
+        auto job_entry(partition& pl, const quant_descriptor& cmd) const -> void;
     };
 
-    auto context::pimpl::job_entry(payload& pl, const quant_descriptor& cmd) const -> void {
+    auto context::pimpl::job_entry(partition& pl, const quant_descriptor& cmd) const -> void {
         const std::int64_t tc {std::max(std::int64_t{1}, pl.tc)};
         const std::int64_t ti {pl.ti};
         const auto partition_row {[&] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
@@ -151,10 +149,7 @@ namespace piquant {
         }
     }
 
-    context::pimpl::pimpl(std::size_t num_threads, std::size_t task_queue_size)
-        : m_pool{static_cast<int>(std::max<std::size_t>(1, num_threads)),
-            static_cast<int>(std::max<std::size_t>(1, task_queue_size))},
-            m_num_threads{std::max<std::size_t>(1, num_threads)} {
+    context::pimpl::pimpl(std::size_t num_threads) : m_pool{std::max<std::size_t>(1, num_threads)} {
         registry = install_quant_generic();
         #ifdef __x86_64__
             if (check_avx512f_support()) registry = install_quant_amd64_avx512f();
@@ -162,26 +157,22 @@ namespace piquant {
             else if (check_sse42_support())  registry = install_quant_amd64_sse42();
 
         #endif
-        m_pool.startup();
     }
 
     context::pimpl::~pimpl() {
-        m_pool.shutdown();
+        m_pool.wait();
     }
 
     auto context::pimpl::operator()(const quant_descriptor& desc) -> void {
-        std::size_t num_threads {m_num_threads};
-        std::vector<std::pair<payload, std::optional<pi::threadpool::TaskFuture<pi::threadpool::void_t>>>> jobs {};
-        jobs.reserve(num_threads);
-        for (std::size_t i {}; i < num_threads; ++i) {
-            auto& job {jobs.emplace_back(std::make_pair(payload{static_cast<std::uint32_t>(i)}, std::nullopt))};
-            job.first.ti = static_cast<std::int64_t>(i);
-            job.first.tc = static_cast<std::int64_t>(num_threads);
-            job.second = m_pool.scheduleTask([=, this, &jobs] {
-                job_entry(jobs[i].first, desc);
-            });
-        }
-        for (auto& [_, task] : jobs) task->join();
+        std::size_t num_threads {m_pool.get_thread_count()};
+        BS::multi_future<void> jobs {m_pool.submit_sequence(0u, num_threads, [this, &desc, num_threads](std::size_t ti) {
+            partition pl {
+                .tc = static_cast<std::int64_t>(num_threads),
+                .ti = static_cast<std::int64_t>(ti)
+            };
+            job_entry(pl, desc);
+        })};
+        jobs.wait();
     }
 
     auto context::pimpl::operator()(std::span<const float> x, std::int64_t t_max) -> std::pair<float, std::int32_t> {
@@ -192,8 +183,8 @@ namespace piquant {
         return (*registry.quant_config_kernel_f64)(x, t_max);
     }
 
-    context::context(std::size_t num_threads, std::size_t task_queue_size) {
-        m_pimpl = std::make_shared<pimpl>(num_threads, task_queue_size);
+    context::context(std::size_t num_threads) {
+        m_pimpl = std::make_shared<pimpl>(num_threads);
     }
 
     context::~context() = default;

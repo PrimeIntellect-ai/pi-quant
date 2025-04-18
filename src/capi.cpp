@@ -9,7 +9,7 @@ struct piquant_context_t final {
 };
 
 extern "C" auto piquant_context_create(const std::size_t num_threads) -> piquant_context_t* {
-    auto* ctx {new context{num_threads, 8192}}; // todo
+    auto* ctx {new context{num_threads}}; // todo
     return std::bit_cast<piquant_context_t*>(ctx);
 }
 
