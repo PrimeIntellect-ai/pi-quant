@@ -105,8 +105,8 @@ namespace piquant {
         BS::thread_pool<> m_pool {};
 
         auto operator ()(const quant_descriptor& desc) -> void;
-        auto operator ()(std::span<const float> x, std::int64_t type_max) -> std::pair<float, std::int32_t>;
-        auto operator ()(std::span<const double> x, std::int64_t type_max) -> std::pair<float, std::int32_t>;
+        auto operator ()(std::span<const float> x, std::int64_t type_max) -> std::pair<float, std::int64_t>;
+        auto operator ()(std::span<const double> x, std::int64_t type_max) -> std::pair<float, std::int64_t>;
         auto job_entry(partition& pl, const quant_descriptor& cmd) const -> void;
     };
 
@@ -181,7 +181,7 @@ namespace piquant {
         F&& kernel,
         std::span<const T> x,
         std::int64_t type_max
-    ) -> std::pair<float, std::int32_t> {
+    ) -> std::pair<float, std::int64_t> {
         const auto* base {x.data()};
         BS::multi_future<std::array<T, 2>> jobs {pool.submit_blocks(0u, x.size(), [base, &kernel](std::size_t start, std::size_t end) -> std::array<T, 2> {
             std::int64_t numel {static_cast<std::int64_t>(end) - static_cast<std::int64_t>(start)};
@@ -209,12 +209,12 @@ namespace piquant {
         return {scale, zp};
     }
 
-    auto context::pimpl::operator()(std::span<const float> x, std::int64_t type_max) -> std::pair<float, std::int32_t> {
+    auto context::pimpl::operator()(std::span<const float> x, std::int64_t type_max) -> std::pair<float, std::int64_t> {
         auto& kernel {(*registry.quant_config_kernel_f32)};
         return compute_quant_config(m_pool, kernel, x, type_max);
     }
 
-    auto context::pimpl::operator()(std::span<const double> x, std::int64_t type_max) -> std::pair<float, std::int32_t> {
+    auto context::pimpl::operator()(std::span<const double> x, std::int64_t type_max) -> std::pair<float, std::int64_t> {
         auto& kernel {(*registry.quant_config_kernel_f64)};
         return compute_quant_config(m_pool, kernel, x, type_max);
     }

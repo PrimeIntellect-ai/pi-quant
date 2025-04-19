@@ -670,14 +670,14 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             float32x4_t vsum_sq7 {vdupq_n_f32(0.0f)};
             float32x4_t vsum_sq8 {vdupq_n_f32(0.0f)};
             for (; i+31 < numel; i += 32) {
-                float32x4_t v1 {vld1q_f32(p+i+4*0)};
-                float32x4_t v2 {vld1q_f32(p+i+4*1)};
-                float32x4_t v3 {vld1q_f32(p+i+4*2)};
-                float32x4_t v4 {vld1q_f32(p+i+4*3)};
-                float32x4_t v5 {vld1q_f32(p+i+4*4)};
-                float32x4_t v6 {vld1q_f32(p+i+4*5)};
-                float32x4_t v7 {vld1q_f32(p+i+4*6)};
-                float32x4_t v8 {vld1q_f32(p+i+4*7)};
+                float32x4_t v1 {vld1q_f32(p+i+(0<<2))};
+                float32x4_t v2 {vld1q_f32(p+i+(1<<2))};
+                float32x4_t v3 {vld1q_f32(p+i+(2<<2))};
+                float32x4_t v4 {vld1q_f32(p+i+(3<<2))};
+                float32x4_t v5 {vld1q_f32(p+i+(4<<2))};
+                float32x4_t v6 {vld1q_f32(p+i+(5<<2))};
+                float32x4_t v7 {vld1q_f32(p+i+(6<<2))};
+                float32x4_t v8 {vld1q_f32(p+i+(7<<2))};
                 vsum1 = vaddq_f32(vsum1, v1);
                 vsum2 = vaddq_f32(vsum2, v2);
                 vsum3 = vaddq_f32(vsum3, v3);
