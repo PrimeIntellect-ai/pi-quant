@@ -25,8 +25,9 @@ auto main() -> int {
     std::ranges::generate(data_in, [&] { return dist(gen); });
     ankerl::nanobench::Bench bench {};
     piquant::context ctx {nt};
-    bench.run("quantize", [&] {
-        ctx.quantize_generic<float, std::uint8_t>(data_in, data_out, 0.2f, 127, piquant::round_mode::nearest);
+    ctx.quantize_generic<float, std::uint8_t>(data_in, data_out, 0.2f, 127, piquant::round_mode::nearest);
+    bench.run("dequantize", [&] {
+        ctx.dequantize_generic<std::uint8_t, float>(data_out, data_in, 0.2f, 127, piquant::reduce_op::add);
     });
     return 0;
 }
