@@ -352,11 +352,150 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         std::int32_t zp
     ) noexcept -> void {
         std::int64_t i {};
-        #if defined(__AVX512F__) && defined(__AVX512BW__)
+        #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
 
         #elif defined(__AVX2__)
+            __m256i vzp256    {_mm256_set1_epi32(zp)};
+            __m256  vscale256 {_mm256_set1_ps(scale)};
+            auto expand_u8_to_s32_avx2 = [&](const __m256i &v) {
+                __m256i zero {_mm256_setzero_si256()};
+                __m256i w_lo {_mm256_unpacklo_epi8(v, zero)};
+                __m256i w_hi {_mm256_unpackhi_epi8(v, zero)};
+                __m256i d0 {_mm256_unpacklo_epi16(w_lo, zero)};
+                __m256i d1 {_mm256_unpackhi_epi16(w_lo, zero)};
+                __m256i d2 {_mm256_unpacklo_epi16(w_hi, zero)};
+                __m256i d3 {_mm256_unpackhi_epi16(w_hi, zero)};
+                return std::array<__m256i,4>{d0,d1,d2,d3};
+            };
+            for (; i + 63 < numel; i += 64) {
+                __m256i in0 {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x + i +  0*32))};
+                __m256i in1 {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x + i +  1*32))};
+                auto [vs00, vs10, vs20, vs30] = expand_u8_to_s32_avx2(in0);
+                auto [vs01, vs11, vs21, vs31] = expand_u8_to_s32_avx2(in1);
+                vs00 = _mm256_sub_epi32(vs00, vzp256);
+                vs10 = _mm256_sub_epi32(vs10, vzp256);
+                vs20 = _mm256_sub_epi32(vs20, vzp256);
+                vs30 = _mm256_sub_epi32(vs30, vzp256);
+                vs01 = _mm256_sub_epi32(vs01, vzp256);
+                vs11 = _mm256_sub_epi32(vs11, vzp256);
+                vs21 = _mm256_sub_epi32(vs21, vzp256);
+                vs31 = _mm256_sub_epi32(vs31, vzp256);
+                __m256 vf00 {_mm256_mul_ps(_mm256_cvtepi32_ps(vs00), vscale256)};
+                __m256 vf10 {_mm256_mul_ps(_mm256_cvtepi32_ps(vs10), vscale256)};
+                __m256 vf20 {_mm256_mul_ps(_mm256_cvtepi32_ps(vs20), vscale256)};
+                __m256 vf30 {_mm256_mul_ps(_mm256_cvtepi32_ps(vs30), vscale256)};
+                __m256 vf01 {_mm256_mul_ps(_mm256_cvtepi32_ps(vs01), vscale256)};
+                __m256 vf11 {_mm256_mul_ps(_mm256_cvtepi32_ps(vs11), vscale256)};
+                __m256 vf21 {_mm256_mul_ps(_mm256_cvtepi32_ps(vs21), vscale256)};
+                __m256 vf31 {_mm256_mul_ps(_mm256_cvtepi32_ps(vs31), vscale256)};
+                if constexpr (SUM) {
+                    vf00 = _mm256_add_ps(vf00, _mm256_loadu_ps(o+i+0*8));
+                    vf10 = _mm256_add_ps(vf10, _mm256_loadu_ps(o+i+1*8));
+                    vf20 = _mm256_add_ps(vf20, _mm256_loadu_ps(o+i+2*8));
+                    vf30 = _mm256_add_ps(vf30, _mm256_loadu_ps(o+i+3*8));
+                    vf01 = _mm256_add_ps(vf01, _mm256_loadu_ps(o+i+4*8));
+                    vf11 = _mm256_add_ps(vf11, _mm256_loadu_ps(o+i+5*8));
+                    vf21 = _mm256_add_ps(vf21, _mm256_loadu_ps(o+i+6*8));
+                    vf31 = _mm256_add_ps(vf31, _mm256_loadu_ps(o+i+7*8));
+                }
+                _mm256_storeu_ps(o+i+0*8, vf00);
+                _mm256_storeu_ps(o+i+1*8, vf10);
+                _mm256_storeu_ps(o+i+2*8, vf20);
+                _mm256_storeu_ps(o+i+3*8, vf30);
+                _mm256_storeu_ps(o+i+4*8, vf01);
+                _mm256_storeu_ps(o+i+5*8, vf11);
+                _mm256_storeu_ps(o+i+6*8, vf21);
+                _mm256_storeu_ps(o+i+7*8, vf31);
+            }
         #elif defined(__SSE4_2__)
-
+            __m128i vzp {_mm_set1_epi32(zp)};
+            __m128 vscale {_mm_set1_ps(scale)};
+            for (; i+63 < numel; i += 64) {
+                __m128i in0 {_mm_loadu_si128((__m128i*)(x+i+0*16))};
+                __m128i in1 {_mm_loadu_si128((__m128i*)(x+i+1*16))};
+                __m128i in2 {_mm_loadu_si128((__m128i*)(x+i+2*16))};
+                __m128i in3 {_mm_loadu_si128((__m128i*)(x+i+3*16))};
+                auto expand16 = [&](const __m128i &v) {
+                    __m128i zero {_mm_setzero_si128()};
+                    __m128i w_lo {_mm_unpacklo_epi8(v, zero)};
+                    __m128i w_hi {_mm_unpackhi_epi8(v, zero)};
+                    __m128i d0 {_mm_unpacklo_epi16(w_lo, zero)};
+                    __m128i d1 {_mm_unpackhi_epi16(w_lo, zero)};
+                    __m128i d2 {_mm_unpacklo_epi16(w_hi, zero)};
+                    __m128i d3 {_mm_unpackhi_epi16(w_hi, zero)};
+                    return std::array<__m128i,4>{d0,d1,d2,d3};
+                };
+                auto [vs00, vs10, vs20, vs30] = expand16(in0);
+                auto [vs01, vs11, vs21, vs31] = expand16(in1);
+                auto [vs02, vs12, vs22, vs32] = expand16(in2);
+                auto [vs03, vs13, vs23, vs33] = expand16(in3);
+                vs00 = _mm_sub_epi32(vs00, vzp);
+                vs10 = _mm_sub_epi32(vs10, vzp);
+                vs20 = _mm_sub_epi32(vs20, vzp);
+                vs30 = _mm_sub_epi32(vs30, vzp);
+                vs01 = _mm_sub_epi32(vs01, vzp);
+                vs11 = _mm_sub_epi32(vs11, vzp);
+                vs21 = _mm_sub_epi32(vs21, vzp);
+                vs31 = _mm_sub_epi32(vs31, vzp);
+                vs02 = _mm_sub_epi32(vs02, vzp);
+                vs12 = _mm_sub_epi32(vs12, vzp);
+                vs22 = _mm_sub_epi32(vs22, vzp);
+                vs32 = _mm_sub_epi32(vs32, vzp);
+                vs03 = _mm_sub_epi32(vs03, vzp);
+                vs13 = _mm_sub_epi32(vs13, vzp);
+                vs23 = _mm_sub_epi32(vs23, vzp);
+                vs33 = _mm_sub_epi32(vs33, vzp);
+                __m128 vf00 {_mm_mul_ps(_mm_cvtepi32_ps(vs00), vscale)};
+                __m128 vf01 {_mm_mul_ps(_mm_cvtepi32_ps(vs10), vscale)};
+                __m128 vf02 {_mm_mul_ps(_mm_cvtepi32_ps(vs20), vscale)};
+                __m128 vf03 {_mm_mul_ps(_mm_cvtepi32_ps(vs30), vscale)};
+                __m128 vf10 {_mm_mul_ps(_mm_cvtepi32_ps(vs01), vscale)};
+                __m128 vf11 {_mm_mul_ps(_mm_cvtepi32_ps(vs11), vscale)};
+                __m128 vf12 {_mm_mul_ps(_mm_cvtepi32_ps(vs21), vscale)};
+                __m128 vf13 {_mm_mul_ps(_mm_cvtepi32_ps(vs31), vscale)};
+                __m128 vf20 {_mm_mul_ps(_mm_cvtepi32_ps(vs02), vscale)};
+                __m128 vf21 {_mm_mul_ps(_mm_cvtepi32_ps(vs12), vscale)};
+                __m128 vf22 {_mm_mul_ps(_mm_cvtepi32_ps(vs22), vscale)};
+                __m128 vf23 {_mm_mul_ps(_mm_cvtepi32_ps(vs32), vscale)};
+                __m128 vf30 {_mm_mul_ps(_mm_cvtepi32_ps(vs03), vscale)};
+                __m128 vf31 {_mm_mul_ps(_mm_cvtepi32_ps(vs13), vscale)};
+                __m128 vf32 {_mm_mul_ps(_mm_cvtepi32_ps(vs23), vscale)};
+                __m128 vf33 {_mm_mul_ps(_mm_cvtepi32_ps(vs33), vscale)};
+                if constexpr (SUM) {
+                    vf00 = _mm_add_ps(vf00, _mm_loadu_ps(o + i +  0*4));
+                    vf01 = _mm_add_ps(vf01, _mm_loadu_ps(o + i +  1*4));
+                    vf02 = _mm_add_ps(vf02, _mm_loadu_ps(o + i +  2*4));
+                    vf03 = _mm_add_ps(vf03, _mm_loadu_ps(o + i +  3*4));
+                    vf10 = _mm_add_ps(vf10, _mm_loadu_ps(o + i +  4*4));
+                    vf11 = _mm_add_ps(vf11, _mm_loadu_ps(o + i +  5*4));
+                    vf12 = _mm_add_ps(vf12, _mm_loadu_ps(o + i +  6*4));
+                    vf13 = _mm_add_ps(vf13, _mm_loadu_ps(o + i +  7*4));
+                    vf20 = _mm_add_ps(vf20, _mm_loadu_ps(o + i +  8*4));
+                    vf21 = _mm_add_ps(vf21, _mm_loadu_ps(o + i +  9*4));
+                    vf22 = _mm_add_ps(vf22, _mm_loadu_ps(o + i + 10*4));
+                    vf23 = _mm_add_ps(vf23, _mm_loadu_ps(o + i + 11*4));
+                    vf30 = _mm_add_ps(vf30, _mm_loadu_ps(o + i + 12*4));
+                    vf31 = _mm_add_ps(vf31, _mm_loadu_ps(o + i + 13*4));
+                    vf32 = _mm_add_ps(vf32, _mm_loadu_ps(o + i + 14*4));
+                    vf33 = _mm_add_ps(vf33, _mm_loadu_ps(o + i + 15*4));
+                }
+                _mm_storeu_ps(o+i+ 0*4, vf00);
+                _mm_storeu_ps(o+i+ 1*4, vf01);
+                _mm_storeu_ps(o+i+ 2*4, vf02);
+                _mm_storeu_ps(o+i+ 3*4, vf03);
+                _mm_storeu_ps(o+i+ 4*4, vf10);
+                _mm_storeu_ps(o+i+ 5*4, vf11);
+                _mm_storeu_ps(o+i+ 6*4, vf12);
+                _mm_storeu_ps(o+i+ 7*4, vf13);
+                _mm_storeu_ps(o+i+ 8*4, vf20);
+                _mm_storeu_ps(o+i+ 9*4, vf21);
+                _mm_storeu_ps(o+i+10*4, vf22);
+                _mm_storeu_ps(o+i+11*4, vf23);
+                _mm_storeu_ps(o+i+12*4, vf30);
+                _mm_storeu_ps(o+i+13*4, vf31);
+                _mm_storeu_ps(o+i+14*4, vf32);
+                _mm_storeu_ps(o+i+15*4, vf33);
+            }
         #elif defined(__aarch64__) && defined(__ARM_NEON__)
             static constexpr auto expand_u8_to_s32{[](uint8x16_t u8) noexcept-> std::array<int32x4_t, 4> {
                 uint16x8_t u16l {vmovl_u8(vget_low_u8(u8))};

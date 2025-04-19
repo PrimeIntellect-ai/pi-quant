@@ -167,8 +167,8 @@ namespace piquant {
         std::size_t num_threads {m_pool.get_thread_count()};
         BS::multi_future<void> jobs {m_pool.submit_sequence(0u, num_threads, [this, &desc, num_threads](std::size_t ti) {
             partition pl {
-                .tc = static_cast<std::int64_t>(num_threads),
-                .ti = static_cast<std::int64_t>(ti)
+                .ti = static_cast<std::int64_t>(ti),
+                .tc = static_cast<std::int64_t>(num_threads)
             };
             job_entry(pl, desc);
         })};
