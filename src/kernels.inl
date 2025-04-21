@@ -365,7 +365,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 __m256i d1 {_mm256_unpackhi_epi16(w_lo, zero)};
                 __m256i d2 {_mm256_unpacklo_epi16(w_hi, zero)};
                 __m256i d3 {_mm256_unpackhi_epi16(w_hi, zero)};
-                return std::array<__m256i,4>{d0,d1,d2,d3};
+                return std::array{d0,d1,d2,d3};
             };
             for (; i + 63 < numel; i += 64) {
                 __m256i in0 {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x + i +  0*32))};
@@ -423,7 +423,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                     __m128i d1 {_mm_unpackhi_epi16(w_lo, zero)};
                     __m128i d2 {_mm_unpacklo_epi16(w_hi, zero)};
                     __m128i d3 {_mm_unpackhi_epi16(w_hi, zero)};
-                    return std::array<__m128i,4>{d0,d1,d2,d3};
+                    return std::array{d0,d1,d2,d3};
                 };
                 auto [vs00, vs10, vs20, vs30] = expand16(in0);
                 auto [vs01, vs11, vs21, vs31] = expand16(in1);
@@ -599,7 +599,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     template <const round_mode RND, typename IN, typename OUT, typename... Args>
          requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>)
              && std::is_same_v<std::common_type_t<Args...>, IN> && sizeof...(Args) != 0)
-    static auto PIQUANT_AINLINE quant_step(double inv_scale, std::int64_t zp, Args... args) noexcept -> OUT {
+    static inline auto PIQUANT_AINLINE quant_step(double inv_scale, std::int64_t zp, Args... args) noexcept -> OUT {
         if constexpr (RND == round_mode::stochastic) {
             const auto Q{[&](const IN x) noexcept -> OUT {
                 double rnd {x * inv_scale};
@@ -654,7 +654,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     template <typename IN, typename OUT>
           requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
-    static auto PIQUANT_AINLINE dequant_step(double scale, std::int64_t zp, const IN x) noexcept -> OUT {
+    static inline auto PIQUANT_AINLINE dequant_step(double scale, std::int64_t zp, const IN x) noexcept -> OUT {
         return static_cast<OUT>(static_cast<std::int64_t>(x) - zp)*scale;
     }
 
