@@ -42,7 +42,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
         constexpr xs128p_state(std::uint64_t p1, std::uint64_t p2) noexcept : p1{p1}, p2{p2} {}
 
-        [[nodiscard]] auto PIQUANT_AINLINE operator ()() noexcept -> std::uint64_t {
+        [[nodiscard]] inline auto PIQUANT_AINLINE operator ()() noexcept -> std::uint64_t {
             std::uint64_t s1 {p1};
             std::uint64_t s0 {p2};
             p1 = s0;
@@ -51,13 +51,13 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             return p2 + s0;
         }
 
-        [[nodiscard]] auto PIQUANT_AINLINE canonical() noexcept -> float {
+        [[nodiscard]] inline auto PIQUANT_AINLINE canonical() noexcept -> float {
             static constexpr auto bias_scale {1.0f/static_cast<float>(0x800000)};
             std::uint64_t y {~0u & (*this)()};
             return (bias_scale*(static_cast<float>(y>>9) + 0.5f));
         }
 
-        [[nodiscard]] auto PIQUANT_AINLINE bounded(std::array<std::uint32_t, 2> bounds) noexcept -> std::array<std::uint32_t, 2> {
+        [[nodiscard]] inline auto PIQUANT_AINLINE bounded(std::array<std::uint32_t, 2> bounds) noexcept -> std::array<std::uint32_t, 2> {
             auto [b1, b2] {bounds}; // [0, bound1), [0, bound2)
             std::uint64_t y {(*this)()};
             return {
@@ -112,7 +112,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 this->p2 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(S1.data()));
             }
 
-            [[nodiscard]] auto operator ()() noexcept -> __m256i {
+            [[nodiscard]] inline auto PIQUANT_AINLINE operator ()() noexcept -> __m256i {
                 __m256i s1 {p1};
                 __m256i s0 {p2};
                 p1 = p2;
@@ -125,7 +125,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 return _mm256_add_epi64(p2, s0);
             }
 
-        [[nodiscard]] auto canonical() noexcept -> __m256 {
+        [[nodiscard]] inline auto PIQUANT_AINLINE canonical() noexcept -> __m256 {
             static constexpr auto bias_scale {1.0f/static_cast<float>(0x800000)};
             __m256i y {(*this)()};
             y = _mm256_and_si256(y, _mm256_set1_epi32(~0));
@@ -271,16 +271,16 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 xf1 = _mm_mul_ps(xf1, vinv_scale);
                 xf2 = _mm_mul_ps(xf2, vinv_scale);
                 xf3 = _mm_mul_ps(xf3, vinv_scale);
-                __m128 mask0   {_mm_cmpge_ps(xf0, vzero)};
+                __m128 mask0 {_mm_cmpge_ps(xf0, vzero)};
                 __m128 offs0 {_mm_blendv_ps(vneg_half, vhalf, mask0)};
                 __m128 adj0 {_mm_add_ps(xf0, offs0)};
-                __m128 mask1   {_mm_cmpge_ps(xf1, vzero)};
+                __m128 mask1 {_mm_cmpge_ps(xf1, vzero)};
                 __m128 offs1 {_mm_blendv_ps(vneg_half, vhalf, mask1)};
                 __m128 adj1 {_mm_add_ps(xf1, offs1)};
-                __m128 mask2   {_mm_cmpge_ps(xf2, vzero)};
+                __m128 mask2 {_mm_cmpge_ps(xf2, vzero)};
                 __m128 offs2 {_mm_blendv_ps(vneg_half, vhalf, mask2)};
                 __m128 adj2 {_mm_add_ps(xf2, offs2)};
-                __m128 mask3   {_mm_cmpge_ps(xf3, vzero)};
+                __m128 mask3 {_mm_cmpge_ps(xf3, vzero)};
                 __m128 offs3 {_mm_blendv_ps(vneg_half, vhalf, mask3)};
                 __m128 adj3 {_mm_add_ps(xf3, offs3)};
                 __m128i xi0 {_mm_cvttps_epi32(adj0)};
@@ -357,7 +357,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         #elif defined(__AVX2__)
             __m256i vzp256    {_mm256_set1_epi32(zp)};
             __m256  vscale256 {_mm256_set1_ps(scale)};
-            auto expand_u8_to_s32_avx2 = [&](const __m256i &v) {
+            static constexpr auto expand_u8_to_s32_avx2 = [](const __m256i &v) {
                 __m256i zero {_mm256_setzero_si256()};
                 __m256i w_lo {_mm256_unpacklo_epi8(v, zero)};
                 __m256i w_hi {_mm256_unpackhi_epi8(v, zero)};
@@ -367,11 +367,11 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 __m256i d3 {_mm256_unpackhi_epi16(w_hi, zero)};
                 return std::array{d0,d1,d2,d3};
             };
-            for (; i + 63 < numel; i += 64) {
-                __m256i in0 {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x + i +  0*32))};
-                __m256i in1 {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x + i +  1*32))};
-                auto [vs00, vs10, vs20, vs30] = expand_u8_to_s32_avx2(in0);
-                auto [vs01, vs11, vs21, vs31] = expand_u8_to_s32_avx2(in1);
+            for (; i+63 < numel; i += 64) {
+                __m256i in0 {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+(0<<5)))};
+                __m256i in1 {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+(1<<5)))};
+                auto [vs00, vs10, vs20, vs30] {expand_u8_to_s32_avx2(in0)};
+                auto [vs01, vs11, vs21, vs31] {expand_u8_to_s32_avx2(in1)};
                 vs00 = _mm256_sub_epi32(vs00, vzp256);
                 vs10 = _mm256_sub_epi32(vs10, vzp256);
                 vs20 = _mm256_sub_epi32(vs20, vzp256);
@@ -389,23 +389,23 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 __m256 vf21 {_mm256_mul_ps(_mm256_cvtepi32_ps(vs21), vscale256)};
                 __m256 vf31 {_mm256_mul_ps(_mm256_cvtepi32_ps(vs31), vscale256)};
                 if constexpr (SUM) {
-                    vf00 = _mm256_add_ps(vf00, _mm256_loadu_ps(o+i+0*8));
-                    vf10 = _mm256_add_ps(vf10, _mm256_loadu_ps(o+i+1*8));
-                    vf20 = _mm256_add_ps(vf20, _mm256_loadu_ps(o+i+2*8));
-                    vf30 = _mm256_add_ps(vf30, _mm256_loadu_ps(o+i+3*8));
-                    vf01 = _mm256_add_ps(vf01, _mm256_loadu_ps(o+i+4*8));
-                    vf11 = _mm256_add_ps(vf11, _mm256_loadu_ps(o+i+5*8));
-                    vf21 = _mm256_add_ps(vf21, _mm256_loadu_ps(o+i+6*8));
-                    vf31 = _mm256_add_ps(vf31, _mm256_loadu_ps(o+i+7*8));
+                    vf00 = _mm256_add_ps(vf00, _mm256_loadu_ps(o+i+(0<<3)));
+                    vf10 = _mm256_add_ps(vf10, _mm256_loadu_ps(o+i+(1<<3)));
+                    vf20 = _mm256_add_ps(vf20, _mm256_loadu_ps(o+i+(2<<3)));
+                    vf30 = _mm256_add_ps(vf30, _mm256_loadu_ps(o+i+(3<<3)));
+                    vf01 = _mm256_add_ps(vf01, _mm256_loadu_ps(o+i+(4<<3)));
+                    vf11 = _mm256_add_ps(vf11, _mm256_loadu_ps(o+i+(5<<3)));
+                    vf21 = _mm256_add_ps(vf21, _mm256_loadu_ps(o+i+(6<<3)));
+                    vf31 = _mm256_add_ps(vf31, _mm256_loadu_ps(o+i+(7<<3)));
                 }
-                _mm256_storeu_ps(o+i+0*8, vf00);
-                _mm256_storeu_ps(o+i+1*8, vf10);
-                _mm256_storeu_ps(o+i+2*8, vf20);
-                _mm256_storeu_ps(o+i+3*8, vf30);
-                _mm256_storeu_ps(o+i+4*8, vf01);
-                _mm256_storeu_ps(o+i+5*8, vf11);
-                _mm256_storeu_ps(o+i+6*8, vf21);
-                _mm256_storeu_ps(o+i+7*8, vf31);
+                _mm256_storeu_ps(o+i+(0<<3), vf00);
+                _mm256_storeu_ps(o+i+(1<<3), vf10);
+                _mm256_storeu_ps(o+i+(2<<3), vf20);
+                _mm256_storeu_ps(o+i+(3<<3), vf30);
+                _mm256_storeu_ps(o+i+(4<<3), vf01);
+                _mm256_storeu_ps(o+i+(5<<3), vf11);
+                _mm256_storeu_ps(o+i+(6<<3), vf21);
+                _mm256_storeu_ps(o+i+(7<<3), vf31);
             }
         #elif defined(__SSE4_2__)
             __m128i vzp {_mm_set1_epi32(zp)};
