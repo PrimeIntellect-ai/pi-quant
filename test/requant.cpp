@@ -44,10 +44,10 @@ using namespace piquant;
         } \
     }
 
-//test_requant(float, uint4_t, nearest, set) TODO
-//test_requant(float, uint4_t, stochastic, set)
-//test_requant(float, uint4_t, nearest, add)
-//test_requant(float, uint4_t, stochastic, add)
+test_requant(float, uint4_t, nearest, set)
+test_requant(float, uint4_t, stochastic, set)
+test_requant(float, uint4_t, nearest, add)
+test_requant(float, uint4_t, stochastic, add)
 test_requant(float, uint8_t, nearest, set)
 test_requant(float, uint8_t, stochastic, set)
 test_requant(float, uint8_t, nearest, add)
