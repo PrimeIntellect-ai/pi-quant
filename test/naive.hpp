@@ -13,16 +13,42 @@
 #include "piquant.hpp"
 #include "../src/piquant_internal.hpp"
 
-inline thread_local std::uint32_t prng {};
+// Xorshift 128 plus PRNG (scalar) used for stochastic rounding.
+// Generates a canonical float ∈ [0, 1) using a 64-bit state.
+struct xs128p_state final {
+   std::uint64_t p1 {};
+   std::uint64_t p2 {};
 
-[[nodiscard]] inline auto xs32_canonical(std::uint32_t& s) noexcept -> float {
-    static constexpr auto bias {static_cast<float>(0x800000)};
-    std::uint32_t y {s};
-    y ^= y<<13;
-    y ^= y>>17;
-    y ^= y<<5;
-    s = y;
-    return (1.f/bias*(static_cast<float>(y>>9) + 0.5f));
+   constexpr xs128p_state(std::uint64_t p1, std::uint64_t p2) noexcept : p1{p1}, p2{p2} {}
+
+   [[nodiscard]] auto operator ()() noexcept -> std::uint64_t {
+       std::uint64_t s1 {p1};
+       std::uint64_t s0 {p2};
+       p1 = s0;
+       s1 ^= s1<<23;
+       p2 = s1^s0^(s1>>18)^(s0>>5);
+       return p2 + s0;
+   }
+
+   [[nodiscard]] auto canonical() noexcept -> float {
+       static constexpr auto bias_scale {1.0f/static_cast<float>(0x800000)};
+       std::uint64_t y {~0u & (*this)()};
+       return (bias_scale*(static_cast<float>(y>>9) + 0.5f));
+   }
+};
+
+static constinit xs128p_state s_sprng {0x123456789abcdef0, 0x0fedcba987654321};
+
+[[nodiscard]] inline auto xs32_canonical() noexcept -> float {
+    return s_sprng.canonical();
+}
+
+template <typename OUT> requires piquant::is_int4<OUT>
+[[nodiscard]] static constexpr auto pack_nibbles(OUT x, OUT y) -> OUT {
+    auto xi {static_cast<std::uint8_t>(x)};
+    auto yi {static_cast<std::uint8_t>(y)};
+    auto pa {static_cast<std::uint8_t>((0xf&xi)<<4|0xf&yi)};
+    return static_cast<OUT>(pa);
 }
 
 template <typename IN, typename OUT, const piquant::round_mode RND> requires requires {
@@ -42,17 +68,23 @@ auto quantize_naive(
             const auto integral {static_cast<std::int64_t>(rnd) + zero_point};
             return static_cast<OUT>(std::clamp<decltype(integral)>(integral, piquant::dtype_limits<OUT>::min, piquant::dtype_limits<OUT>::max));
         }};
-        if constexpr (piquant::is_int4<OUT>)
-            for (std::size_t i {}; i < (x.size()+1)>>1; ++i)
-                o[i] = static_cast<OUT>((static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)]))&15)<<4|static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)+1]))&15);
-        else
-            for (std::int64_t i {}; i < x.size(); ++i)
+        if constexpr (piquant::is_int4<OUT>) {
+            std::int64_t numel_out = (x.size()+1) >> 1;
+            for (std::int64_t i = 0, j = 0; j < numel_out; ++j, i += 2) {
+                IN a = x[i];
+                IN b = i+1 < x.size() ? x[i+1] : x[i];
+                o[j] = pack_nibbles(Q(a), Q(b));
+            }
+        } else {
+            for (std::int64_t i {}; i < x.size(); ++i) {
                 o[i] = Q(x[i]);
+            }
+        }
     } else {
         const auto Q{[&](const IN x) noexcept -> OUT {
             double rnd {x * inv_scale};
             const double dec {std::abs(rnd - std::trunc(rnd))};
-            const double xi {xs32_canonical(prng)};
+            const double xi {xs32_canonical()};
             double adj {xi < dec ? 1.0f : 0.0f};
             if (rnd < 0.0f) adj = -1.0f * adj;
             rnd = std::trunc(rnd) + adj;

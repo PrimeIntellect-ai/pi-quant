@@ -644,12 +644,17 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         const auto* PIQUANT_RESTRICT x {static_cast<const IN*>(in)};
         auto* PIQUANT_RESTRICT o {static_cast<OUT*>(out)};
         double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
-        if constexpr (is_int4<OUT>) numel = (numel+1)>>1;
-        for (std::int64_t i {}; i < numel; ++i)
-            if constexpr (is_int4<OUT>)
-                o[i] = quant_step<RND, IN, OUT>(inv_scale, zp, x[i], x[i+1]);
-            else
+        if constexpr (is_int4<OUT>) {
+            std::int64_t numel_out = (numel+1) >> 1;
+            for (std::int64_t i = 0, j = 0; j < numel_out; ++j, i += 2) {
+                IN a = x[i];
+                IN b = i+1 < numel ? x[i+1] : x[i];
+                o[j] = quant_step<RND, IN, OUT>(inv_scale, zp, a, b);
+            }
+        } else {
+            for (std::int64_t i = 0; i < numel; ++i)
                 o[i] = quant_step<RND, IN, OUT>(inv_scale, zp, x[i]);
+        }
     }
 
     template <typename IN, typename OUT>

@@ -17,8 +17,7 @@ using namespace piquant;
 
 #define test_dequant(ti, to, rnd, reduce) \
     TEST(dequantize, dequantize_##ti##_to_##to##_##rnd##_##reduce) { \
-        std::random_device rd {}; \
-        std::mt19937 gen {rd()}; \
+        std::mt19937 gen {0x9032002}; \
         std::uniform_real_distribution<ti> dist {-1.0, 1.0}; \
         \
         for (std::size_t n {}; n < iters; ++n) { \

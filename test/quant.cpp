@@ -24,8 +24,7 @@ template <const std::uint8_t IDX, typename T>
 
 #define test_quant(ti, to, rnd) \
     TEST(quantize, quantize_##ti##_to_##to##_##rnd) { \
-        std::random_device rd {}; \
-        std::mt19937 gen {rd()}; \
+        std::mt19937 gen {0x9032002}; \
         std::uniform_real_distribution<ti> dist {-1.0, 1.0}; \
         \
         for (std::size_t n {}; n < iters; ++n) { \
