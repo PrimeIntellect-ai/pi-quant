@@ -271,15 +271,15 @@ namespace piquant {
         piquant_assert(dti.flags & dtype_flags::is_quant, "input dtype must be a quantized type");
         piquant_assert(!(dto.flags & dtype_flags::is_quant), "output dtype must be a dequantized type");
         if (dti.bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
-            piquant_assert(in.size()/(dti.bit_size>>3) == (out.size()/(dto.bit_size>>3)+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
+            piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
         } else {
-            piquant_assert(in.size()/(dti.bit_size>>3) == out.size()/(dto.bit_size>>3), "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
+            piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
         }
         quant_descriptor info {
             .type = command_type::dequant,
             .in = in.data(),
             .out = out.data(),
-            .numel = static_cast<std::int64_t>(in.size()/(dti.bit_size>>3)),
+            .numel = static_cast<std::int64_t>(in.size()/(dti.stride)),
             .scale = scale,
             .zero_point = zero_point,
             .dt_in = dtype_in,
@@ -323,7 +323,7 @@ namespace piquant {
         piquant_assert(width > 0 && width <= 64, "invalid width %zu for type %s", width, dtype_info_of(dt).name.data());
         std::uint64_t max {width == 64 ? std::numeric_limits<std::uint64_t>::max() : std::uint64_t{1} << width};
         --max;
-        if (dtype_info_of(dt).flags & dtype_flags::is_signed) max >>= 1;
+        if (dt == dtype::uint64 || dtype_info_of(dt).flags & dtype_flags::is_signed) max >>= 1;
         return static_cast<std::int64_t>(max);
     }
 
