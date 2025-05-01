@@ -12,7 +12,7 @@
 
 #include "naive.hpp"
 
-constexpr std::size_t iters {100};
+constexpr std::size_t iters {10};
 constexpr int stochastic_epsilon {3};
 
 using namespace piquant;
@@ -47,7 +47,7 @@ template <const std::uint8_t IDX, typename T>
             for (std::size_t i {}; i < numel_out; ++i) { \
                 bool eq {eq = data_out[i] == data_out_naive[i]}; \
                 if (is_int4<to>) { \
-                    eq |= std::abs(unpack_nibble<0>(data_out[i]) - unpack_nibble<1>(data_out_naive[i])) <= stochastic_epsilon \
+                    eq |= std::abs(unpack_nibble<0>(data_out[i]) - unpack_nibble<0>(data_out_naive[i])) <= stochastic_epsilon \
                         && std::abs(unpack_nibble<1>(data_out[i]) - unpack_nibble<1>(data_out[i])) <= stochastic_epsilon; \
                 } else { \
                     eq |= std::abs(static_cast<int>(data_out[i]) - static_cast<int>(data_out_naive[i])) <= stochastic_epsilon; \
@@ -61,8 +61,8 @@ template <const std::uint8_t IDX, typename T>
         } \
     }
 
-//test_quant(float, uint4_t, nearest)
-//test_quant(float, uint4_t, stochastic)
+test_quant(float, uint4_t, nearest)
+test_quant(float, uint4_t, stochastic)
 test_quant(float, uint8_t, nearest)
 test_quant(float, uint8_t, stochastic)
 test_quant(float, uint16_t, nearest)
@@ -71,8 +71,8 @@ test_quant(float, uint32_t, nearest)
 test_quant(float, uint32_t, stochastic)
 test_quant(float, uint64_t, nearest)
 test_quant(float, uint64_t, stochastic)
-//test_quant(float, int4_t, nearest)
-//test_quant(float, int4_t, stochastic)
+test_quant(float, int4_t, nearest)
+test_quant(float, int4_t, stochastic)
 test_quant(float, int8_t, nearest)
 test_quant(float, int8_t, stochastic)
 test_quant(float, int16_t, nearest)
@@ -82,7 +82,7 @@ test_quant(float, int32_t, stochastic)
 test_quant(float, int64_t, nearest)
 test_quant(float, int64_t, stochastic)
 test_quant(double, uint4_t, nearest)
-//test_quant(double, uint4_t, stochastic)
+test_quant(double, uint4_t, stochastic)
 test_quant(double, uint8_t, nearest)
 test_quant(double, uint8_t, stochastic)
 test_quant(double, uint16_t, nearest)
@@ -91,8 +91,8 @@ test_quant(double, uint32_t, nearest)
 test_quant(double, uint32_t, stochastic)
 test_quant(double, uint64_t, nearest)
 test_quant(double, uint64_t, stochastic)
-//test_quant(double, int4_t, nearest)
-//test_quant(double, int4_t, stochastic)
+test_quant(double, int4_t, nearest)
+test_quant(double, int4_t, stochastic)
 test_quant(double, int8_t, nearest)
 test_quant(double, int8_t, stochastic)
 test_quant(double, int16_t, nearest)

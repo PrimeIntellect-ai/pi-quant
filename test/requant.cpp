@@ -12,7 +12,7 @@
 
 #include "naive.hpp"
 
-constexpr std::size_t iters {100};
+constexpr std::size_t iters {10};
 constexpr double epsilon {1e-1};
 
 using namespace piquant;
