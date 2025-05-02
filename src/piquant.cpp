@@ -241,13 +241,13 @@ namespace piquant {
         if (dto.bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
             piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
         } else {
-            piquant_assert(in.size()/(dti.bit_size>>3) == out.size()/(dto.bit_size>>3), "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
+            piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
         }
         quant_descriptor info {
             .type = command_type::quant,
             .in = in.data(),
             .out = out.data(),
-            .numel = static_cast<std::int64_t>(in.size()/(dti.bit_size>>3)),
+            .numel = static_cast<std::int64_t>(in.size()/dti.stride),
             .scale = scale,
             .zero_point = zero_point,
             .dt_in = dtype_in,
@@ -307,7 +307,7 @@ namespace piquant {
             .type = command_type::quant_dequant,
             .in = in.data(),
             .out = out.data(),
-            .numel = static_cast<std::int64_t>(in.size()/(dti.bit_size>>3)),
+            .numel = static_cast<std::int64_t>(in.size()/dti.stride),
             .scale = scale,
             .zero_point = zero_point,
             .dt_in = dtype_in_out,

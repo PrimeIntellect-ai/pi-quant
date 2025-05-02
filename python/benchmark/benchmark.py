@@ -4,6 +4,8 @@ import timeit
 from piquant import QuantDtype
 
 os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Force CPU usage
+os.environ['OMP_NUM_THREADS'] = str(64)
+os.environ['MKL_NUM_THREADS'] = str(64)
 
 import torch
 from torch.ao.quantization.fx._decomposed import quantize_per_tensor
