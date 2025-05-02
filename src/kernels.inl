@@ -164,36 +164,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     template <typename OUT> requires is_int4<OUT>
     [[nodiscard]] static constexpr auto PIQUANT_AINLINE pack_nibbles(OUT x, OUT y) -> OUT {
-        auto xi {static_cast<std::uint8_t>(x)};
-        auto yi {static_cast<std::uint8_t>(y)};
-        auto pa {static_cast<std::uint8_t>((0xf&xi)<<4|0xf&yi)};
-        return static_cast<OUT>(pa);
-    }
-
-    static auto PIQUANT_HOT quant_f32_to_uint4_nearest(
-        const float* PIQUANT_RESTRICT x,
-        uint4_t* PIQUANT_RESTRICT o,
-        std::int64_t numel,
-        float scale,
-        std::int32_t zp
-    ) noexcept -> void {
-        scale = 1.0f / scale; /* We multiply by reciprocal */
-        std::int64_t i {};
-        #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
-
-        #elif defined(__AVX2__)
-
-        #elif defined(__SSE4_2__)
-
-        #elif defined(__aarch64__) && defined(__ARM_NEON__)
-
-        #endif
-        numel = (numel+1)>>1;
-        for (; i < numel; ++i) {
-            auto x1 {static_cast<uint4_t>(std::clamp(static_cast<std::int32_t>(std::round(x[i]*scale)) + zp, 0, 0xf))};
-            auto x2 {static_cast<uint4_t>(std::clamp(static_cast<std::int32_t>(std::round(x[i+1]*scale)) + zp, 0, 0xf))};
-            o[i] = pack_nibbles(x1, x2);
-        }
+        return static_cast<OUT>(static_cast<std::uint8_t>((0xF & static_cast<std::uint8_t>(x)) | ((0xF & static_cast<std::uint8_t>(y)) << 4)));
     }
 
     static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
@@ -637,18 +608,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         if constexpr (std::is_same_v<IN, float> && std::is_same_v<OUT, std::uint8_t> && RND == round_mode::nearest) {
             quant_f32_to_uint8_nearest(static_cast<const float*>(in), static_cast<std::uint8_t*>(out), numel, scale, zp);
             return;
-        } else if constexpr (std::is_same_v<IN, float> && std::is_same_v<OUT, uint4_t> && RND == round_mode::nearest) {
-            quant_f32_to_uint4_nearest(static_cast<const float*>(in), static_cast<uint4_t*>(out), numel, scale, zp);
-            return;
         }
         const auto* PIQUANT_RESTRICT x {static_cast<const IN*>(in)};
         auto* PIQUANT_RESTRICT o {static_cast<OUT*>(out)};
         double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
         if constexpr (is_int4<OUT>) {
-            std::int64_t numel_out = (numel+1) >> 1;
-            for (std::int64_t i = 0, j = 0; j < numel_out; ++j, i += 2) {
-                IN a = x[i];
-                IN b = i+1 < numel ? x[i+1] : x[i];
+            std::int64_t numel_out {(numel+1)>>1};
+            for (std::int64_t i{}, j{}; j < numel_out; ++j, i += 2) {
+                IN a {x[i]};
+                IN b {i+1 < numel ? x[i+1] : x[i]};
                 o[j] = quant_step<RND, IN, OUT>(inv_scale, zp, a, b);
             }
         } else {
@@ -683,6 +651,32 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 dequant_uint8_to_f32<true>(static_cast<const std::uint8_t*>(in), static_cast<float*>(out), numel, static_cast<float>(scale), static_cast<std::int32_t>(zp));
                 return;
             }
+        } else if constexpr (is_int4<IN>) {
+            std::int64_t numel_packed {(numel+1)>>1};
+            constexpr auto unpack {[](std::uint8_t nib) noexcept -> std::int8_t {
+                if constexpr (std::is_same_v<IN, int4_t>) { // 4-bit sign extension
+                    return nib & 0x8 ? static_cast<std::int8_t>(nib | 0xF0) : static_cast<std::int8_t>(nib);
+                } else {
+                    return static_cast<std::int8_t>(nib);
+                }
+            }};
+            for (std::int64_t j{}, i{}; j < numel_packed; ++j) {
+                std::uint8_t byte {static_cast<std::uint8_t>(x[j])};
+                std::int8_t qa {unpack(byte&0xF)};
+                std::int8_t qb {unpack(byte>>4)};
+                if constexpr (RDO == reduce_op::set) {
+                    o[i++] = dequant_step<std::int8_t, OUT>(scale, zp, qa);
+                    if (i < numel)
+                        o[i++] = dequant_step<std::int8_t, OUT>(scale, zp, qb);
+                } else if constexpr (RDO == reduce_op::add) {
+                    o[i++] += dequant_step<std::int8_t, OUT>(scale, zp, qa);
+                    if (i < numel)
+                        o[i++] += dequant_step<std::int8_t, OUT>(scale, zp, qb);
+                } else {
+                    static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
+                }
+            }
+            return;
         }
         if constexpr (RDO == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
@@ -690,8 +684,9 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         } else if constexpr (RDO == reduce_op::add) {
             for (std::int64_t i {}; i < numel; ++i)
                 o[i] += dequant_step<IN, OUT>(scale, zp, x[i]);
-        } else
-            panic("Invalid reduce operation");
+        } else {
+            static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
+        }
     }
 
     template <typename IN, typename QUANT, const round_mode RND, const reduce_op RDO>
