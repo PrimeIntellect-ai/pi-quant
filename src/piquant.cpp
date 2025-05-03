@@ -151,7 +151,7 @@ namespace piquant {
     }
 
     context::pimpl::pimpl(const std::size_t num_threads) : num_threads(num_threads),
-        m_pool{1, 64} { // TODO: use num_threads
+        m_pool{static_cast<int>(num_threads), 64} {
         registry = install_quant_generic();
         m_pool.startup();
         #ifdef __x86_64__
