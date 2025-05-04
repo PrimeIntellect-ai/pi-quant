@@ -56,8 +56,10 @@ endif ()
 target_compile_options(piquant PRIVATE -fomit-frame-pointer -fno-rtti)
 target_include_directories(piquant PUBLIC include)
 
-# add threadpark library
-add_subdirectory(third_party)
+# add threadpool library
+if (NOT TARGET threadpool)
+    add_subdirectory(extern/threadpool)
+endif()
 
 target_link_libraries(piquant PUBLIC threadpool)
 
