@@ -168,7 +168,7 @@ namespace piquant {
 
     auto context::pimpl::operator()(const quant_descriptor& desc) -> void {
         const size_t num_threads {this->num_threads};
-        pi::threadpool::MultiTaskResult jobs_future = m_pool.scheduleSequence<void>(0u, num_threads, [this, &desc, num_threads](const std::size_t ti) {
+        const pi::threadpool::MultiTaskResult jobs_future = m_pool.scheduleSequence<void>(0u, num_threads, [this, &desc, num_threads](const std::size_t ti) {
             partition pl {
                 .ti = static_cast<std::int64_t>(ti),
                 .tc = static_cast<std::int64_t>(num_threads)
