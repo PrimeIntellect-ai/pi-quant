@@ -49,7 +49,7 @@ namespace piquant {
     static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::num_) <= 0xff);
 
     enum class uint4_t : std::uint8_t {};
-    enum class int4_t : std::uint8_t {};
+    enum class int4_t : std::int8_t {};
 
     struct dtype_flags final {
         enum $ {

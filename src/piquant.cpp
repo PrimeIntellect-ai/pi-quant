@@ -201,7 +201,7 @@ namespace piquant {
         double mean {sum / fnumel};
         double variance {(sum_sq - sum*sum / fnumel) / (fnumel-1.0)};
         double stddev {std::sqrt(variance)};
-        double scale {static_cast<float>(stddev_scale*stddev / static_cast<float>(type_max))};
+        double scale {stddev_scale*stddev / static_cast<double>(type_max)};
         if (scale == 0.0) [[unlikely]] {
             return {1.0f, (type_max+1)>>1};
         }
