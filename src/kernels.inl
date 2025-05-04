@@ -712,14 +712,13 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     }
 
     template <typename T> requires std::is_floating_point_v<T>
-    [[nodiscard]] auto compute_quant_config_from_data(const T* p, std::int64_t numel) -> std::array<T, 2> {
-        if (!numel) [[unlikely]] return {0.0, 0.0};
+    [[nodiscard]] auto compute_quant_config_from_data(std::span<const T> x) -> std::array<T, 2> {
+        if (x.empty()) [[unlikely]] return {0.0, 0.0};
         T sum {};
         T sum_sq {};
-        for (std::int64_t i {}; i < numel; ++i) {
-            T x {p[i]};
-            sum += x;
-            sum_sq += x*x;
+        for (T v : x) {
+            sum += v;
+            sum_sq += v*v;
         }
         return {sum, sum_sq};
     }
@@ -740,8 +739,9 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     #endif
 
     template <>
-    [[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel) -> std::array<float, 2> {
-        if (!numel) [[unlikely]] return {0.0f, 0.0};
+    [[nodiscard]] auto compute_quant_config_from_data(std::span<const float> x) -> std::array<float, 2> {
+        if (x.empty()) [[unlikely]] return {0.0f, 0.0};
+        const auto* p {x.data()};
         float sum {};
         float sum_sq {};
         std::int64_t i {};
@@ -858,7 +858,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             float32x4_t vsum_sq6 {vdupq_n_f32(0.0f)};
             float32x4_t vsum_sq7 {vdupq_n_f32(0.0f)};
             float32x4_t vsum_sq8 {vdupq_n_f32(0.0f)};
-            for (; i+31 < numel; i += 32) {
+            for (; i+31 < x.size(); i += 32) {
                 float32x4_t v1 {vld1q_f32(p+i+(0<<2))};
                 float32x4_t v2 {vld1q_f32(p+i+(1<<2))};
                 float32x4_t v3 {vld1q_f32(p+i+(2<<2))};
@@ -889,20 +889,20 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             sum = vaddvq_f32(vsum_total);
             sum_sq = vaddvq_f32(vsum_sq_total);
         #endif
-        for (; i < numel; ++i) {
-            float x {p[i]};
-            sum += x;
-            sum_sq += x*x;
+        for (; i < x.size(); ++i) {
+            float v {p[i]};
+            sum += v;
+            sum_sq += v*v;
         }
         return {sum, sum_sq};
     }
 
     static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> x) noexcept -> std::array<float, 2> {
-        return compute_quant_config_from_data(x.data(), static_cast<std::int64_t>(x.size()));
+        return compute_quant_config_from_data(x);
     }
 
     static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> x) noexcept -> std::array<double, 2> {
-        return compute_quant_config_from_data(x.data(), static_cast<std::int64_t>(x.size()));
+        return compute_quant_config_from_data(x);
     }
 };
 
