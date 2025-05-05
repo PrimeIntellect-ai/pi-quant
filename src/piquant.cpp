@@ -333,7 +333,9 @@ namespace piquant {
         piquant_assert(width > 0 && width <= 64, "invalid width %zu for type %s", width, dtype_info_of(dt).name.data());
         std::uint64_t max {width == 64 ? std::numeric_limits<std::uint64_t>::max() : std::uint64_t{1} << width};
         --max;
-        if (dt == dtype::uint64 || dtype_info_of(dt).flags & dtype_flags::is_signed) max >>= 1;
+        if (dt == dtype::uint64 || (dtype_info_of(dt).flags & dtype_flags::is_signed))
+            max >>= 1;
+        piquant_assert2(max <= std::numeric_limits<std::int64_t>::max());
         return static_cast<std::int64_t>(max);
     }
 
