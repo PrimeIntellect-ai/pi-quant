@@ -665,11 +665,11 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 std::int8_t qb {unpack(byte >> 4)};
                 if constexpr (RDO == reduce_op::set) {
                     o[i++] = dequant_step<std::int8_t, OUT>(scale, zp, qa);
-                    if (i < numel)
+                    if (i+1 < numel)
                         o[i++] = dequant_step<std::int8_t, OUT>(scale, zp, qb);
                 } else if constexpr (RDO == reduce_op::add) {
                     o[i++] += dequant_step<std::int8_t, OUT>(scale, zp, qa);
-                    if (i < numel)
+                    if (i+1 < numel)
                         o[i++] += dequant_step<std::int8_t, OUT>(scale, zp, qb);
                 } else {
                     static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
