@@ -45,10 +45,10 @@ static constinit xs128p_state s_sprng {0x123456789abcdef0, 0x0fedcba987654321};
 
 template <typename OUT> requires piquant::is_int4<OUT>
 [[nodiscard]] static constexpr auto pack_nibbles(OUT x, OUT y) -> OUT {
-    auto xi {static_cast<std::uint8_t>(x)};
-    auto yi {static_cast<std::uint8_t>(y)};
+    auto xi {x.u8};
+    auto yi {y.u8};
     auto pa {static_cast<std::uint8_t>((0xf&xi)<<4|0xf&yi)};
-    return static_cast<OUT>(pa);
+    return OUT{pa};
 }
 
 template <typename IN, typename OUT, const piquant::round_mode RND> requires requires {
@@ -93,7 +93,7 @@ auto quantize_naive(
         }};
         if constexpr (piquant::is_int4<OUT>)
             for (std::size_t i {}; i < (x.size()+1)>>1; ++i)
-                o[i] = static_cast<OUT>((static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)]))&15)<<4|static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)+1]))&15);
+                o[i] = static_cast<OUT>(((Q(x[(i<<1)]).u8)&15)<<4|(Q(x[(i<<1)+1]).u8)&15);
         else
             for (std::int64_t i {}; i < x.size(); ++i)
                 o[i] = Q(x[i]);

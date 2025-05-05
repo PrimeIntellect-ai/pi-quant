@@ -580,18 +580,13 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         }
     }
 
-    template <typename OUT> requires is_int4<OUT>
-    [[nodiscard]] static constexpr auto PIQUANT_AINLINE pack_nibbles(OUT x, OUT y) noexcept -> OUT {
-        auto xu8 {static_cast<std::underlying_type_t<OUT>>(x)};
-        auto yu8 {static_cast<std::underlying_type_t<OUT>>(y)};
-        return static_cast<OUT>((xu8 & 15) | ((yu8 & 15) << 4));
-    }
-
     template <const round_mode RND, typename IN, typename OUT> requires (std::is_floating_point_v<IN> && is_int4<OUT>)
     [[nodiscard]] static inline auto PIQUANT_AINLINE quant_step_packed(IN a, IN b, double inv_scale, std::int64_t zp) noexcept -> OUT {
         auto pa {quant_step_scalar<RND, IN, OUT>(a, inv_scale, zp)};
         auto pb {quant_step_scalar<RND, IN, OUT>(b, inv_scale, zp)};
-        return pack_nibbles(pa, pb);
+        OUT r{0};
+        r.pack(pa.u8, pb.u8);
+        return r;
     }
 
     template <typename IN, typename OUT, const round_mode RND>
@@ -624,10 +619,12 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         }
     }
 
-    template <typename IN, typename OUT>
-          requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
-    static inline auto PIQUANT_AINLINE dequant_step(double scale, std::int64_t zp, const IN x) noexcept -> OUT {
-        return static_cast<OUT>(static_cast<std::int64_t>(x) - zp)*scale;
+    template <typename IN, typename OUT> requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
+    [[nodiscard]] static inline auto PIQUANT_AINLINE dequant_step(double scale, std::int64_t zp, const IN x) noexcept -> OUT {
+        if constexpr (is_int4<IN>)
+            return static_cast<OUT>(static_cast<std::int64_t>(x.u8) - zp)*scale;
+        else
+            return static_cast<OUT>(static_cast<std::int64_t>(x) - zp)*scale;
     }
 
     template <typename IN, typename OUT, const reduce_op RDO>
@@ -650,19 +647,11 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 dequant_uint8_to_f32<true>(static_cast<const std::uint8_t*>(in), static_cast<float*>(out), numel, static_cast<float>(scale), static_cast<std::int32_t>(zp));
                 return;
             }
-        } else if constexpr (is_int4<IN>) {
+        }
+        if constexpr (is_int4<IN>) {
             std::int64_t numel_packed {(numel+1)>>1};
-            constexpr auto unpack {[](std::uint8_t nib) noexcept -> std::int8_t {
-                if constexpr (std::is_same_v<IN, int4_t>) { // 4-bit sign extension
-                    return nib & 0x8 ? static_cast<std::int8_t>(nib | 0xF0) : static_cast<std::int8_t>(nib);
-                } else {
-                    return static_cast<std::int8_t>(nib);
-                }
-            }};
             for (std::int64_t j{}, i{}; j < numel_packed; ++j) {
-                std::uint8_t byte {static_cast<std::uint8_t>(x[j])};
-                std::int8_t qa {unpack(byte & 0xF)};
-                std::int8_t qb {unpack(byte >> 4)};
+                auto [qa, qb] {x[j].unpack()};
                 if constexpr (RDO == reduce_op::set) {
                     o[i++] = dequant_step<std::int8_t, OUT>(scale, zp, qa);
                     if (i+1 < numel)

@@ -48,8 +48,41 @@ namespace piquant {
     };
     static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::num_) <= 0xff);
 
-    enum class uint4_t : std::uint8_t {};
-    enum class int4_t : std::int8_t {};
+    struct uint4_t final {
+        std::uint8_t u8;
+        constexpr uint4_t() noexcept : u8 {} {}
+        constexpr uint4_t(int u8) noexcept : u8 {static_cast<std::uint8_t>(u8)} {}
+        constexpr auto operator == (std::uint8_t y) const noexcept -> bool { return this->u8 == y; }
+        constexpr auto operator != (std::uint8_t y) const noexcept -> bool { return !(*this == y); }
+        constexpr auto operator == (uint4_t y) const noexcept -> bool { return this->u8 == y.u8; }
+        constexpr auto operator != (uint4_t y) const noexcept -> bool { return !(*this == y); }
+        constexpr auto pack(std::uint8_t lo, std::uint8_t hi) noexcept -> void {
+            u8 = static_cast<std::uint8_t>((lo & 15) | ((hi & 15) << 4));
+        }
+        [[nodiscard]] constexpr auto unpack() const noexcept -> std::array<std::uint8_t, 2> {
+            return {static_cast<std::uint8_t>(u8 & 15), static_cast<std::uint8_t>(u8 >> 4)};
+        }
+    };
+
+    struct int4_t final {
+        std::int8_t u8;
+        constexpr int4_t() noexcept : u8 {} {}
+        constexpr int4_t(int u8) noexcept : u8 {static_cast<std::int8_t>(u8)} {}
+        constexpr auto operator == (std::int8_t u8) const noexcept -> bool { return this->u8 == u8; }
+        constexpr auto operator != (std::int8_t y) const noexcept -> bool { return !(*this == y); }
+        constexpr auto operator == (int4_t y) const noexcept -> bool { return this->u8 == y.u8; }
+        constexpr auto operator != (int4_t y) const noexcept -> bool { return !(*this == y); }
+        constexpr auto pack(std::int8_t lo, std::int8_t hi) noexcept -> void {
+            u8 = static_cast<std::int8_t>((lo & 15) | ((hi & 15) << 4));
+        }
+        [[nodiscard]] constexpr auto unpack() const noexcept -> std::array<std::int8_t, 2> {
+            constexpr auto snex4 {[](std::int8_t x) noexcept -> std::int8_t { return x & 0x8 ? static_cast<std::int8_t>(x|0xF0) : x; }};
+            return {(snex4(u8 & 15)), (snex4(u8 >> 4))};
+        }
+    };
+
+    static_assert(sizeof(uint4_t) == 1);
+    static_assert(sizeof(int4_t) == 1);
 
     struct dtype_flags final {
         enum $ {
