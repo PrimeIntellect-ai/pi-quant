@@ -31,7 +31,7 @@ using namespace piquant;
         data_in.resize(numel); \
         std::ranges::generate(data_in, [&] { return dist(gen); }); \
         piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())}; \
-        auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<to>::ty)}; \
+        auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<to>::type_code)}; \
         std::vector<ti> requantized {}; \
         requantized.resize(numel); \
         ti prev {piquant::reduce_op::reduce == piquant::reduce_op::add ? dist(gen) : 0.0f}; \

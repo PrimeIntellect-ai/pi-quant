@@ -145,7 +145,7 @@ TEST(quantize, requantize_float_to_uint8_identity_data) {
     quantized.resize(numel_out);
     std::ranges::fill(data_in, 42.0f);
     context ctx {std::max(1u, std::thread::hardware_concurrency())};
-    auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<std::uint8_t>::ty)};
+    auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<std::uint8_t>::type_code)};
     ctx.quantize_generic<float, std::uint8_t>(data_in, quantized, scale, zero_point, round_mode::nearest);
     std::vector<float> dequantized {};
     dequantized.resize(numel);
@@ -166,7 +166,7 @@ TEST(quantize, requantize_double_to_uint8_identity_data) {
     quantized.resize(numel_out);
     std::ranges::fill(data_in, 42.0);
     context ctx {std::max(1u, std::thread::hardware_concurrency())};
-    auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<std::uint8_t>::ty)};
+    auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<std::uint8_t>::type_code)};
     ctx.quantize_generic<double, std::uint8_t>(data_in, quantized, scale, zero_point, round_mode::nearest);
     std::vector<double> dequantized {};
     dequantized.resize(numel);

@@ -142,18 +142,18 @@ namespace piquant {
     template<typename T> concept is_dtype = std::is_arithmetic_v<T> || is_int4<T>;
     template<typename T> requires is_dtype<T> struct dtype_traits final {};
 
-    template<> struct dtype_traits<uint4_t> { static constexpr dtype ty = dtype::uint4; };
-    template<> struct dtype_traits<int4_t> { static constexpr dtype ty = dtype::int4; };
-    template<> struct dtype_traits<std::int8_t> { static constexpr dtype ty = dtype::int8; };
-    template<> struct dtype_traits<std::uint8_t> { static constexpr dtype ty = dtype::uint8; };
-    template<> struct dtype_traits<std::int16_t> { static constexpr dtype ty = dtype::int16; };
-    template<> struct dtype_traits<std::uint16_t> { static constexpr dtype ty = dtype::uint16; };
-    template<> struct dtype_traits<std::int32_t> { static constexpr dtype ty = dtype::int32; };
-    template<> struct dtype_traits<std::uint32_t> { static constexpr dtype ty = dtype::uint32; };
-    template<> struct dtype_traits<std::int64_t> { static constexpr dtype ty = dtype::int64; };
-    template<> struct dtype_traits<std::uint64_t> { static constexpr dtype ty = dtype::uint64; };
-    template<> struct dtype_traits<float> { static constexpr dtype ty = dtype::f32; };
-    template<> struct dtype_traits<double> { static constexpr dtype ty = dtype::f64; };
+    template<> struct dtype_traits<uint4_t> { static constexpr dtype type_code = dtype::uint4; };
+    template<> struct dtype_traits<int4_t> { static constexpr dtype type_code = dtype::int4; };
+    template<> struct dtype_traits<std::int8_t> { static constexpr dtype type_code = dtype::int8; };
+    template<> struct dtype_traits<std::uint8_t> { static constexpr dtype type_code = dtype::uint8; };
+    template<> struct dtype_traits<std::int16_t> { static constexpr dtype type_code = dtype::int16; };
+    template<> struct dtype_traits<std::uint16_t> { static constexpr dtype type_code = dtype::uint16; };
+    template<> struct dtype_traits<std::int32_t> { static constexpr dtype type_code = dtype::int32; };
+    template<> struct dtype_traits<std::uint32_t> { static constexpr dtype type_code = dtype::uint32; };
+    template<> struct dtype_traits<std::int64_t> { static constexpr dtype type_code = dtype::int64; };
+    template<> struct dtype_traits<std::uint64_t> { static constexpr dtype type_code = dtype::uint64; };
+    template<> struct dtype_traits<float> { static constexpr dtype type_code = dtype::f32; };
+    template<> struct dtype_traits<double> { static constexpr dtype type_code = dtype::f64; };
 
     class QUANT_EXPORT context final {
     public:
@@ -177,8 +177,8 @@ namespace piquant {
         template<typename IN, typename OUT> requires requires {
             requires is_dtype<IN>;
             requires is_dtype<OUT>;
-            dtype_info_of(dtype_traits<IN>::ty).flags & dtype_flags::is_quant;
-            !(dtype_info_of(dtype_traits<OUT>::ty).flags & dtype_flags::is_quant);
+            dtype_info_of(dtype_traits<IN>::type_code).flags & dtype_flags::is_quant;
+            !(dtype_info_of(dtype_traits<OUT>::type_code).flags & dtype_flags::is_quant);
         }
         auto quantize_generic(
             std::span<const IN> in,
@@ -189,9 +189,9 @@ namespace piquant {
         ) -> void {
             quantize(
                 {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
-                dtype_traits<IN>::ty,
+                dtype_traits<IN>::type_code,
                 {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},
-                dtype_traits<OUT>::ty,
+                dtype_traits<OUT>::type_code,
                 scale,
                 zero_point,
                 mode
@@ -211,8 +211,8 @@ namespace piquant {
         template<typename IN, typename OUT> requires requires {
             requires is_dtype<IN>;
             requires is_dtype<OUT>;
-            !(dtype_info_of(dtype_traits<IN>::ty).flags & dtype_flags::is_quant);
-            dtype_info_of(dtype_traits<OUT>::ty).flags & dtype_flags::is_quant;
+            !(dtype_info_of(dtype_traits<IN>::type_code).flags & dtype_flags::is_quant);
+            dtype_info_of(dtype_traits<OUT>::type_code).flags & dtype_flags::is_quant;
         }
         auto dequantize_generic(
             std::span<const IN> in,
@@ -223,9 +223,9 @@ namespace piquant {
         ) -> void {
             dequantize(
                 {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
-                dtype_traits<IN>::ty,
+                dtype_traits<IN>::type_code,
                 {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},
-                dtype_traits<OUT>::ty,
+                dtype_traits<OUT>::type_code,
                 scale,
                 zero_point,
                 op
@@ -245,8 +245,8 @@ namespace piquant {
 
         template<typename INOUT, typename QUANT> requires requires {
             requires is_dtype<INOUT>;
-            !(dtype_info_of(dtype_traits<INOUT>::ty).flags & dtype_flags::is_quant);
-            dtype_info_of(dtype_traits<QUANT>::ty).flags & dtype_flags::is_quant;
+            !(dtype_info_of(dtype_traits<INOUT>::type_code).flags & dtype_flags::is_quant);
+            dtype_info_of(dtype_traits<QUANT>::type_code).flags & dtype_flags::is_quant;
         }
         auto quantize_dequantize_fused_generic(
             std::span<const INOUT> in,
@@ -258,9 +258,9 @@ namespace piquant {
         ) -> void {
             quantize_dequantize_fused(
                 {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
-                dtype_traits<INOUT>::ty,
+                dtype_traits<INOUT>::type_code,
                 {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},
-                dtype_traits<QUANT>::ty,
+                dtype_traits<QUANT>::type_code,
                 scale,
                 zero_point,
                 mode,
