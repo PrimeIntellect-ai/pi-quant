@@ -16,7 +16,7 @@ constexpr double epsilon {1e-1};
 using namespace piquant;
 
 TEST(dequantize, uint4_packing) {
-    context ctx {10};
+    context ctx {1};
 
     std::vector<float> input {-1.0f, 1.0f, 2.0f, 3.0f, 0.5f};
 

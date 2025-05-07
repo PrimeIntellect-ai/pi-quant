@@ -128,10 +128,7 @@ namespace piquant {
                 if (pair_a >= pair_b) [[unlikely]] return {};
                 std::int64_t elem_a {pair_a<<1};
                 std::int64_t elem_b {std::min(pair_b<<1, cmd.numel)};
-                if (cmd.type == command_type::dequant)
-                    return {{pair_a, elem_a, pair_b - pair_a}};
-                else
-                    return {{elem_a, pair_a, elem_b - elem_a}};
+                return {{elem_a, pair_a, elem_b - elem_a}};
             }
             std::int64_t chunk {(cmd.numel + tc - 1)/tc};
             std::int64_t ra {chunk*ti};
