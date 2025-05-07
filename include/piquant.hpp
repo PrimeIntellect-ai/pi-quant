@@ -17,8 +17,11 @@
 #endif
 
 namespace piquant {
-    // This determines the amount of standard deviations/sigmas (left and right of 0) to use for the quantization range.
+    // (All types except u/int4) Amount of standard deviations/sigmas (left and right of 0) to use for the quantization range
     static constexpr double stddev_scale {12.0};
+
+    // (u/int4 only) Amount of standard deviations/sigmas (left and right of 0) to use for the quantization range
+    static constexpr double stddev_scale_int4 {2.5};
 
     enum class round_mode {
         nearest,

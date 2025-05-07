@@ -6,9 +6,11 @@
 #include "piquant_internal.hpp"
 
 #include <algorithm>
+#include <bitset>
 #include <cmath>
 #include <cstdint>
 #include <numeric>
+#include <sstream>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
@@ -608,10 +610,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
         if constexpr (is_int4<OUT>) {
             std::int64_t numel_out {(numel+1)>>1};
-            for (std::int64_t i{}, j{}; j < numel_out; ++j, i += 2) {
+            for (std::int64_t i{}; i < numel_out; i += 2) {
                 IN a {x[i]};
-                IN b {i+1 < numel ? x[i+1] : x[i]};
-                o[j] = quant_step_packed<RND, IN, OUT>(a, b, inv_scale, zp);
+                IN b {x[i+1]};
+                o[i>>1] = quant_step_packed<RND, IN, OUT>(a, b, inv_scale, zp);
+            }
+            if (numel_out & 1) { // Handle odd numel
+                auto packed = quant_step_packed<RND, IN, OUT>(x[numel-1], 0, inv_scale, zp);
+                packed.u8 &= 15;
+                o[numel_out-1] = packed;
             }
         } else {
             for (std::int64_t i = 0; i < numel; ++i)
@@ -649,20 +656,27 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             }
         }
         if constexpr (is_int4<IN>) {
-            std::int64_t numel_packed {(numel+1)>>1};
-            for (std::int64_t j{}, i{}; j < numel_packed; ++j) {
-                auto [qa, qb] {x[j].unpack()};
+            std::int64_t even_numel {numel & ~std::int64_t{1}};
+            for (std::int64_t i {}; i < even_numel; ++i) {
+                auto [qa, qb]  {x[i].unpack()};
                 if constexpr (RDO == reduce_op::set) {
-                    o[i++] = dequant_step<std::int8_t, OUT>(scale, zp, qa);
-                    if (i+1 < numel)
-                        o[i++] = dequant_step<std::int8_t, OUT>(scale, zp, qb);
+                    o[i<<1] = dequant_step<IN, OUT>(scale, zp, qa);
+                    o[(i<<1)+1] = dequant_step<IN, OUT>(scale, zp, qb);
                 } else if constexpr (RDO == reduce_op::add) {
-                    o[i++] += dequant_step<std::int8_t, OUT>(scale, zp, qa);
-                    if (i+1 < numel)
-                        o[i++] += dequant_step<std::int8_t, OUT>(scale, zp, qb);
-                } else {
+                    o[i<<1] += dequant_step<IN, OUT>(scale, zp, qa);
+                    o[(i<<1)+1] += dequant_step<IN, OUT>(scale, zp, qb);
+                } else
                     static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
-                }
+            }
+            if (numel & 1) { // Handle odd numel
+                auto [qa, qb] {x[numel-1].unpack()};
+                OUT r = dequant_step<IN, OUT>(scale, zp, qa);
+                if constexpr (RDO == reduce_op::set)
+                    o[(numel-1)<<1] = r;
+                else if constexpr (RDO == reduce_op::add)
+                    o[(numel-1)<<1] += r;
+                else
+                    static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
             }
             return;
         }

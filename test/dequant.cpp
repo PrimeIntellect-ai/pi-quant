@@ -16,13 +16,11 @@ constexpr double epsilon {1e-1};
 using namespace piquant;
 
 TEST(dequantize, uint4_packing) {
-    context ctx {std::max(1u, std::thread::hardware_concurrency())};
+    context ctx {10};
 
-    std::vector<float> input {-1.0f, 1.0f, 2.0f, 3.0f};
+    std::vector<float> input {-1.0f, 1.0f, 2.0f, 3.0f, 0.5f};
 
-    auto config {ctx.compute_quant_config_from_data(input, dtype::uint4)};
-    float scale = config.first;
-    int64_t zp = config.second;
+    auto [scale, zp] {ctx.compute_quant_config_from_data(input, dtype::uint4)};
 
     std::vector<uint4_t> quantized {};
     quantized.resize((input.size()+1)/2);
@@ -39,6 +37,14 @@ TEST(dequantize, uint4_packing) {
     std::cout << "OUTPUT"  << std::endl;
     for (auto&& x : dequantized)
         std::cout << x << " ";
+    std::cout << std::endl;
+    std::cout << "PACKED"  << std::endl;
+    for (auto&& x : quantized)
+        std::cout << std::bitset<8>(x.u8) << " ";
+    std::cout << std::endl;
+    std::cout << "UNPACKED"  << std::endl;
+    for (auto&& x : quantized)
+        std::cout << +x.unpack()[0] << "|" << +x.unpack()[1] << " ";
     std::cout << std::endl;
 }
 

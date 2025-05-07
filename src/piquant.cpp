@@ -122,17 +122,16 @@ namespace piquant {
                    (cmd.type == command_type::quant_dequant && packed_output)};
             if (split_by_pairs) { // Subbyte granularity requires special handling to not split packed bit pairs
                 std::int64_t pairs {(cmd.numel+1) >> 1};
-                std::int64_t per_thread {(pairs + tc - 1) / tc};
+                std::int64_t per_thread {(pairs + tc - 1)/tc};
                 std::int64_t pair_a {per_thread * ti};
                 std::int64_t pair_b {std::min(pair_a + per_thread, pairs)};
                 if (pair_a >= pair_b) [[unlikely]] return {};
-                std::int64_t elem_a {pair_a << 1};
-                std::int64_t elem_b {std::min(pair_b << 1, cmd.numel)};
-                if (cmd.type == command_type::dequant) {
+                std::int64_t elem_a {pair_a<<1};
+                std::int64_t elem_b {std::min(pair_b<<1, cmd.numel)};
+                if (cmd.type == command_type::dequant)
                     return {{pair_a, elem_a, pair_b - pair_a}};
-                } else {
+                else
                     return {{elem_a, pair_a, elem_b - elem_a}};
-                }
             }
             std::int64_t chunk {(cmd.numel + tc - 1)/tc};
             std::int64_t ra {chunk*ti};
@@ -140,7 +139,7 @@ namespace piquant {
             if (ra >= rb) [[unlikely]] return {};
             return {{ra, ra, rb-ra}};
         }};
-        const auto dispatch_quant {[&](const std::int64_t oa, const std::int64_t ob, const std::int64_t range, const context::quant_descriptor& cmd) noexcept -> void {
+        const auto dispatch_quant {[&](const std::int64_t oa, const std::int64_t ob, const std::int64_t range, const quant_descriptor& cmd) noexcept -> void {
             auto* const kernel {&registry.quant_kernel};
             piquant_assert2(kernel != nullptr);
             const auto si {dtype_info_of(cmd.dt_in).stride};
@@ -211,7 +210,7 @@ namespace piquant {
         double mean {sum / fnumel};
         double variance {(sum_sq - sum*sum / fnumel) / (fnumel-1.0)};
         double stddev {std::sqrt(variance)};
-        double scale {stddev_scale*stddev / static_cast<double>(type_max)};
+        double scale {(type_max == 15 || type_max == 7 ? stddev_scale_int4 : stddev_scale)*stddev / static_cast<double>(type_max)};
         if (scale == 0.0) [[unlikely]] {
             return {1.0f, (type_max+1)>>1};
         }
