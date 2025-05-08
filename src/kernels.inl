@@ -233,10 +233,10 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
             }
             for (; i+15 < numel; i += 16) {
-                __m128 xf0 {_mm_cvtepi32_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float*>(x+i+(0<<2)))))};
-                __m128 xf1 {_mm_cvtepi32_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float*>(x+i+(1<<2)))))};
-                __m128 xf2 {_mm_cvtepi32_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float*>(x+i+(2<<2)))))};
-                __m128 xf3 {_mm_cvtepi32_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float*>(x+i+(3<<2)))))};
+                __m128 xf0 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float*>(x+i+(0<<2)))))};
+                __m128 xf1 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float*>(x+i+(1<<2)))))};
+                __m128 xf2 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float*>(x+i+(2<<2)))))};
+                __m128 xf3 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float*>(x+i+(3<<2)))))};
                 xf0 = _mm_mul_ps(xf0, vinv_scale);
                 xf1 = _mm_mul_ps(xf1, vinv_scale);
                 xf2 = _mm_mul_ps(xf2, vinv_scale);
