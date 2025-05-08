@@ -11,7 +11,7 @@
 #include <numeric>
 #include <condition_variable>
 
-#include "BS_thread_pool.hpp"
+#include <pithreadpool/threadpool.hpp>
 
 namespace piquant {
     #define decl_quant_kernel_installer_fn(impl) \
@@ -102,7 +102,8 @@ namespace piquant {
         ~pimpl();
 
         kernel_registry registry {};
-        BS::thread_pool<> m_pool {};
+        std::size_t num_threads;
+        pi::threadpool::ThreadPool m_pool;
 
         auto operator ()(const quant_descriptor& desc) -> void;
         auto operator ()(std::span<const float> x, std::int64_t type_max) -> std::pair<float, std::int64_t>;
@@ -155,8 +156,10 @@ namespace piquant {
         }
     }
 
-    context::pimpl::pimpl(std::size_t num_threads) : m_pool{std::max<std::size_t>(1, num_threads)} {
+    context::pimpl::pimpl(const std::size_t num_threads) : num_threads(num_threads),
+        m_pool{static_cast<int>(num_threads), 64} {
         registry = install_quant_generic();
+        m_pool.startup();
         #ifdef __x86_64__
             if (check_avx512f_support()) registry = install_quant_amd64_avx512f();
             else if (check_avx2_support()) registry = install_quant_amd64_avx2();
@@ -166,40 +169,40 @@ namespace piquant {
     }
 
     context::pimpl::~pimpl() {
-        m_pool.wait();
+        m_pool.shutdown();
     }
 
     auto context::pimpl::operator()(const quant_descriptor& desc) -> void {
-        std::size_t num_threads {m_pool.get_thread_count()};
-        BS::multi_future<void> jobs {m_pool.submit_sequence(0u, num_threads, [this, &desc, num_threads](std::size_t ti) {
+        const size_t num_threads {this->num_threads};
+        const pi::threadpool::MultiTaskResult jobs_future = m_pool.scheduleSequence<void>(0u, num_threads, [this, &desc, num_threads](const std::size_t ti) {
             partition pl {
                 .ti = static_cast<std::int64_t>(ti),
                 .tc = static_cast<std::int64_t>(num_threads)
             };
             job_entry(pl, desc);
-        })};
-        jobs.wait();
+        });
+        jobs_future.join();
     }
 
     template <typename T, typename F> requires std::is_floating_point_v<T>
     static auto compute_quant_config(
-        BS::thread_pool<>& pool,
+        pi::threadpool::ThreadPool& pool,
         F&& kernel,
         std::span<const T> x,
         std::int64_t type_max
     ) -> std::pair<float, std::int64_t> {
         const auto* base {x.data()};
-        BS::multi_future<std::array<T, 2>> jobs {pool.submit_blocks(0u, x.size(), [base, &kernel](std::size_t start, std::size_t end) -> std::array<T, 2> {
-            std::int64_t numel {static_cast<std::int64_t>(end) - static_cast<std::int64_t>(start)};
+        pi::threadpool::MultiTaskResult jobs_future = pool.scheduleBlocks<std::array<T, 2>>(0u, x.size(), [base, &kernel](std::size_t start, std::size_t end) -> std::array<T, 2> {
+            std::size_t numel {end - start};
             if (numel <= 0) return {0.0, 0.0};
-            std::span<const T> x {base + start, static_cast<std::size_t>(numel)};
+            std::span<const T> x {base + start, numel};
             return std::invoke(kernel, x);
-        })};
-        jobs.wait();
+        });
+        jobs_future.join();
         double sum {};
         double sum_sq {};
-        for (auto& job : jobs) {
-            auto [s, ss] {job.get()};
+        for (size_t i = 0; i < jobs_future.size(); ++i) {
+            auto [s, ss] {jobs_future.get(i)};
             sum += static_cast<double>(s);
             sum_sq += static_cast<double>(ss);
         }

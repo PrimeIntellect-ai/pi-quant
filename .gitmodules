@@ -1,3 +1,7 @@
 [submodule "test/googletest"]
 	path = test/googletest
 	url = https://github.com/google/googletest
+
+[submodule "third_party/threadpool"]
+	path = third_party/threadpool
+	url = https://github.com/PrimeIntellect-ai/threadpool

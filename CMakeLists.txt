@@ -56,7 +56,12 @@ endif ()
 target_compile_options(piquant PRIVATE -fomit-frame-pointer -fno-rtti)
 target_include_directories(piquant PUBLIC include)
 
-target_include_directories(piquant PRIVATE extern/thread-pool/include)
+# add threadpool library
+if (NOT TARGET threadpool)
+    add_subdirectory(third_party/threadpool)
+endif()
+
+target_link_libraries(piquant PUBLIC threadpool)
 
 # release mode opt
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
