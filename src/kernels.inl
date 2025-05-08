@@ -768,7 +768,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             __m256 vsum_sq6 {_mm256_setzero_ps()};
             __m256 vsum_sq7 {_mm256_setzero_ps()};
             __m256 vsum_sq8 {_mm256_setzero_ps()};
-            for (; i+63 < numel; i += 64) {
+            for (; i+63 < x.size(); i += 64) {
                 __m256 v1 {_mm256_loadu_ps(p+i+8*0)};
                 __m256 v2 {_mm256_loadu_ps(p+i+8*1)};
                 __m256 v3 {_mm256_loadu_ps(p+i+8*2)};
@@ -815,7 +815,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             __m128 vsum_sq6 {_mm_setzero_ps()};
             __m128 vsum_sq7 {_mm_setzero_ps()};
             __m128 vsum_sq8 {_mm_setzero_ps()};
-            for (; i+31 < numel; i += 32) {
+            for (; i+31 < x.size(); i += 32) {
                 __m128 v1 {_mm_loadu_ps(p+i+4*0)};
                 __m128 v2 {_mm_loadu_ps(p+i+4*1)};
                 __m128 v3 {_mm_loadu_ps(p+i+4*2)};
