@@ -114,27 +114,33 @@ namespace piquant {
         const std::int64_t tc {std::max(std::int64_t{1}, pl.tc)};
         const std::int64_t ti {pl.ti};
         const auto partition_row {[&] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
-            if (dtype_info_of(cmd.dt_out).bit_size < 8) {       // Subbyte granularity requires special handling to not split packed bit pairs
-                const std::int64_t pairs {(cmd.numel + 1)>>1};
-                const std::int64_t pair_chunk {(pairs + tc - 1)/tc};
-                const std::int64_t pra {pair_chunk*ti};
-                const std::int64_t prb {std::min(pra + pair_chunk, pairs)};
-                if (pra >= prb) [[unlikely]] return {};
-                const std::int64_t ra {pra<<1};
-                const std::int64_t rb {prb<<1 > cmd.numel ? cmd.numel : prb<<1}; // When numel is odd, the last pair is incomplete
-                return {{ra, pra, rb-ra}};
+            bool packed_input  {dtype_info_of(cmd.dt_in ).bit_size < 8};
+            bool packed_output {dtype_info_of(cmd.dt_out).bit_size < 8};
+            bool split_by_pairs {
+                   (cmd.type == command_type::quant && packed_output) ||
+                   (cmd.type == command_type::dequant && packed_input ) ||
+                   (cmd.type == command_type::quant_dequant && packed_output)};
+            if (split_by_pairs) { // Subbyte granularity requires special handling to not split packed bit pairs
+                std::int64_t pairs {(cmd.numel+1) >> 1};
+                std::int64_t per_thread {(pairs + tc - 1)/tc};
+                std::int64_t pair_a {per_thread * ti};
+                std::int64_t pair_b {std::min(pair_a + per_thread, pairs)};
+                if (pair_a >= pair_b) [[unlikely]] return {};
+                std::int64_t elem_a {pair_a<<1};
+                std::int64_t elem_b {std::min(pair_b<<1, cmd.numel)};
+                return {{elem_a, pair_a, elem_b - elem_a}};
             }
-            const std::int64_t chunk {(cmd.numel + tc - 1)/tc};
-            const std::int64_t ra {chunk*ti};
-            const std::int64_t rb {std::min(ra + chunk, cmd.numel)};
+            std::int64_t chunk {(cmd.numel + tc - 1)/tc};
+            std::int64_t ra {chunk*ti};
+            std::int64_t rb {std::min(ra + chunk, cmd.numel)};
             if (ra >= rb) [[unlikely]] return {};
             return {{ra, ra, rb-ra}};
         }};
-        const auto dispatch_quant {[&](const std::int64_t oa, const std::int64_t ob, const std::int64_t range, const context::quant_descriptor& cmd) noexcept -> void {
+        const auto dispatch_quant {[&](const std::int64_t oa, const std::int64_t ob, const std::int64_t range, const quant_descriptor& cmd) noexcept -> void {
             auto* const kernel {&registry.quant_kernel};
             piquant_assert2(kernel != nullptr);
             const auto si {dtype_info_of(cmd.dt_in).stride};
-            const auto so {cmd.type == context::command_type::quant_dequant ? si : dtype_info_of(cmd.dt_out).stride};
+            const auto so {cmd.type == command_type::quant_dequant ? si : dtype_info_of(cmd.dt_out).stride};
             (*kernel)(
                 cmd.in + si*oa,
                 cmd.out + so*ob,
@@ -201,7 +207,7 @@ namespace piquant {
         double mean {sum / fnumel};
         double variance {(sum_sq - sum*sum / fnumel) / (fnumel-1.0)};
         double stddev {std::sqrt(variance)};
-        double scale {static_cast<float>(stddev_scale*stddev / static_cast<float>(type_max))};
+        double scale {(type_max == 15 || type_max == 7 ? stddev_scale_int4 : stddev_scale)*stddev / static_cast<double>(type_max)};
         if (scale == 0.0) [[unlikely]] {
             return {1.0f, (type_max+1)>>1};
         }
@@ -323,7 +329,9 @@ namespace piquant {
         piquant_assert(width > 0 && width <= 64, "invalid width %zu for type %s", width, dtype_info_of(dt).name.data());
         std::uint64_t max {width == 64 ? std::numeric_limits<std::uint64_t>::max() : std::uint64_t{1} << width};
         --max;
-        if (dt == dtype::uint64 || dtype_info_of(dt).flags & dtype_flags::is_signed) max >>= 1;
+        if (dt == dtype::uint64 || (dtype_info_of(dt).flags & dtype_flags::is_signed))
+            max >>= 1;
+        piquant_assert2(max <= std::numeric_limits<std::int64_t>::max());
         return static_cast<std::int64_t>(max);
     }
 

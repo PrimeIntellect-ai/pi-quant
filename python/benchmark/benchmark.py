@@ -1,11 +1,12 @@
 import os
 import timeit
+import multiprocessing
 
 from piquant import QuantDtype
 
 os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Force CPU usage
-os.environ['OMP_NUM_THREADS'] = str(64)
-os.environ['MKL_NUM_THREADS'] = str(64)
+os.environ['OMP_NUM_THREADS'] = str(multiprocessing.cpu_count())
+os.environ['MKL_NUM_THREADS'] = str(multiprocessing.cpu_count())
 
 import torch
 from torch.ao.quantization.fx._decomposed import quantize_per_tensor
@@ -56,7 +57,7 @@ print(f'Torch FX quantization time for {num_runs} runs: {time_torch_fx:.6f} seco
 print(f'Torch quantization time for {num_runs} runs: {time_torch:.6f} seconds')
 print(f'Fast quantization time for {num_runs} runs: {time_fast:.6f} seconds')
 
-labels = ['Torch FX Quant', 'Torch Builtin Quant', 'Fast Quant']
+labels = ['torch.ao.quantization.fx._decomposed.quantize_per_tensor', 'torch.quantize_per_tensor', 'piquant.quantize_torch']
 times = [time_torch_fx, time_torch, time_fast]
 
 plt.figure(figsize=(6, 4))

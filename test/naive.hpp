@@ -45,10 +45,10 @@ static constinit xs128p_state s_sprng {0x123456789abcdef0, 0x0fedcba987654321};
 
 template <typename OUT> requires piquant::is_int4<OUT>
 [[nodiscard]] static constexpr auto pack_nibbles(OUT x, OUT y) -> OUT {
-    auto xi {static_cast<std::uint8_t>(x)};
-    auto yi {static_cast<std::uint8_t>(y)};
+    auto xi {x.u8};
+    auto yi {y.u8};
     auto pa {static_cast<std::uint8_t>((0xf&xi)<<4|0xf&yi)};
-    return static_cast<OUT>(pa);
+    return OUT{pa};
 }
 
 template <typename IN, typename OUT, const piquant::round_mode RND> requires requires {
@@ -59,7 +59,7 @@ auto quantize_naive(
     const std::span<IN> x,
     const std::span<OUT> o,
     const double scale,
-    const std::int32_t zero_point
+    const std::int64_t zero_point
 ) noexcept -> void { /* Original implementation */
     const double inv_scale {1.0 / scale};
     if constexpr (RND == piquant::round_mode::nearest) {
@@ -69,11 +69,18 @@ auto quantize_naive(
             return static_cast<OUT>(std::clamp<decltype(integral)>(integral, piquant::dtype_limits<OUT>::min, piquant::dtype_limits<OUT>::max));
         }};
         if constexpr (piquant::is_int4<OUT>) {
-            std::int64_t numel_out = (x.size()+1) >> 1;
-            for (std::int64_t i = 0, j = 0; j < numel_out; ++j, i += 2) {
-                IN a = x[i];
-                IN b = i+1 < x.size() ? x[i+1] : x[i];
-                o[j] = pack_nibbles(Q(a), Q(b));
+            std::size_t numel_out {o.size()};
+            for (std::size_t i{}; i < numel_out; i += 2) {
+                IN a {x[i]};
+                IN b {x[i+1]};
+                OUT r{0};
+                o[i>>1].pack(Q(a).u8, Q(b).u8);
+            }
+            if (numel_out & 1) { // Handle odd numel
+                OUT packed{};
+                packed.pack(Q(x[x.size()-1]).u8, 0);
+                packed.u8 &= 15;
+                o[numel_out-1] = packed;
             }
         } else {
             for (std::int64_t i {}; i < x.size(); ++i) {
@@ -93,30 +100,10 @@ auto quantize_naive(
         }};
         if constexpr (piquant::is_int4<OUT>)
             for (std::size_t i {}; i < (x.size()+1)>>1; ++i)
-                o[i] = static_cast<OUT>((static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)]))&15)<<4|static_cast<std::underlying_type_t<OUT>>(Q(x[(i<<1)+1]))&15);
+                o[i] = static_cast<OUT>(((Q(x[(i<<1)]).u8)&15)<<4|(Q(x[(i<<1)+1]).u8)&15);
         else
             for (std::int64_t i {}; i < x.size(); ++i)
                 o[i] = Q(x[i]);
-    }
-}
-
-inline auto quantize_naive_4bit(
-    const std::span<const float> in,
-    const std::span<piquant::uint4_t> out,
-    const double scale,
-    const std::int32_t zero_point
-) noexcept -> void {
-    const std::size_t numel {in.size()};
-    const std::size_t out_numel {(numel + 1) / 2};
-    const double inv_scale {1.0 / scale};
-    piquant_assert(out_numel == out.size(), "input and output spans must have the same length, but %zu != %zu", out_numel, out.size());
-    const auto f = [=](float x) noexcept -> std::uint8_t {
-        return std::clamp<int>(std::round(x * inv_scale) + zero_point, 0, 0xf);
-    };
-    for (std::size_t i {}; i < out_numel; ++i) {
-        std::uint8_t hi = f(in[2 * i])     & 15;
-        std::uint8_t lo = f(in[2 * i + 1]) & 15;
-        out[i] = static_cast<piquant::uint4_t>((hi << 4) | lo);
     }
 }
 
