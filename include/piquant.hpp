@@ -17,8 +17,11 @@
 #endif
 
 namespace piquant {
-    // This determines the amount of standard deviations/sigmas (left and right of 0) to use for the quantization range.
+    // (All types except u/int4) Amount of standard deviations/sigmas (left and right of 0) to use for the quantization range
     static constexpr double stddev_scale {12.0};
+
+    // (u/int4 only) Amount of standard deviations/sigmas (left and right of 0) to use for the quantization range
+    static constexpr double stddev_scale_int4 {2.7};
 
     enum class round_mode {
         nearest,
@@ -48,8 +51,41 @@ namespace piquant {
     };
     static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::num_) <= 0xff);
 
-    enum class uint4_t : std::uint8_t {};
-    enum class int4_t : std::uint8_t {};
+    struct uint4_t final {
+        std::uint8_t u8;
+        constexpr uint4_t() noexcept : u8 {} {}
+        constexpr uint4_t(int u8) noexcept : u8 {static_cast<std::uint8_t>(u8)} {}
+        constexpr auto operator == (std::uint8_t y) const noexcept -> bool { return this->u8 == y; }
+        constexpr auto operator != (std::uint8_t y) const noexcept -> bool { return !(*this == y); }
+        constexpr auto operator == (uint4_t y) const noexcept -> bool { return this->u8 == y.u8; }
+        constexpr auto operator != (uint4_t y) const noexcept -> bool { return !(*this == y); }
+        constexpr auto pack(std::uint8_t lo, std::uint8_t hi) noexcept -> void {
+            u8 = static_cast<std::uint8_t>((lo & 15) | ((hi & 15) << 4));
+        }
+        [[nodiscard]] constexpr auto unpack() const noexcept -> std::array<std::uint8_t, 2> {
+            return {static_cast<std::uint8_t>(u8 & 15), static_cast<std::uint8_t>(u8 >> 4)};
+        }
+    };
+
+    struct int4_t final {
+        std::int8_t u8;
+        constexpr int4_t() noexcept : u8 {} {}
+        constexpr int4_t(int u8) noexcept : u8 {static_cast<std::int8_t>(u8)} {}
+        constexpr auto operator == (std::int8_t u8) const noexcept -> bool { return this->u8 == u8; }
+        constexpr auto operator != (std::int8_t y) const noexcept -> bool { return !(*this == y); }
+        constexpr auto operator == (int4_t y) const noexcept -> bool { return this->u8 == y.u8; }
+        constexpr auto operator != (int4_t y) const noexcept -> bool { return !(*this == y); }
+        constexpr auto pack(std::int8_t lo, std::int8_t hi) noexcept -> void {
+            u8 = static_cast<std::int8_t>((lo & 15) | ((hi & 15) << 4));
+        }
+        [[nodiscard]] constexpr auto unpack() const noexcept -> std::array<std::int8_t, 2> {
+            constexpr auto snex4 {[](std::int8_t x) noexcept -> std::int8_t { return x & 0x8 ? static_cast<std::int8_t>(x|0xF0) : x; }};
+            return {(snex4(u8 & 15)), (snex4(u8 >> 4))};
+        }
+    };
+
+    static_assert(sizeof(uint4_t) == 1);
+    static_assert(sizeof(int4_t) == 1);
 
     struct dtype_flags final {
         enum $ {
@@ -109,18 +145,18 @@ namespace piquant {
     template<typename T> concept is_dtype = std::is_arithmetic_v<T> || is_int4<T>;
     template<typename T> requires is_dtype<T> struct dtype_traits final {};
 
-    template<> struct dtype_traits<uint4_t> { static constexpr dtype ty = dtype::uint4; };
-    template<> struct dtype_traits<int4_t> { static constexpr dtype ty = dtype::int4; };
-    template<> struct dtype_traits<std::int8_t> { static constexpr dtype ty = dtype::int8; };
-    template<> struct dtype_traits<std::uint8_t> { static constexpr dtype ty = dtype::uint8; };
-    template<> struct dtype_traits<std::int16_t> { static constexpr dtype ty = dtype::int16; };
-    template<> struct dtype_traits<std::uint16_t> { static constexpr dtype ty = dtype::uint16; };
-    template<> struct dtype_traits<std::int32_t> { static constexpr dtype ty = dtype::int32; };
-    template<> struct dtype_traits<std::uint32_t> { static constexpr dtype ty = dtype::uint32; };
-    template<> struct dtype_traits<std::int64_t> { static constexpr dtype ty = dtype::int64; };
-    template<> struct dtype_traits<std::uint64_t> { static constexpr dtype ty = dtype::uint64; };
-    template<> struct dtype_traits<float> { static constexpr dtype ty = dtype::f32; };
-    template<> struct dtype_traits<double> { static constexpr dtype ty = dtype::f64; };
+    template<> struct dtype_traits<uint4_t> { static constexpr dtype type_code = dtype::uint4; };
+    template<> struct dtype_traits<int4_t> { static constexpr dtype type_code = dtype::int4; };
+    template<> struct dtype_traits<std::int8_t> { static constexpr dtype type_code = dtype::int8; };
+    template<> struct dtype_traits<std::uint8_t> { static constexpr dtype type_code = dtype::uint8; };
+    template<> struct dtype_traits<std::int16_t> { static constexpr dtype type_code = dtype::int16; };
+    template<> struct dtype_traits<std::uint16_t> { static constexpr dtype type_code = dtype::uint16; };
+    template<> struct dtype_traits<std::int32_t> { static constexpr dtype type_code = dtype::int32; };
+    template<> struct dtype_traits<std::uint32_t> { static constexpr dtype type_code = dtype::uint32; };
+    template<> struct dtype_traits<std::int64_t> { static constexpr dtype type_code = dtype::int64; };
+    template<> struct dtype_traits<std::uint64_t> { static constexpr dtype type_code = dtype::uint64; };
+    template<> struct dtype_traits<float> { static constexpr dtype type_code = dtype::f32; };
+    template<> struct dtype_traits<double> { static constexpr dtype type_code = dtype::f64; };
 
     class QUANT_EXPORT context final {
     public:
@@ -144,8 +180,8 @@ namespace piquant {
         template<typename IN, typename OUT> requires requires {
             requires is_dtype<IN>;
             requires is_dtype<OUT>;
-            dtype_info_of(dtype_traits<IN>::ty).flags & dtype_flags::is_quant;
-            !(dtype_info_of(dtype_traits<OUT>::ty).flags & dtype_flags::is_quant);
+            dtype_info_of(dtype_traits<IN>::type_code).flags & dtype_flags::is_quant;
+            !(dtype_info_of(dtype_traits<OUT>::type_code).flags & dtype_flags::is_quant);
         }
         auto quantize_generic(
             std::span<const IN> in,
@@ -156,9 +192,9 @@ namespace piquant {
         ) -> void {
             quantize(
                 {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
-                dtype_traits<IN>::ty,
+                dtype_traits<IN>::type_code,
                 {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},
-                dtype_traits<OUT>::ty,
+                dtype_traits<OUT>::type_code,
                 scale,
                 zero_point,
                 mode
@@ -178,8 +214,8 @@ namespace piquant {
         template<typename IN, typename OUT> requires requires {
             requires is_dtype<IN>;
             requires is_dtype<OUT>;
-            !(dtype_info_of(dtype_traits<IN>::ty).flags & dtype_flags::is_quant);
-            dtype_info_of(dtype_traits<OUT>::ty).flags & dtype_flags::is_quant;
+            !(dtype_info_of(dtype_traits<IN>::type_code).flags & dtype_flags::is_quant);
+            dtype_info_of(dtype_traits<OUT>::type_code).flags & dtype_flags::is_quant;
         }
         auto dequantize_generic(
             std::span<const IN> in,
@@ -190,9 +226,9 @@ namespace piquant {
         ) -> void {
             dequantize(
                 {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
-                dtype_traits<IN>::ty,
+                dtype_traits<IN>::type_code,
                 {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},
-                dtype_traits<OUT>::ty,
+                dtype_traits<OUT>::type_code,
                 scale,
                 zero_point,
                 op
@@ -212,8 +248,8 @@ namespace piquant {
 
         template<typename INOUT, typename QUANT> requires requires {
             requires is_dtype<INOUT>;
-            !(dtype_info_of(dtype_traits<INOUT>::ty).flags & dtype_flags::is_quant);
-            dtype_info_of(dtype_traits<QUANT>::ty).flags & dtype_flags::is_quant;
+            !(dtype_info_of(dtype_traits<INOUT>::type_code).flags & dtype_flags::is_quant);
+            dtype_info_of(dtype_traits<QUANT>::type_code).flags & dtype_flags::is_quant;
         }
         auto quantize_dequantize_fused_generic(
             std::span<const INOUT> in,
@@ -225,9 +261,9 @@ namespace piquant {
         ) -> void {
             quantize_dequantize_fused(
                 {reinterpret_cast<const std::byte*>(in.data()), in.size_bytes()},
-                dtype_traits<INOUT>::ty,
+                dtype_traits<INOUT>::type_code,
                 {reinterpret_cast<std::byte*>(out.data()), out.size_bytes()},
-                dtype_traits<QUANT>::ty,
+                dtype_traits<QUANT>::type_code,
                 scale,
                 zero_point,
                 mode,

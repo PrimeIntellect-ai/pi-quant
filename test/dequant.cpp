@@ -6,6 +6,7 @@
 #include <iostream>
 #include <random>
 #include <span>
+#include <bitset>
 
 #include <piquant.hpp>
 #include <gtest/gtest.h>
@@ -14,6 +15,39 @@ constexpr std::size_t iters {10};
 constexpr double epsilon {1e-1};
 
 using namespace piquant;
+
+TEST(dequantize, uint4_packing) {
+    context ctx {1};
+
+    std::vector<float> input {-1.0f, 1.0f, 2.0f, 3.0f, 0.5f};
+
+    auto [scale, zp] {ctx.compute_quant_config_from_data(input, dtype::uint4)};
+
+    std::vector<uint4_t> quantized {};
+    quantized.resize((input.size()+1)/2);
+    ctx.quantize_generic<float, uint4_t>(input, quantized, scale, zp, round_mode::nearest);
+
+    std::vector<float> dequantized {};
+    dequantized.resize(input.size());
+    ctx.dequantize_generic<uint4_t, float>(quantized, dequantized, scale, zp, reduce_op::set);
+
+    std::cout << "INPUT"  << std::endl;
+    for (auto&& x : input)
+        std::cout << x << " ";
+    std::cout << std::endl;
+    std::cout << "OUTPUT"  << std::endl;
+    for (auto&& x : dequantized)
+        std::cout << x << " ";
+    std::cout << std::endl;
+    std::cout << "PACKED"  << std::endl;
+    for (auto&& x : quantized)
+        std::cout << std::bitset<8>(x.u8) << " ";
+    std::cout << std::endl;
+    std::cout << "UNPACKED"  << std::endl;
+    for (auto&& x : quantized)
+        std::cout << +x.unpack()[0] << "|" << +x.unpack()[1] << " ";
+    std::cout << std::endl;
+}
 
 #define test_dequant(ti, to, rnd, reduce) \
     TEST(dequantize, dequantize_##ti##_to_##to##_##rnd##_##reduce) { \
@@ -30,7 +64,7 @@ using namespace piquant;
             quantized.resize(numel_out); \
             std::ranges::generate(data_in, [&] { return dist(gen); }); \
             piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())}; \
-            auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<to>::ty)}; \
+            auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<to>::type_code)}; \
             ctx.quantize_generic<ti, to>(data_in, quantized, scale, zero_point, piquant::round_mode::rnd); \
             std::vector<ti> dequantized {}; \
             dequantized.resize(numel); \

@@ -6,10 +6,13 @@
 #include "piquant_internal.hpp"
 
 #include <algorithm>
+#include <bitset>
 #include <cmath>
 #include <cstdint>
 #include <numeric>
 #include <bit>
+#include <sstream>
+
 
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
@@ -162,11 +165,6 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     template <typename T>
     concept is_int4 = std::is_same_v<T, uint4_t> || std::is_same_v<T, int4_t>;
-
-    template <typename OUT> requires is_int4<OUT>
-    [[nodiscard]] static constexpr auto PIQUANT_AINLINE pack_nibbles(OUT x, OUT y) -> OUT {
-        return static_cast<OUT>(static_cast<std::uint8_t>((0xF & static_cast<std::uint8_t>(x)) | ((0xF & static_cast<std::uint8_t>(y)) << 4)));
-    }
 
     static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
         const float* PIQUANT_RESTRICT x,
@@ -568,32 +566,31 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         }
     }
 
-    template <const round_mode RND, typename IN, typename OUT, typename... Args>
-         requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>)
-             && std::is_same_v<std::common_type_t<Args...>, IN> && sizeof...(Args) != 0)
-    static inline auto PIQUANT_AINLINE quant_step(double inv_scale, std::int64_t zp, Args... args) noexcept -> OUT {
+    template <const round_mode RND, typename IN, typename OUT> requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>))
+    [[nodiscard]] static inline auto PIQUANT_AINLINE quant_step_scalar(IN x, double inv_scale, std::int64_t zp) noexcept -> OUT {
         if constexpr (RND == round_mode::stochastic) {
-            const auto Q{[&](const IN x) noexcept -> OUT {
-                double rnd {x * inv_scale};
-                double dec {std::abs(rnd - std::trunc(rnd))};
-                double xi {(s_sprng.canonical())};
-                double adj {xi < dec ? 1.0f : 0.0f};
-                if (rnd < 0.0f) adj = -1.0f * adj;
-                rnd = std::trunc(rnd) + adj;
-                auto integral {static_cast<std::int64_t>(rnd) + zp};
-                return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
-            }};
-            if constexpr (sizeof...(Args) == 1) return Q(args...);
-            else return pack_nibbles(Q(args)...);
+            double rnd {x * inv_scale};
+            double dec {std::abs(rnd - std::trunc(rnd))};
+            double xi {(s_sprng.canonical())};
+            double adj {xi < dec ? 1.0f : 0.0f};
+            if (rnd < 0.0f) adj = -1.0f * adj;
+            rnd = std::trunc(rnd) + adj;
+            auto integral {static_cast<std::int64_t>(rnd) + zp};
+            return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
         } else {
-            const auto Q {[=](const IN x) noexcept -> OUT {
-                double rnd {std::round(static_cast<double>(x) * inv_scale)};
-                auto integral {static_cast<std::int64_t>(rnd) + zp};
-                return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
-            }};
-            if constexpr (sizeof...(Args) == 1) return Q(args...);
-            else return pack_nibbles(Q(args)...);
+            double rnd {std::round(static_cast<double>(x) * inv_scale)};
+            auto integral {static_cast<std::int64_t>(rnd) + zp};
+            return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
         }
+    }
+
+    template <const round_mode RND, typename IN, typename OUT> requires (std::is_floating_point_v<IN> && is_int4<OUT>)
+    [[nodiscard]] static inline auto PIQUANT_AINLINE quant_step_packed(IN a, IN b, double inv_scale, std::int64_t zp) noexcept -> OUT {
+        auto pa {quant_step_scalar<RND, IN, OUT>(a, inv_scale, zp)};
+        auto pb {quant_step_scalar<RND, IN, OUT>(b, inv_scale, zp)};
+        OUT r{0};
+        r.pack(pa.u8, pb.u8);
+        return r;
     }
 
     template <typename IN, typename OUT, const round_mode RND>
@@ -615,21 +612,28 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
         if constexpr (is_int4<OUT>) {
             std::int64_t numel_out {(numel+1)>>1};
-            for (std::int64_t i{}, j{}; j < numel_out; ++j, i += 2) {
+            for (std::int64_t i{}; i < numel_out; i += 2) {
                 IN a {x[i]};
-                IN b {i+1 < numel ? x[i+1] : x[i]};
-                o[j] = quant_step<RND, IN, OUT>(inv_scale, zp, a, b);
+                IN b {x[i+1]};
+                o[i>>1] = quant_step_packed<RND, IN, OUT>(a, b, inv_scale, zp);
+            }
+            if (numel_out & 1) { // Handle odd numel
+                auto packed = quant_step_packed<RND, IN, OUT>(x[numel-1], 0, inv_scale, zp);
+                packed.u8 &= 15;
+                o[numel_out-1] = packed;
             }
         } else {
             for (std::int64_t i = 0; i < numel; ++i)
-                o[i] = quant_step<RND, IN, OUT>(inv_scale, zp, x[i]);
+                o[i] = quant_step_scalar<RND, IN, OUT>(x[i], inv_scale, zp);
         }
     }
 
-    template <typename IN, typename OUT>
-          requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
-    static inline auto PIQUANT_AINLINE dequant_step(double scale, std::int64_t zp, const IN x) noexcept -> OUT {
-        return static_cast<OUT>(static_cast<std::int64_t>(x) - zp)*scale;
+    template <typename IN, typename OUT> requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
+    [[nodiscard]] static inline auto PIQUANT_AINLINE dequant_step(double scale, std::int64_t zp, const IN x) noexcept -> OUT {
+        if constexpr (is_int4<IN>)
+            return static_cast<OUT>(static_cast<std::int64_t>(x.u8) - zp)*scale;
+        else
+            return static_cast<OUT>(static_cast<std::int64_t>(x) - zp)*scale;
     }
 
     template <typename IN, typename OUT, const reduce_op RDO>
@@ -652,30 +656,29 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 dequant_uint8_to_f32<true>(static_cast<const std::uint8_t*>(in), static_cast<float*>(out), numel, static_cast<float>(scale), static_cast<std::int32_t>(zp));
                 return;
             }
-        } else if constexpr (is_int4<IN>) {
-            std::int64_t numel_packed {(numel+1)>>1};
-            constexpr auto unpack {[](std::uint8_t nib) noexcept -> std::int8_t {
-                if constexpr (std::is_same_v<IN, int4_t>) { // 4-bit sign extension
-                    return nib & 0x8 ? static_cast<std::int8_t>(nib | 0xF0) : static_cast<std::int8_t>(nib);
-                } else {
-                    return static_cast<std::int8_t>(nib);
-                }
-            }};
-            for (std::int64_t j{}, i{}; j < numel_packed; ++j) {
-                std::uint8_t byte {static_cast<std::uint8_t>(x[j])};
-                std::int8_t qa {unpack(byte&0xF)};
-                std::int8_t qb {unpack(byte>>4)};
+        }
+        if constexpr (is_int4<IN>) {
+            std::int64_t even_numel {numel & ~std::int64_t{1}};
+            for (std::int64_t i {}; i < even_numel; ++i) {
+                auto [qa, qb]  {x[i].unpack()};
                 if constexpr (RDO == reduce_op::set) {
-                    o[i++] = dequant_step<std::int8_t, OUT>(scale, zp, qa);
-                    if (i < numel)
-                        o[i++] = dequant_step<std::int8_t, OUT>(scale, zp, qb);
+                    o[i<<1] = dequant_step<IN, OUT>(scale, zp, qa);
+                    o[(i<<1)+1] = dequant_step<IN, OUT>(scale, zp, qb);
                 } else if constexpr (RDO == reduce_op::add) {
-                    o[i++] += dequant_step<std::int8_t, OUT>(scale, zp, qa);
-                    if (i < numel)
-                        o[i++] += dequant_step<std::int8_t, OUT>(scale, zp, qb);
-                } else {
+                    o[i<<1] += dequant_step<IN, OUT>(scale, zp, qa);
+                    o[(i<<1)+1] += dequant_step<IN, OUT>(scale, zp, qb);
+                } else
                     static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
-                }
+            }
+            if (numel & 1) { // Handle odd numel
+                auto [qa, qb] {x[numel-1].unpack()};
+                OUT r = dequant_step<IN, OUT>(scale, zp, qa);
+                if constexpr (RDO == reduce_op::set)
+                    o[(numel-1)<<1] = r;
+                else if constexpr (RDO == reduce_op::add)
+                    o[(numel-1)<<1] += r;
+                else
+                    static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
             }
             return;
         }
@@ -704,23 +707,22 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         double inv_scale {1.0 / scale};
         if constexpr (RDO == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
-                o[i] = dequant_step<QUANT, IN>(scale, zp, quant_step<RND, IN, QUANT>(inv_scale, zp, x[i]));
+                o[i] = dequant_step<QUANT, IN>(scale, zp, quant_step_scalar<RND, IN, QUANT>(x[i], inv_scale, zp));
         } else if constexpr (RDO == reduce_op::add) {
             for (std::int64_t i {}; i < numel; ++i)
-                o[i] += dequant_step<QUANT, IN>(scale, zp, quant_step<RND, IN, QUANT>(inv_scale, zp, x[i]));
+                o[i] += dequant_step<QUANT, IN>(scale, zp, quant_step_scalar<RND, IN, QUANT>(x[i], inv_scale, zp));
         } else
             panic("Invalid reduce operation");
     }
 
     template <typename T> requires std::is_floating_point_v<T>
-    [[nodiscard]] auto compute_quant_config_from_data(const T* p, std::int64_t numel) -> std::array<T, 2> {
-        if (!numel) [[unlikely]] return {0.0, 0.0};
+    [[nodiscard]] auto compute_quant_config_from_data(std::span<const T> x) -> std::array<T, 2> {
+        if (x.empty()) [[unlikely]] return {0.0, 0.0};
         T sum {};
         T sum_sq {};
-        for (std::int64_t i {}; i < numel; ++i) {
-            T x {p[i]};
-            sum += x;
-            sum_sq += x*x;
+        for (T v : x) {
+            sum += v;
+            sum_sq += v*v;
         }
         return {sum, sum_sq};
     }
@@ -741,8 +743,9 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     #endif
 
     template <>
-    [[nodiscard]] auto compute_quant_config_from_data(const float* p, std::int64_t numel) -> std::array<float, 2> {
-        if (!numel) [[unlikely]] return {0.0f, 0.0};
+    [[nodiscard]] auto compute_quant_config_from_data(std::span<const float> x) -> std::array<float, 2> {
+        if (x.empty()) [[unlikely]] return {0.0f, 0.0};
+        const auto* p {x.data()};
         float sum {};
         float sum_sq {};
         std::int64_t i {};
@@ -765,7 +768,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             __m256 vsum_sq6 {_mm256_setzero_ps()};
             __m256 vsum_sq7 {_mm256_setzero_ps()};
             __m256 vsum_sq8 {_mm256_setzero_ps()};
-            for (; i+63 < numel; i += 64) {
+            for (; i+63 < x.size(); i += 64) {
                 __m256 v1 {_mm256_loadu_ps(p+i+8*0)};
                 __m256 v2 {_mm256_loadu_ps(p+i+8*1)};
                 __m256 v3 {_mm256_loadu_ps(p+i+8*2)};
@@ -812,7 +815,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             __m128 vsum_sq6 {_mm_setzero_ps()};
             __m128 vsum_sq7 {_mm_setzero_ps()};
             __m128 vsum_sq8 {_mm_setzero_ps()};
-            for (; i+31 < numel; i += 32) {
+            for (; i+31 < x.size(); i += 32) {
                 __m128 v1 {_mm_loadu_ps(p+i+4*0)};
                 __m128 v2 {_mm_loadu_ps(p+i+4*1)};
                 __m128 v3 {_mm_loadu_ps(p+i+4*2)};
@@ -859,7 +862,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             float32x4_t vsum_sq6 {vdupq_n_f32(0.0f)};
             float32x4_t vsum_sq7 {vdupq_n_f32(0.0f)};
             float32x4_t vsum_sq8 {vdupq_n_f32(0.0f)};
-            for (; i+31 < numel; i += 32) {
+            for (; i+31 < x.size(); i += 32) {
                 float32x4_t v1 {vld1q_f32(p+i+(0<<2))};
                 float32x4_t v2 {vld1q_f32(p+i+(1<<2))};
                 float32x4_t v3 {vld1q_f32(p+i+(2<<2))};
@@ -890,20 +893,20 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             sum = vaddvq_f32(vsum_total);
             sum_sq = vaddvq_f32(vsum_sq_total);
         #endif
-        for (; i < numel; ++i) {
-            float x {p[i]};
-            sum += x;
-            sum_sq += x*x;
+        for (; i < x.size(); ++i) {
+            float v {p[i]};
+            sum += v;
+            sum_sq += v*v;
         }
         return {sum, sum_sq};
     }
 
     static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> x) noexcept -> std::array<float, 2> {
-        return compute_quant_config_from_data(x.data(), static_cast<std::int64_t>(x.size()));
+        return compute_quant_config_from_data(x);
     }
 
     static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> x) noexcept -> std::array<double, 2> {
-        return compute_quant_config_from_data(x.data(), static_cast<std::int64_t>(x.size()));
+        return compute_quant_config_from_data(x);
     }
 };
 

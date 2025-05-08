@@ -1,8 +1,9 @@
-# Prime Fast Quantization Library
-
+# pi-quant: Prime Intellect Fast Quantization Library
+![logo.png](media/logo.png)
 ## Overview
 
-This project provides **multithreaded CPU SIMD int8 and int4 quantization kernels** with various rounding modes. The kernels are optimized for different CPU architectures, including **AMD64** (SSE4.2, AVX2, AVX512F) and **ARM64**(Neon). The most optimal kernel is selected at runtime.
+**Fast, multithreaded CPU quantization kernels** with various rounding modes, outperforming PyTorch’s built-in quantization routines by **more than 2 times** on all tested hardware.
+The kernels are optimized with SIMD intrinsics for different CPU architectures, including **AMD64** (SSE4.2, AVX2, AVX512F) and **ARM64** (Neon). The most optimal kernel is selected at runtime using runtime CPU detection.
 
 ## What is Quantization?
 
@@ -10,13 +11,13 @@ Quantization is the process of mapping continuous values into a finite, discrete
 
 ## Features
 
-✅ **Parallel De/Quantization**: Efficiently quantizes and dequantizes data using multiple threads.
+✅ **Parallel De/Quantization**: Efficiently quantizes and de-quantizes data using multiple threads.
 
-✅ **Multiple Datatypes:**  Support for f32 ↔ uint8 and f32 ↔ uint4 quantization. **(uint4 is still WIP)**
+✅ **Rich Datatype Support:** Provides f32, f64 ↔ (u)int8/16/32/64.
 
 ✅ **Modern Python API:** Use the library from Python with PyTorch, numpy or standalone.
 
-✅ **Architecture-Specific Optimizations**: Includes optimizations for AMD64 with SSE4.2, AVX2, and AVX512 instruction sets and ARM64 with NEON.
+✅ **Architecture-Specific Optimizations**: The kernels are optimized with SIMD intrinsics for different CPU architectures, including **AMD64** (SSE4.2, AVX2, AVX512F) and **ARM64** (Neon).
 
 ✅ **Thread Pool**: Reuses threads for minimal overhead.
 
@@ -24,39 +25,39 @@ Quantization is the process of mapping continuous values into a finite, discrete
 
 ✅ **C99 API**: Provides a C99 API for C projects or foreign language bindings (see `quant.h`).
 
-✅ **Store Operators:** Multiple store operators for dequantization, useful for ring reduces.
+✅ **Store Operators:** Supports multiple store modes (SET, ADD) during dequantization — useful for ring-reduction operations.
+
+✅ **Quantization Parameters:** Efficient SIMD-parallel computation of quantization scale and zero point from input data.
+
+# Benchmarks
 
 ## Benchmark
 
-The benchmarks were run on a variety of hardware. We benchmark against torch quint8 quantize_per_tensor and also against the torch.fx quantize_per_tensor. Benchmarked was float32 to uint8 quantization with 1000 runs. The numel and other properties can be see in the [benchmark code](https://github.com/PrimeIntellect-ai/quantization-kernels/blob/main/python/benchmark/benchmark.py).
+The benchmarks were run on a variety of hardware. We benchmark against PyTorch’s [**torch.quantize_per_tensor**](https://pytorch.org/docs/stable/generated/torch.quantize_per_tensor.html) and  **[torch.ao.quantization.fx._decomposed.quantize_per_tensor**.](https://github.com/pytorch/pytorch/blob/main/torch/ao/quantization/fx/_decomposed.py) Each benchmark quantized float32 to uint8 across **1000 runs**. The number of elements and other details can be seen in the [benchmark code](https://github.com/PrimeIntellect-ai/quantization-kernels/blob/main/python/benchmark/benchmark.py).
 
-In the charts, “Torch FX Quant” refers to **torch.ao.quantization.fx._decomposed.quantize_per_tensor**.
+### Benchmark 1 (AMD EPYC 9654, 360 vCPUs)
 
-“Torch Builtin Quant” referes to **torch.quantize_per_tensor** and Fast Quant to our own library **quant.quant_torch.**
+1000 runs with numel 27264000<br>
+CPU:  AMD EPYC 9654 96-Core Processor, Runtime: AVX512-F<br>
+Memory: 1485 GB<br>
+Linux: 6.8.0-57-generic<br>
 
-### Benchmark 1 (Threadripper 3970X 32-Core Processor, 64 CPUs)
+![bench1.png](media/bench1.png)
+**Torch FX Quant** refers to  **[torch.ao.quantization.fx._decomposed.quantize_per_tensor](https://github.com/pytorch/pytorch/blob/main/torch/ao/quantization/fx/_decomposed.py),**
+**Torch Builtin Quant**  to [**torch.quantize_per_tensor](https://pytorch.org/docs/stable/generated/torch.quantize_per_tensor.html)** and **Fast Quant** to **pi-quant’s [piquant.quantize_torch](https://github.com/PrimeIntellect-ai/piquant/blob/4bcf6ebc69bf9b44f89b13965f010a1d025a59f6/python/src/piquant/_torch.py#L52).**
 
-* 1000 runs with numel 27264000
-* CPU:  AMD Ryzen Threadripper 3970X 32-Core Processor, Runtime: AVX2
-* Memory: 128 GB
-* Linux: 6.1.0-30-amd64
+### Benchmark 2 (AMD EPYC 7742, 128 vCPUs)
 
-![image.png](https://i.imgur.com/rjurbfB.png)
+1000 runs with numel 27264000<br>
+CPU:  AMD EPYC 7742 64-Core Processor, Runtime: AVX2<br>
+Memory: 528 GB<br>
+Linux: 6.8.0-1023-nvidia<br>
+![bench2.png](media/bench2.png)
 
-### Benchmark 2 (Apple M3 Pro, 11 CPUs)
+### Benchmark 3 (Apple M3 Pro)
 
-* 1000 runs with numel 27264000
-* CPU: Apple M3 Pro, 11 CPUs, Runtime: ARM Neon
-* Memory: 18GB
-* OSX: 15.3.1 (24D70
-
-![image.png](https://i.imgur.com/aMCvInY.png)
-
-### Benchmark 3 (Xeon Platinum 8470, 104 vCPUs)
-
-* 1000 runs with numel 27264000
-* CPU:  Intel(R) Xeon(R) Platinum 8470, 104 vCPUs, Runtime: AVX512-F
-* Memory: 752 GB
-* Linux: 5.15.0-112-generic
-
-![image.png](https://i.imgur.com/GreULz2.png)
+1000 runs with numel 27264000<br>
+CPU:  Apple M3 Pro, Runtime: Neon<br>
+Memory: 18 GB<br>
+OSX: 15.4 (24E248)<br>
+![bench3.png](media/bench3.png)
