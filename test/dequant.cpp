@@ -6,6 +6,7 @@
 #include <iostream>
 #include <random>
 #include <span>
+#include <bitset>
 
 #include <piquant.hpp>
 #include <gtest/gtest.h>
