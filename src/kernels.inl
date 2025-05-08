@@ -195,10 +195,10 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
             }
             for (; i+31 < numel; i += 32) {
-                __m256 xf0 {_mm256_cvtepi32_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(0<<3))))};
-                __m256 xf1 {_mm256_cvtepi32_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(1<<3))))};
-                __m256 xf2 {_mm256_cvtepi32_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(2<<3))))};
-                __m256 xf3 {_mm256_cvtepi32_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(3<<3))))};
+                __m256 xf0 {_mm256_castsi256_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(0<<3))))};
+                __m256 xf1 {_mm256_castsi256_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(1<<3))))};
+                __m256 xf2 {_mm256_castsi256_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(2<<3))))};
+                __m256 xf3 {_mm256_castsi256_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(3<<3))))};
                 __m256 prod0 {_mm256_mul_ps(xf0, vinv_scale)};
                 __m256 prod1 {_mm256_mul_ps(xf1, vinv_scale)};
                 __m256 prod2 {_mm256_mul_ps(xf2, vinv_scale)};
