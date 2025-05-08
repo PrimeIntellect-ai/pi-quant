@@ -58,7 +58,7 @@ target_include_directories(piquant PUBLIC include)
 
 # add threadpool library
 if (NOT TARGET threadpool)
-    add_subdirectory(extern/threadpool)
+    add_subdirectory(third_party/threadpool)
 endif()
 
 target_link_libraries(piquant PUBLIC threadpool)
