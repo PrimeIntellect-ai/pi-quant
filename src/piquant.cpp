@@ -216,18 +216,17 @@ namespace piquant {
         if (scale == 0.0) [[unlikely]] {
             return {1.0f, (type_max+1)>>1};
         }
-
-        const auto signed_max128 = (__int128{type_max} + 1) >> 1;
-
-        const auto zpo128 = __int128{ std::llround(mean/scale) };
-        const auto raw_zp  = signed_max128 - zpo128;
-
-        const auto zpi128 = std::clamp(raw_zp,
-                                     __int128{0},
-                                     __int128{std::numeric_limits<int64_t>::max()});
-
-        auto zpi = static_cast<int64_t>(zpi128);
-        return { scale, zpi };
+        size_t signed_max;
+        if (type_max == UINT64_MAX) {
+            signed_max = 1ull << 63;
+        } else {
+            // convert to next clean power of 2 and divide by 2 ; assert dtype is unsigned, max pattern will be all ones
+            signed_max = (type_max + 1) >> 1;
+        }
+        const auto zpo = static_cast<std::int64_t>(std::round(mean / scale));
+        const size_t zp = {signed_max - zpo};
+        const auto zpi = static_cast<std::int64_t>(zp);
+        return {scale, zpi};
     }
 
     auto context::pimpl::operator()(std::span<const float> x, std::uint64_t type_max) -> std::pair<float, std::int64_t> {
