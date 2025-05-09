@@ -70,17 +70,19 @@ auto quantize_naive(
         }};
         if constexpr (piquant::is_int4<OUT>) {
             std::size_t numel_out {o.size()};
-            for (std::size_t i{}; i < numel_out; i += 2) {
+            for (std::size_t i{}; i + 1 < numel_out; i += 2) {
                 IN a {x[i]};
                 IN b {x[i+1]};
                 OUT r{0};
                 o[i>>1].pack(Q(a).u8, Q(b).u8);
             }
             if (numel_out & 1) { // Handle odd numel
+                size_t n_pairs = numel_out > 1 ? (numel_out >> 1) : 1;
+                size_t byte_idx = n_pairs - 1;
                 OUT packed{};
                 packed.pack(Q(x[x.size()-1]).u8, 0);
                 packed.u8 &= 15;
-                o[numel_out-1] = packed;
+                o[byte_idx] = packed;
             }
         } else {
             for (std::int64_t i {}; i < x.size(); ++i) {
@@ -99,8 +101,8 @@ auto quantize_naive(
             return static_cast<OUT>(std::clamp<decltype(integral)>(integral, piquant::dtype_limits<OUT>::min, piquant::dtype_limits<OUT>::max));
         }};
         if constexpr (piquant::is_int4<OUT>)
-            for (std::size_t i {}; i < (x.size()+1)>>1; ++i)
-                o[i] = static_cast<OUT>(((Q(x[(i<<1)]).u8)&15)<<4|(Q(x[(i<<1)+1]).u8)&15);
+            for (std::size_t i {}; i + 1 < x.size(); i += 2)
+                o[i>>1] = static_cast<OUT>(((Q(x[i]).u8)&15)<<4|(Q(x[i+1]).u8)&15);
         else
             for (std::int64_t i {}; i < x.size(); ++i)
                 o[i] = Q(x[i]);

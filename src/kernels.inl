@@ -611,16 +611,17 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         auto* PIQUANT_RESTRICT o {static_cast<OUT*>(out)};
         double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
         if constexpr (is_int4<OUT>) {
-            std::int64_t numel_out {(numel+1)>>1};
-            for (std::int64_t i{}; i < numel_out; i += 2) {
+            for (std::int64_t i{}; i + 1 < numel; i += 2) {
                 IN a {x[i]};
                 IN b {x[i+1]};
                 o[i>>1] = quant_step_packed<RND, IN, OUT>(a, b, inv_scale, zp);
             }
-            if (numel_out & 1) { // Handle odd numel
+            if (numel & 1) {
+                size_t n_pairs = numel > 1 ? (numel >> 1) : 1;
+                size_t byte_idx = n_pairs - 1;
                 auto packed = quant_step_packed<RND, IN, OUT>(x[numel-1], 0, inv_scale, zp);
                 packed.u8 &= 15;
-                o[numel_out-1] = packed;
+                o[byte_idx] = packed;
             }
         } else {
             for (std::int64_t i = 0; i < numel; ++i)
@@ -629,7 +630,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     }
 
     template <typename IN, typename OUT> requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_int4<IN>))
-    [[nodiscard]] static inline auto PIQUANT_AINLINE dequant_step(double scale, std::int64_t zp, const IN x) noexcept -> OUT {
+    [[nodiscard]] auto dequant_step(double scale, std::int64_t zp, const IN x) noexcept -> OUT {
         if constexpr (is_int4<IN>)
             return static_cast<OUT>(static_cast<std::int64_t>(x.u8) - zp)*scale;
         else
@@ -658,25 +659,26 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             }
         }
         if constexpr (is_int4<IN>) {
-            std::int64_t even_numel {numel & ~std::int64_t{1}};
-            for (std::int64_t i {}; i < even_numel; ++i) {
-                auto [qa, qb]  {x[i].unpack()};
+            for (std::int64_t i{}, j{}; i + 1 < numel; i += 2, j++) {
+                auto [qa, qb]  {x[j].unpack()};
                 if constexpr (RDO == reduce_op::set) {
-                    o[i<<1] = dequant_step<IN, OUT>(scale, zp, qa);
-                    o[(i<<1)+1] = dequant_step<IN, OUT>(scale, zp, qb);
+                    o[i] = dequant_step<IN, OUT>(scale, zp, qa);
+                    o[i+1] = dequant_step<IN, OUT>(scale, zp, qb);
                 } else if constexpr (RDO == reduce_op::add) {
-                    o[i<<1] += dequant_step<IN, OUT>(scale, zp, qa);
-                    o[(i<<1)+1] += dequant_step<IN, OUT>(scale, zp, qb);
+                    o[i] += dequant_step<IN, OUT>(scale, zp, qa);
+                    o[i+1] += dequant_step<IN, OUT>(scale, zp, qb);
                 } else
                     static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
             }
-            if (numel & 1) { // Handle odd numel
-                auto [qa, qb] {x[numel-1].unpack()};
+            if (numel & 1) {
+                size_t n_pairs = numel > 1 ? (numel >> 1) : 1;
+                size_t byte_idx = n_pairs - 1;
+                auto [qa, qb] {x[byte_idx].unpack()};
                 OUT r = dequant_step<IN, OUT>(scale, zp, qa);
                 if constexpr (RDO == reduce_op::set)
-                    o[(numel-1)<<1] = r;
+                    o[numel-1] = r;
                 else if constexpr (RDO == reduce_op::add)
-                    o[(numel-1)<<1] += r;
+                    o[numel-1] += r;
                 else
                     static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
             }
