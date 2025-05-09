@@ -17,11 +17,12 @@ constexpr double epsilon {1e-1};
 using namespace piquant;
 
 TEST(dequantize, uint4_packing) {
-    context ctx {1};
+    context ctx {16};
 
     std::vector<float> input {-1.0f, 1.0f, 2.0f, 3.0f, 0.5f};
 
     auto [scale, zp] {ctx.compute_quant_config_from_data(input, dtype::uint4)};
+    std::cout << "scale: " << scale << " zp: " << +zp << std::endl;
 
     std::vector<uint4_t> quantized {};
     quantized.resize((input.size()+1)/2);
@@ -72,7 +73,7 @@ TEST(dequantize, uint4_packing) {
             std::ranges::fill(dequantized, prev); \
             ctx.dequantize_generic<to, ti>(quantized, dequantized, scale, zero_point, piquant::reduce_op::reduce); \
             for (std::size_t i {}; i < numel; ++i) { \
-                ASSERT_NEAR(data_in[i], dequantized[i]-prev, epsilon); \
+                ASSERT_NEAR(data_in[i], dequantized[i]-prev, epsilon) << "Failed at index " << i << " for n=" << n; \
             } \
         } \
     }
