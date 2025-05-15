@@ -19,7 +19,7 @@ using namespace piquant;
 TEST(dequantize, uint4_packing) {
     context ctx {16};
 
-    std::vector<float> input {-1.0f, 1.0f, 2.0f, 3.0f, 0.5f};
+    std::vector input {-1.0f, 1.0f, 2.0f, 3.0f, 0.5f};
 
     auto [scale, zp] {ctx.compute_quant_config_from_data(input, dtype::uint4)};
     std::cout << "scale: " << scale << " zp: " << +zp << std::endl;

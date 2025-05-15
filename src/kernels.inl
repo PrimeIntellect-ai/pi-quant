@@ -381,10 +381,10 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             __m128i vzp {_mm_set1_epi32(zp)};
             __m128 vscale {_mm_set1_ps(scale)};
             for (; i+63 < numel; i += 64) {
-                __m128i in0 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(0<<5)))};
-                __m128i in1 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(1<<5)))};
-                __m128i in2 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(2<<5)))};
-                __m128i in3 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(3<<5)))};
+                __m128i in0 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(0<<4)))};
+                __m128i in1 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(1<<4)))};
+                __m128i in2 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(2<<4)))};
+                __m128i in3 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(3<<4)))};
                 auto expand16 = [&](const __m128i &v) {
                     __m128i zero {_mm_setzero_si128()};
                     __m128i w_lo {_mm_unpacklo_epi8(v, zero)};

@@ -105,7 +105,7 @@ namespace piquant {
         std::size_t num_threads;
         pi::threadpool::ThreadPool m_pool;
 
-        auto operator ()(const quant_descriptor& desc) -> void;
+        auto operator ()(const quant_descriptor& desc) const -> void;
         auto operator ()(std::span<const float> x, std::uint64_t type_max) -> std::pair<float, std::int64_t>;
         auto operator ()(std::span<const double> x, std::uint64_t type_max) -> std::pair<float, std::int64_t>;
         auto job_entry(partition& pl, const quant_descriptor& cmd) const -> void;
@@ -117,8 +117,9 @@ namespace piquant {
         const auto partition_row {[&] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
             std::int64_t chunk_size {(cmd.numel + tc - 1)/tc};
 
-            // if we have nibble input or output, we really don't want the chunk size to be and odd number of elements
-            // because it would trigger trailing element handling in every thread. We want to avoid that.
+            // If we have nibble input or output, we really don't want the chunk size to be and odd number of elements
+            // because it would trigger trailing element handling in every thread. We want to avoid that to eliminate
+            // the need for synchronization, as now two threads want to modify the same output byte to place their respective nibble-parts.
             // Hence, we round up to the next even number if we have a packed type.
             {
                 const bool packed_input  {dtype_info_of(cmd.dt_in ).bit_size < 8};
@@ -173,7 +174,7 @@ namespace piquant {
         m_pool.shutdown();
     }
 
-    auto context::pimpl::operator()(const quant_descriptor& desc) -> void {
+    auto context::pimpl::operator()(const quant_descriptor& desc) const -> void {
         const size_t num_threads {this->num_threads};
         const pi::threadpool::MultiTaskResult jobs_future = m_pool.scheduleSequence<void>(0u, num_threads, [this, &desc, num_threads](const std::size_t ti) {
             partition pl {
