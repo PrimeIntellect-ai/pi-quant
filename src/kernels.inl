@@ -381,10 +381,10 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             __m128i vzp {_mm_set1_epi32(zp)};
             __m128 vscale {_mm_set1_ps(scale)};
             for (; i+63 < numel; i += 64) {
-                __m128i in0 {_mm_loadu_si128((__m128i*)(x+i+0*16))};
-                __m128i in1 {_mm_loadu_si128((__m128i*)(x+i+1*16))};
-                __m128i in2 {_mm_loadu_si128((__m128i*)(x+i+2*16))};
-                __m128i in3 {_mm_loadu_si128((__m128i*)(x+i+3*16))};
+                __m128i in0 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(0<<5)))};
+                __m128i in1 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(1<<5)))};
+                __m128i in2 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(2<<5)))};
+                __m128i in3 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+(3<<5)))};
                 auto expand16 = [&](const __m128i &v) {
                     __m128i zero {_mm_setzero_si128()};
                     __m128i w_lo {_mm_unpacklo_epi8(v, zero)};
@@ -432,39 +432,39 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 __m128 vf32 {_mm_mul_ps(_mm_cvtepi32_ps(vs23), vscale)};
                 __m128 vf33 {_mm_mul_ps(_mm_cvtepi32_ps(vs33), vscale)};
                 if constexpr (SUM) {
-                    vf00 = _mm_add_ps(vf00, _mm_loadu_ps(o + i +  0*4));
-                    vf01 = _mm_add_ps(vf01, _mm_loadu_ps(o + i +  1*4));
-                    vf02 = _mm_add_ps(vf02, _mm_loadu_ps(o + i +  2*4));
-                    vf03 = _mm_add_ps(vf03, _mm_loadu_ps(o + i +  3*4));
-                    vf10 = _mm_add_ps(vf10, _mm_loadu_ps(o + i +  4*4));
-                    vf11 = _mm_add_ps(vf11, _mm_loadu_ps(o + i +  5*4));
-                    vf12 = _mm_add_ps(vf12, _mm_loadu_ps(o + i +  6*4));
-                    vf13 = _mm_add_ps(vf13, _mm_loadu_ps(o + i +  7*4));
-                    vf20 = _mm_add_ps(vf20, _mm_loadu_ps(o + i +  8*4));
-                    vf21 = _mm_add_ps(vf21, _mm_loadu_ps(o + i +  9*4));
-                    vf22 = _mm_add_ps(vf22, _mm_loadu_ps(o + i + 10*4));
-                    vf23 = _mm_add_ps(vf23, _mm_loadu_ps(o + i + 11*4));
-                    vf30 = _mm_add_ps(vf30, _mm_loadu_ps(o + i + 12*4));
-                    vf31 = _mm_add_ps(vf31, _mm_loadu_ps(o + i + 13*4));
-                    vf32 = _mm_add_ps(vf32, _mm_loadu_ps(o + i + 14*4));
-                    vf33 = _mm_add_ps(vf33, _mm_loadu_ps(o + i + 15*4));
+                    vf00 = _mm_add_ps(vf00, _mm_loadu_ps(o+i+ ( 0<<2)));
+                    vf01 = _mm_add_ps(vf01, _mm_loadu_ps(o+i+ ( 1<<2)));
+                    vf02 = _mm_add_ps(vf02, _mm_loadu_ps(o+i+ ( 2<<2)));
+                    vf03 = _mm_add_ps(vf03, _mm_loadu_ps(o+i+ ( 3<<2)));
+                    vf10 = _mm_add_ps(vf10, _mm_loadu_ps(o+i+ ( 4<<2)));
+                    vf11 = _mm_add_ps(vf11, _mm_loadu_ps(o+i+ ( 5<<2)));
+                    vf12 = _mm_add_ps(vf12, _mm_loadu_ps(o+i+ ( 6<<2)));
+                    vf13 = _mm_add_ps(vf13, _mm_loadu_ps(o+i+ ( 7<<2)));
+                    vf20 = _mm_add_ps(vf20, _mm_loadu_ps(o+i+ ( 8<<2)));
+                    vf21 = _mm_add_ps(vf21, _mm_loadu_ps(o+i+ ( 9<<2)));
+                    vf22 = _mm_add_ps(vf22, _mm_loadu_ps(o+i+ (10<<2)));
+                    vf23 = _mm_add_ps(vf23, _mm_loadu_ps(o+i+ (11<<2)));
+                    vf30 = _mm_add_ps(vf30, _mm_loadu_ps(o+i+ (12<<2)));
+                    vf31 = _mm_add_ps(vf31, _mm_loadu_ps(o+i+ (13<<2)));
+                    vf32 = _mm_add_ps(vf32, _mm_loadu_ps(o+i+ (14<<2)));
+                    vf33 = _mm_add_ps(vf33, _mm_loadu_ps(o+i+ (15<<2)));
                 }
-                _mm_storeu_ps(o+i+ 0*4, vf00);
-                _mm_storeu_ps(o+i+ 1*4, vf01);
-                _mm_storeu_ps(o+i+ 2*4, vf02);
-                _mm_storeu_ps(o+i+ 3*4, vf03);
-                _mm_storeu_ps(o+i+ 4*4, vf10);
-                _mm_storeu_ps(o+i+ 5*4, vf11);
-                _mm_storeu_ps(o+i+ 6*4, vf12);
-                _mm_storeu_ps(o+i+ 7*4, vf13);
-                _mm_storeu_ps(o+i+ 8*4, vf20);
-                _mm_storeu_ps(o+i+ 9*4, vf21);
-                _mm_storeu_ps(o+i+10*4, vf22);
-                _mm_storeu_ps(o+i+11*4, vf23);
-                _mm_storeu_ps(o+i+12*4, vf30);
-                _mm_storeu_ps(o+i+13*4, vf31);
-                _mm_storeu_ps(o+i+14*4, vf32);
-                _mm_storeu_ps(o+i+15*4, vf33);
+                _mm_storeu_ps(o+i+( 0<<2), vf00);
+                _mm_storeu_ps(o+i+( 1<<2), vf01);
+                _mm_storeu_ps(o+i+( 2<<2), vf02);
+                _mm_storeu_ps(o+i+( 3<<2), vf03);
+                _mm_storeu_ps(o+i+( 4<<2), vf10);
+                _mm_storeu_ps(o+i+( 5<<2), vf11);
+                _mm_storeu_ps(o+i+( 6<<2), vf12);
+                _mm_storeu_ps(o+i+( 7<<2), vf13);
+                _mm_storeu_ps(o+i+( 8<<2), vf20);
+                _mm_storeu_ps(o+i+( 9<<2), vf21);
+                _mm_storeu_ps(o+i+(10<<2), vf22);
+                _mm_storeu_ps(o+i+(11<<2), vf23);
+                _mm_storeu_ps(o+i+(12<<2), vf30);
+                _mm_storeu_ps(o+i+(13<<2), vf31);
+                _mm_storeu_ps(o+i+(14<<2), vf32);
+                _mm_storeu_ps(o+i+(15<<2), vf33);
             }
         #elif defined(__aarch64__) && defined(__ARM_NEON__)
             static constexpr auto expand_u8_to_s32{[](uint8x16_t u8) noexcept-> std::array<int32x4_t, 4> {
