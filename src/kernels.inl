@@ -611,17 +611,16 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         auto* PIQUANT_RESTRICT o {static_cast<OUT*>(out)};
         double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
         if constexpr (is_int4<OUT>) {
-            for (std::int64_t i{}; i + 1 < numel; i += 2) {
+            std::int64_t i{};
+            for (i = 0; i + 1 < numel; i += 2) {
                 IN a {x[i]};
                 IN b {x[i+1]};
                 o[i>>1] = quant_step_packed<RND, IN, OUT>(a, b, inv_scale, zp);
             }
             if (numel & 1) {
-                size_t n_pairs = numel > 1 ? (numel >> 1) : 1;
-                size_t byte_idx = n_pairs - 1;
                 auto packed = quant_step_packed<RND, IN, OUT>(x[numel-1], 0, inv_scale, zp);
                 packed.u8 &= 15;
-                o[byte_idx] = packed;
+                o[numel>>1] = packed;
             }
         } else {
             for (std::int64_t i = 0; i < numel; ++i)
@@ -659,7 +658,8 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             }
         }
         if constexpr (is_int4<IN>) {
-            for (std::int64_t i{}, j{}; i + 1 < numel; i += 2, j++) {
+            std::int64_t i{};
+            for (std::int64_t j{}; i + 1 < numel; i += 2, j++) {
                 auto [qa, qb]  {x[j].unpack()};
                 if constexpr (RDO == reduce_op::set) {
                     o[i] = dequant_step<IN, OUT>(scale, zp, qa);
@@ -671,9 +671,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                     static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
             }
             if (numel & 1) {
-                size_t n_pairs = numel > 1 ? (numel >> 1) : 1;
-                size_t byte_idx = n_pairs - 1;
-                auto [qa, qb] {x[byte_idx].unpack()};
+                auto [qa, qb] {x[i >> 1].unpack()};
                 OUT r = dequant_step<IN, OUT>(scale, zp, qa);
                 if constexpr (RDO == reduce_op::set)
                     o[numel-1] = r;
