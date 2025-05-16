@@ -72,26 +72,33 @@ jobs:
           cd ${{ github.workspace }}/python/
           python -m pip wheel --verbose -w dist .
 
+      - name: Create Virtual Environment
+        if: runner.os != 'windows'
+        shell: bash
+        run: |
+          cd ${{ github.workspace }}/python/
+          python -m venv venv
+
       - name: Install dev dependencies
         if: runner.os != 'windows'
         shell: bash
         run: |
           cd ${{ github.workspace }}/python/
-          python -m pip install .[dev]
+          ${{ github.workspace }}/python/venv/bin/python -m pip install .[dev]
 
       - name: Install Python wheel
         if: runner.os != 'windows'
         shell: bash
         run: |
           cd ${{ github.workspace }}/python/
-          python -m pip install ${{ github.workspace }}/python/dist/*.whl
+          ${{ github.workspace }}/python/venv/bin/python -m pip install ${{ github.workspace }}/python/dist/*.whl
 
       - name: Run Python Tests
         if: runner.os != 'windows'
         shell: bash
         run: |
           cd ${{ github.workspace }}/python/
-          python -m pytest tests/*
+          ${{ github.workspace }}/python/venv/bin/python -m pytest tests/*
 
   windows:
     runs-on: windows-latest
