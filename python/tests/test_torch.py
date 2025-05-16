@@ -63,7 +63,7 @@ def test_quant_vs_torch_uint8() -> None:
     assert torch_quant.numel() == tensor.numel()
     assert torch_quant.numel() == fast_quant.numel()
     for i in range(tensor.numel()):
-        assert math.abs(torch_quant[i].item() - fast_quant[i].item()) < INT_EPSILON
+        assert math.fabs(torch_quant[i].item() - fast_quant[i].item()) < INT_EPSILON
 
 
 def test_quant_vs_torch_decomposed_uint8() -> None:
@@ -81,7 +81,7 @@ def test_quant_vs_torch_decomposed_uint8() -> None:
     assert torch_quant.numel() == tensor.numel()
     assert torch_quant.numel() == fast_quant.numel()
     for i in range(tensor.numel()):
-        assert math.abs(torch_quant[i].item() - fast_quant[i].item()) < INT_EPSILON
+        assert math.fabs(torch_quant[i].item() - fast_quant[i].item()) < INT_EPSILON
 
 
 def test_dequant_vs_torch_uint8_reduce_set() -> None:
@@ -100,7 +100,7 @@ def test_dequant_vs_torch_uint8_reduce_set() -> None:
     assert torch_dequant.numel() == fast_dequant.numel()
     assert torch_dequant.dtype == fast_dequant.dtype
     for i in range(tensor.numel()):
-        assert math.abs(torch_dequant[i].item() - fast_dequant[i].item()) < FLOAT_EPSILON
+        assert math.fabs(torch_dequant[i].item() - fast_dequant[i].item()) < FLOAT_EPSILON
 
 
 def test_dequant_vs_torch_uint8_reduce_add() -> None:
@@ -118,4 +118,4 @@ def test_dequant_vs_torch_uint8_reduce_add() -> None:
     assert torch_dequant.numel() == fast_dequant.numel()
     assert torch_dequant.dtype == fast_dequant.dtype
     for i in range(tensor.numel()):
-        assert math.abs(torch_dequant[i].item() - fast_dequant[i].item()) < FLOAT_EPSILON
+        assert math.fabs(torch_dequant[i].item() - fast_dequant[i].item()) < FLOAT_EPSILON
