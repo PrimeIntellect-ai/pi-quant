@@ -3,9 +3,6 @@ import math
 import torch
 from piquant import *
 
-assert torch is not None, 'Torch is not installed. Please install torch to run these tests.'
-
-
 def test_dequant_config_compute_torch() -> None:
     tensor = torch.rand(8192)
     scale, zero_point = compute_quant_config_torch(tensor, target_quant_dtype=QuantDtype.UINT8)

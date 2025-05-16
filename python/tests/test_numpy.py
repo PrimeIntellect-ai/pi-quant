@@ -4,9 +4,6 @@ import math
 import numpy as np
 from piquant import *
 
-assert numpy is not None, 'Numpy is not installed. Please install numpy to run these tests.'
-
-
 def test_dequant_config_compute_numpy() -> None:
     arr = np.random.rand(8192).astype(np.float32)
     scale, zero_point = compute_quant_config_numpy(arr, target_quant_dtype=QuantDtype.UINT8)
