@@ -93,13 +93,6 @@ jobs:
           cd ${{ github.workspace }}/python/
           ${{ github.workspace }}/python/venv/bin/python -m pip install ${{ github.workspace }}/python/dist/*.whl
 
-      - name: Print Environment
-        if: runner.os != 'windows'
-        shell: bash
-        run: |
-          cd ${{ github.workspace }}/python/
-          ${{ github.workspace }}/python/venv/bin/python -m pip list
-
       - name: Run Python Tests
         if: runner.os != 'windows'
         shell: bash
