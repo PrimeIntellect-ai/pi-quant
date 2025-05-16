@@ -327,7 +327,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         #elif defined(__AVX2__)
             __m256i vzp256    {_mm256_set1_epi32(zp)};
             __m256  vscale256 {_mm256_set1_ps(scale)};
-            static constexpr auto expand_u8_to_s32_avx2 = [](const __m256i &v) {
+            static constexpr auto expand_u8_to_s32_avx2_fast = [](const __m256i &v) {
                 __m256i zero {_mm256_setzero_si256()};
                 __m256i w_lo {_mm256_unpacklo_epi8(v, zero)};
                 __m256i w_hi {_mm256_unpackhi_epi8(v, zero)};
@@ -336,6 +336,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 __m256i d2 {_mm256_unpacklo_epi16(w_hi, zero)};
                 __m256i d3 {_mm256_unpackhi_epi16(w_hi, zero)};
                 return std::array{d0,d1,d2,d3};
+            };
+            static constexpr auto expand_u8_to_s32_avx2 = [](const __m256i &v) {
+                __m128i lo128 = _mm256_castsi256_si128(v);
+                __m128i hi128 = _mm256_extracti128_si256(v, 1);
+                __m256i a0 = _mm256_cvtepu8_epi32(lo128);
+                __m256i a1 = _mm256_cvtepu8_epi32(_mm_srli_si128(lo128, 8));
+                __m256i b0 = _mm256_cvtepu8_epi32(hi128);             
+                __m256i b1 = _mm256_cvtepu8_epi32(_mm_srli_si128(hi128, 8));
+                return std::array{a0, a1, b0, b1};
             };
             for (; i+63 < numel; i += 64) {
                 __m256i in0 {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+(0<<5)))};
