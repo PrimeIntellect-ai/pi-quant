@@ -81,7 +81,7 @@ template <const std::uint8_t IDX, typename T>
             data_out_naive.resize(numel_out); \
             std::ranges::generate(data_in, [&] { return dist(gen); }); \
             quantize_naive<ti, to, piquant::round_mode::rnd>(data_in, data_out_naive, scale, zero_point); \
-            piquant::context ctx {1}; \
+            piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())}; \
             ctx.quantize_generic<ti, to>(data_in, data_out, scale, zero_point, piquant::round_mode::rnd); \
             for (std::size_t i {}; i < numel_out; ++i) { \
                 bool eq {eq = data_out[i] == data_out_naive[i]}; \
