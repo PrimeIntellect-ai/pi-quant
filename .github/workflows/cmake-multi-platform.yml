@@ -65,19 +65,19 @@ jobs:
         with:
           python-version: '3.8'
 
-      - name: Build Python wheel
-        if: runner.os != 'windows'
-        shell: bash
-        run: |
-          cd ${{ github.workspace }}/python/
-          python -m pip wheel --verbose -w dist .
-
       - name: Create Virtual Environment
         if: runner.os != 'windows'
         shell: bash
         run: |
           cd ${{ github.workspace }}/python/
           python -m venv venv
+
+      - name: Build Python wheel
+        if: runner.os != 'windows'
+        shell: bash
+        run: |
+          cd ${{ github.workspace }}/python/
+          ${{ github.workspace }}/python/venv/bin/python -m pip wheel --verbose -w dist .
 
       - name: Install dev dependencies
         if: runner.os != 'windows'
