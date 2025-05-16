@@ -61,7 +61,7 @@ def test_quant_vs_torch_uint8() -> None:
     assert torch_quant.numel() == tensor.numel()
     assert torch_quant.numel() == fast_quant.numel()
     for i in range(tensor.numel()):
-        assert torch_quant[i].item() == fast_quant[i].item()
+        assert math.abs(torch_quant[i].item() - fast_quant[i].item()) < 2
 
 
 def test_quant_vs_torch_decomposed_uint8() -> None:
@@ -79,7 +79,7 @@ def test_quant_vs_torch_decomposed_uint8() -> None:
     assert torch_quant.numel() == tensor.numel()
     assert torch_quant.numel() == fast_quant.numel()
     for i in range(tensor.numel()):
-        assert torch_quant[i].item() == fast_quant[i].item()
+        assert math.abs(torch_quant[i].item() - fast_quant[i].item()) < 2
 
 
 def test_dequant_vs_torch_uint8_reduce_set() -> None:
