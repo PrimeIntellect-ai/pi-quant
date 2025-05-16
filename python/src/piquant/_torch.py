@@ -1,13 +1,7 @@
 import importlib
 from typing import TYPE_CHECKING, Tuple, Dict
 from piquant._quant import *
-
-if TYPE_CHECKING:
-    import torch
-else:
-    torch = None
-    if importlib.util.find_spec('torch') is not None:
-        import torch
+import torch
 
 
 def _torch_to_piquant_dtype(dtype: 'torch.target_quant_dtype') -> QuantDtype:

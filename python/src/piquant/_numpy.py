@@ -1,14 +1,7 @@
 import importlib
 from typing import TYPE_CHECKING, Dict
 from piquant._quant import *
-
-if TYPE_CHECKING:
-    import numpy
-else:
-    torch = None
-    if importlib.util.find_spec('numpy') is not None:
-        import numpy
-
+import numpy
 
 def _get_data_ptr(arr: 'numpy.ndarray') -> int:
     if numpy is None:
