@@ -576,7 +576,9 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             if (rnd < 0.0f) adj = -1.0f * adj;
             rnd = std::trunc(rnd) + adj;
             auto integral {static_cast<std::int64_t>(rnd) + zp};
-            return static_cast<OUT>(std::clamp<decltype(integral)>(integral, dtype_limits<OUT>::min, dtype_limits<OUT>::max));
+            const auto min = dtype_limits<OUT>::min;
+            const auto max = dtype_limits<OUT>::max;
+            return static_cast<OUT>(std::clamp<decltype(integral)>(integral, min, max));
         } else {
             double rnd {std::round(static_cast<double>(x) * inv_scale)};
             auto integral {static_cast<std::int64_t>(rnd) + zp};
@@ -620,7 +622,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             if (numel & 1) {
                 auto packed = quant_step_packed<RND, IN, OUT>(x[numel-1], 0, inv_scale, zp);
                 packed.u8 &= 15;
-                o[numel>>1] = packed;
+                o[i>>1] = packed;
             }
         } else {
             for (std::int64_t i = 0; i < numel; ++i)

@@ -62,35 +62,12 @@ auto quantize_naive(
     const std::int64_t zero_point
 ) noexcept -> void { /* Original implementation */
     const double inv_scale {1.0 / scale};
-    if constexpr (RND == piquant::round_mode::nearest) {
-        const auto Q{[&](const IN x) noexcept -> OUT {
+    const auto Q{[&](const IN x) noexcept -> OUT {
+        if constexpr (RND == piquant::round_mode::nearest) {
             const double rnd {std::round(static_cast<double>(x) * inv_scale)};
             const auto integral {static_cast<std::int64_t>(rnd) + zero_point};
             return static_cast<OUT>(std::clamp<decltype(integral)>(integral, piquant::dtype_limits<OUT>::min, piquant::dtype_limits<OUT>::max));
-        }};
-        if constexpr (piquant::is_int4<OUT>) {
-            std::size_t numel_out {o.size()};
-            for (std::size_t i{}; i + 1 < numel_out; i += 2) {
-                IN a {x[i]};
-                IN b {x[i+1]};
-                OUT r{0};
-                o[i>>1].pack(Q(a).u8, Q(b).u8);
-            }
-            if (numel_out & 1) { // Handle odd numel
-                size_t n_pairs = numel_out > 1 ? (numel_out >> 1) : 1;
-                size_t byte_idx = n_pairs - 1;
-                OUT packed{};
-                packed.pack(Q(x[x.size()-1]).u8, 0);
-                packed.u8 &= 15;
-                o[byte_idx] = packed;
-            }
         } else {
-            for (std::int64_t i {}; i < x.size(); ++i) {
-                o[i] = Q(x[i]);
-            }
-        }
-    } else {
-        const auto Q{[&](const IN x) noexcept -> OUT {
             double rnd {x * inv_scale};
             const double dec {std::abs(rnd - std::trunc(rnd))};
             const double xi {xs32_canonical()};
@@ -99,13 +76,29 @@ auto quantize_naive(
             rnd = std::trunc(rnd) + adj;
             const auto integral {static_cast<std::int64_t>(rnd) + zero_point};
             return static_cast<OUT>(std::clamp<decltype(integral)>(integral, piquant::dtype_limits<OUT>::min, piquant::dtype_limits<OUT>::max));
-        }};
-        if constexpr (piquant::is_int4<OUT>)
-            for (std::size_t i {}; i + 1 < x.size(); i += 2)
-                o[i>>1] = static_cast<OUT>(((Q(x[i]).u8)&15)<<4|(Q(x[i+1]).u8)&15);
-        else
-            for (std::int64_t i {}; i < x.size(); ++i)
-                o[i] = Q(x[i]);
+        }
+    }};
+    if constexpr (piquant::is_int4<OUT>) {
+        std::size_t numel_out {x.size()};
+        std::size_t i{};
+        for (i = 0; i + 1 < numel_out; i += 2) {
+            IN a {x[i]};
+            IN b {x[i+1]};
+            OUT r{0};
+            auto qa = Q(a);
+            auto qb = Q(b);
+            o[i>>1].pack(qa.u8, qb.u8);
+        }
+        if (numel_out & 1) { // Handle odd numel
+            OUT packed{};
+            packed.pack(Q(x[x.size()-1]).u8, 0);
+            packed.u8 &= 15;
+            o[i>>1] = packed;
+        }
+    } else {
+        for (std::int64_t i {}; i < x.size(); ++i) {
+            o[i] = Q(x[i]);
+        }
     }
 }
 
