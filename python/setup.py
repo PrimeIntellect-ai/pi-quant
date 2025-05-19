@@ -59,7 +59,7 @@ class CMakeBuildExecutor(build_ext):
 
 
 setup(
-    name='piquant',
+    name='pypiquant',
     packages=['piquant'],
     package_dir={'': 'src'},  # tell setuptools packages are under src/
     package_data={

@@ -4,7 +4,7 @@ import torch
 from piquant import *
 
 INT_EPSILON = 2
-FLOAT_EPSILON = 1e-3
+FLOAT_EPSILON = 1e-5
 
 def test_dequant_config_compute_torch() -> None:
     tensor = torch.rand(8192)
