@@ -21,9 +21,9 @@ jobs:
         run: pip install cibuildwheel
 
       - name: Build all the wheels
-        run: |
-          cd python
-          cibuildwheel --output-dir ../wheelhouse
+        env:
+          CIBW_PROJECT_DIR: python
+        run: cibuildwheel --output-dir wheelhouse
 
       - name: Repair Linux wheels (manylinux)
         run: |
