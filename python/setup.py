@@ -5,20 +5,20 @@ import multiprocessing
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 
-CMAKE_ROOT: str = os.path.abspath(
+CMAKE_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..')  # Go up one directory to find CMakeLists.txt
 )
-NUM_JOBS: int = max(multiprocessing.cpu_count() - 1, 1)  # Use all but one core
+NUM_JOBS = max(multiprocessing.cpu_count() - 1, 1)  # Use all but one core
 
 
 class BuildException(Exception):
-    def __init__(self, message: str):
+    def __init__(self, message):
         self.message = message
         super().__init__(self.message)
 
 
 class CMakeBuildExtension(Extension):
-    def __init__(self, name, root_dir: str = ''):
+    def __init__(self, name, root_dir = ''):
         super().__init__(name, sources=[])
         self.root_dir = os.path.abspath(root_dir)
 
@@ -46,12 +46,12 @@ class CMakeBuildExecutor(build_ext):
         os.makedirs(self.build_temp)
 
         cmake_args = [
-            f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={os.path.abspath(os.path.join(self.build_lib, "piquant"))}',
+            '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + os.path.abspath(os.path.join(self.build_lib, "piquant")),
             '-DCMAKE_BUILD_TYPE=Release',
         ]
         build_args = [
             '--target piquant',
-            f'-j{NUM_JOBS}',
+            '-j' + str(NUM_JOBS),
             '-v',
         ]
         print(subprocess.check_call(['cmake', ext.root_dir] + cmake_args, cwd=self.build_temp))
@@ -60,6 +60,8 @@ class CMakeBuildExecutor(build_ext):
 
 setup(
     name='pypiquant',
+    author='Mario Sieg',
+    author_email='mario@primeintellect.ai',
     packages=['piquant'],
     package_dir={'': 'src'},  # tell setuptools packages are under src/
     package_data={
