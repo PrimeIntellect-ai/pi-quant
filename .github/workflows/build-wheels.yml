@@ -1,4 +1,3 @@
-# .github/workflows/build-wheels.yml
 name: Build and Publish Wheels
 
 on:
@@ -7,32 +6,22 @@ on:
       - 'v*.*.*'
 
 jobs:
-  build_wheels:
+  build-and-publish:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Build and repair wheels
+        uses: cibuildwheel/action@v2
         with:
-          python-version: '3.11'
-
-      - name: Install cibuildwheel
-        run: pip install cibuildwheel
-
-      - name: Build all the wheels
-        run: |
-          cd python
-          cibuildwheel --output-dir ../wheelhouse
-
-      - name: Repair Linux wheels (manylinux)
-        run: |
-          pip install auditwheel
-          for whl in wheelhouse/*linux_x86_64.whl; do
-            auditwheel repair "$whl" --plat manylinux2014_x86_64 -w wheelhouse/
-          done
+          project-dir: python
+          output-dir: wheelhouse
+        env:
+          CIBW_REPAIR_WHEEL: true
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@v1.4.2
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
+          distributions: 'wheelhouse/*'
