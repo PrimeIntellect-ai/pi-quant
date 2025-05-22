@@ -26,7 +26,7 @@ jobs:
         run: |
           python -m cibuildwheel --output-dir wheelhouse python
         env:
-          CIBW_ARCHS_LINUX: "x86_64 aarch64"
+          CIBW_ARCHS_LINUX: "x86_64"
 
       - name: Repair Linux wheels
         if: runner.os == 'Linux'
