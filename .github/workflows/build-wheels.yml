@@ -27,11 +27,7 @@ jobs:
       - name: Prepare sources
         run: |
           # Copy the source code to the python directory
-          cp -r . python/
-          # Remove unnecessary files
-          rm -rf python/.git
-          rm -rf python/.github
-          rm -rf python/tests
+          cp -r ../ .
 
       # 4) Build wheels for *all* supported Pythons and platforms
       #    by running cibuildwheel from inside python/
