@@ -24,21 +24,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install cibuildwheel==3.0.0b1 auditwheel
 
-      - name: Prepare sources
-        run: |
-          # Copy the source code to the python directory
-          cp ./CMakeLists.txt ./python/CMakeLists.txt
-          cp -r ./third_party ./python/third_party
-          cp -r ./test ./python/test
-          cp -r ./include ./python/include
-          cp -r ./benchmark ./python/benchmark
-          cp -r ./src ./python/src
-
       # 4) Build wheels for *all* supported Pythons and platforms
       #    by running cibuildwheel from inside python/
       - name: Build wheels
-        working-directory: python
-        run: python -m cibuildwheel --output-dir ../wheelhouse
+        # stay in the repo root!
+        run: |
+          python -m cibuildwheel --output-dir wheelhouse python 
 
       # 5) Repair any manylinux wheels (this step is optional—
       #    cibuildwheel will auto-repair by default, but here’s how to do it manually)
