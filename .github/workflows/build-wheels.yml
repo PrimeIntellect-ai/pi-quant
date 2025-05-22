@@ -27,7 +27,12 @@ jobs:
       - name: Prepare sources
         run: |
           # Copy the source code to the python directory
-          cp -r ../ .
+          cp ../CMakeLists.txt ./CMakeLists.txt
+          cp -r ../third_party ./third_party
+          cp -r ../test ./test
+          cp -r ../include ./include
+          cp -r ../benchmark ./benchmark
+          cp -r ../src ./src
 
       # 4) Build wheels for *all* supported Pythons and platforms
       #    by running cibuildwheel from inside python/
