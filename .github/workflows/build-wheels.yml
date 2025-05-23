@@ -17,6 +17,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Update version in __init__.py
+        run: |
+          sed '/__version__ =/d' python/src/piquant/__init__.py > python/src/piquant/__init__.py.tmp
+          mv python/src/piquant/__init__.py.tmp python/src/piquant/__init__.py
+          echo "__version__ = \"$VERSION\"" >> python/src/piquant/__init__.py
+        shell: bash
 
       - name: Install build tools
         run: |
