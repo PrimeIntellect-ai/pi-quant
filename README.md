@@ -13,7 +13,7 @@ Quantization is the process of mapping continuous values into a finite, discrete
 
 ✅ **Parallel De/Quantization**: Efficiently quantizes and de-quantizes data using multiple threads.
 
-✅ **Rich Datatype Support:** Provides f32, f64 ↔ (u)int8/16/32/64.
+✅ **Rich Datatype Support:** Provides f32, f64 ↔ (u)int4/8/16/32/64.
 
 ✅ **Modern Python API:** Use the library from Python with PyTorch, numpy or standalone.
 
