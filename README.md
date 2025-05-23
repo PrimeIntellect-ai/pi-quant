@@ -29,6 +29,13 @@ Quantization is the process of mapping continuous values into a finite, discrete
 
 ✅ **Quantization Parameters:** Efficient SIMD-parallel computation of quantization scale and zero point from input data.
 
+## Installation
+
+To install pi-quant from PyPI, run the following command:
+```bash
+pip install pypiquant
+```
+
 # Benchmarks
 
 ## Benchmark
