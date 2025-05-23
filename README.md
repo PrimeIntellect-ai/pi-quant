@@ -1,5 +1,5 @@
 # pi-quant: Prime Intellect Fast Quantization Library
-![logo.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/03c3497788b20d9b694ca016ecbde29bcf360b96/media/logo.png)
+![logo.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/main/media/logo.png)
 
 ## Overview
 
@@ -50,7 +50,7 @@ CPU:  AMD EPYC 9654 96-Core Processor, Runtime: AVX512-F<br>
 Memory: 1485 GB<br>
 Linux: 6.8.0-57-generic<br>
 
-![bench1.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/03c3497788b20d9b694ca016ecbde29bcf360b96/media/bench1.png)
+![bench1.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/main/media/bench1.png)
 **Torch FX Quant** refers to  **[torch.ao.quantization.fx._decomposed.quantize_per_tensor](https://github.com/pytorch/pytorch/blob/main/torch/ao/quantization/fx/_decomposed.py),**
 **Torch Builtin Quant**  to [**torch.quantize_per_tensor](https://pytorch.org/docs/stable/generated/torch.quantize_per_tensor.html)** and **Fast Quant** to **pi-quant’s [piquant.quantize_torch](https://github.com/PrimeIntellect-ai/piquant/blob/4bcf6ebc69bf9b44f89b13965f010a1d025a59f6/python/src/piquant/_torch.py#L52).**
 
@@ -60,7 +60,7 @@ Linux: 6.8.0-57-generic<br>
 CPU:  AMD EPYC 7742 64-Core Processor, Runtime: AVX2<br>
 Memory: 528 GB<br>
 Linux: 6.8.0-1023-nvidia<br>
-![bench3.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/03c3497788b20d9b694ca016ecbde29bcf360b96/media/bench2.png)
+![bench3.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/main/media/bench2.png)
 
 ### Benchmark 3 (Apple M3 Pro)
 
@@ -69,4 +69,4 @@ CPU:  Apple M3 Pro, Runtime: Neon<br>
 Memory: 18 GB<br>
 OSX: 15.4 (24E248)<br>
 ![bench2.png](media/bench2.png)
-![bench3.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/03c3497788b20d9b694ca016ecbde29bcf360b96/media/bench3.png)
+![bench3.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/main/media/bench3.png)
