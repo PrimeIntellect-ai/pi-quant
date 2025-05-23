@@ -25,7 +25,7 @@ line-length = 120
 target-version = "py38"
 
 [tool.setuptools.dynamic]
-version = {attr = "pypiquant.__version__"}
+version = {attr = "piquant.__version__"}
 
 [tool.ruff.lint]
 ignore = ["F403"]
