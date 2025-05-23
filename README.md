@@ -60,7 +60,7 @@ Linux: 6.8.0-57-generic<br>
 CPU:  AMD EPYC 7742 64-Core Processor, Runtime: AVX2<br>
 Memory: 528 GB<br>
 Linux: 6.8.0-1023-nvidia<br>
-![bench3.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/main/media/bench2.png)
+![bench2.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/main/media/bench2.png)
 
 ### Benchmark 3 (Apple M3 Pro)
 
@@ -68,5 +68,4 @@ Linux: 6.8.0-1023-nvidia<br>
 CPU:  Apple M3 Pro, Runtime: Neon<br>
 Memory: 18 GB<br>
 OSX: 15.4 (24E248)<br>
-![bench2.png](media/bench2.png)
 ![bench3.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/main/media/bench3.png)
