@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pypiquant"
-version = "0.1.0"
+dynamic = ["version"]
 authors = [
     {name = "Mario Sieg", email = "mario.sieg.64@gmail.com"},
 ]
@@ -23,6 +23,9 @@ dev = ["pytest","torch","numpy","pre-commit","ruff", "matplotlib", "twine"]
 [tool.ruff]
 line-length = 120
 target-version = "py38"
+
+[tool.setuptools.dynamic]
+version = {attr = "pypiquant.__version__"}
 
 [tool.ruff.lint]
 ignore = ["F403"]
