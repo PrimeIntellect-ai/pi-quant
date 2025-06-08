@@ -34,6 +34,8 @@ namespace piquant {
     };
 
     enum class dtype {
+        uint2,
+        int2,
         uint4,
         int4,
         uint8,
@@ -50,6 +52,40 @@ namespace piquant {
         num_
     };
     static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::num_) <= 0xff);
+
+    struct uint2_t final {
+        std::uint8_t u8;
+        constexpr uint2_t() noexcept : u8{} {}
+        constexpr uint2_t(int u8) noexcept : u8{static_cast<std::uint8_t>(u8)} {}
+        constexpr auto operator==(std::uint8_t y) const noexcept -> bool { return this->u8 == y; }
+        constexpr auto operator!=(std::uint8_t y) const noexcept -> bool { return !(*this == y); }
+        constexpr auto operator==(uint2_t y)  const noexcept -> bool { return this->u8 == y.u8; }
+        constexpr auto operator!=(uint2_t y)  const noexcept -> bool { return !(*this == y); }
+        constexpr auto pack(std::uint8_t v0, std::uint8_t v1, std::uint8_t v2, std::uint8_t v3) noexcept -> void {
+            u8 = static_cast<std::uint8_t>((v0 & 3) | ((v1 & 3) << 2) | ((v2 & 3) << 4) | ((v3 & 3) << 6));
+        }
+        [[nodiscard]] constexpr auto unpack() const noexcept -> std::array<std::uint8_t, 4> {
+            return {static_cast<std::uint8_t>(u8 & 3), static_cast<std::uint8_t>((u8 >> 2) & 3),
+                    static_cast<std::uint8_t>((u8 >> 4) & 3), static_cast<std::uint8_t>((u8 >> 6) & 3)};
+        }
+    };
+
+    struct int2_t final {
+        std::int8_t u8;
+        constexpr int2_t() noexcept : u8{} {}
+        constexpr int2_t(int u8) noexcept : u8{static_cast<std::int8_t>(u8)} {}
+        constexpr auto operator==(std::int8_t y) const noexcept -> bool { return this->u8 == y; }
+        constexpr auto operator!=(std::int8_t y) const noexcept -> bool { return !(*this == y); }
+        constexpr auto operator==(int2_t y)  const noexcept -> bool { return this->u8 == y.u8; }
+        constexpr auto operator!=(int2_t y)  const noexcept -> bool { return !(*this == y); }
+        constexpr auto pack(std::int8_t v0, std::int8_t v1, std::int8_t v2, std::int8_t v3) noexcept -> void {
+            u8 = static_cast<std::int8_t>((v0 & 3) | ((v1 & 3) << 2) | ((v2 & 3) << 4) | ((v3 & 3) << 6));
+        }
+        [[nodiscard]] constexpr auto unpack() const noexcept -> std::array<std::int8_t, 4> {
+            constexpr auto se2{[](std::int8_t x) noexcept -> std::int8_t { return x & 0x2 ? static_cast<std::int8_t>(x | 0xFC) : x; }};
+            return {se2(u8 & 3), se2((u8 >> 2) & 3), se2((u8 >> 4) & 3), se2((u8 >> 6) & 3)};
+        }
+    };
 
     struct uint4_t final {
         std::uint8_t u8;
@@ -84,6 +120,8 @@ namespace piquant {
         }
     };
 
+    static_assert(sizeof(uint2_t) == 1);
+    static_assert(sizeof(int2_t) == 1);
     static_assert(sizeof(uint4_t) == 1);
     static_assert(sizeof(int4_t) == 1);
 
@@ -106,6 +144,8 @@ namespace piquant {
     };
 
     constexpr std::array dtype_infos {
+        dtype_info{.name="uint2", .stride=1, .bit_size=2,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                            // uint2
+        dtype_info{.name="int2", .stride=1, .bit_size=2,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed+dtype_flags::is_signed},      // int2
         dtype_info{.name="uint4", .stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                            // uint4
         dtype_info{.name="int4", .stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed+dtype_flags::is_signed},      // int4
         dtype_info{.name="uint8", .stride=1, .bit_size=8,  .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                   // uint8
@@ -132,6 +172,14 @@ namespace piquant {
         static constexpr T min{std::numeric_limits<T>::min()};
         static constexpr T max{std::numeric_limits<T>::max()};
     };
+    template<> struct dtype_limits<uint2_t> final {
+        static constexpr std::uint8_t min{0};
+        static constexpr std::uint8_t max{0x3};
+    };
+    template<> struct dtype_limits<int2_t> final {
+        static constexpr std::int8_t  min{-0x2};
+        static constexpr std::int8_t  max{0x1};
+    };
     template<> struct dtype_limits<uint4_t> final {
         static constexpr std::uint8_t min{0};
         static constexpr std::uint8_t max{0xf};
@@ -141,10 +189,14 @@ namespace piquant {
         static constexpr std::int8_t max{0x7};
     };
 
+    template<typename T> concept is_int2 = std::is_same_v<T, uint2_t> || std::is_same_v<T, int2_t>;
     template<typename T> concept is_int4 = std::is_same_v<T, uint4_t> || std::is_same_v<T, int4_t>;
-    template<typename T> concept is_dtype = std::is_arithmetic_v<T> || is_int4<T>;
+    template<typename T> concept is_packed_int = is_int2<T> || is_int4<T>;
+    template<typename T> concept is_dtype = std::is_arithmetic_v<T> || is_packed_int<T>;
     template<typename T> requires is_dtype<T> struct dtype_traits final {};
 
+    template<> struct dtype_traits<uint2_t> { static constexpr dtype type_code = dtype::uint2; };
+    template<> struct dtype_traits<int2_t> { static constexpr dtype type_code = dtype::int2; };
     template<> struct dtype_traits<uint4_t> { static constexpr dtype type_code = dtype::uint4; };
     template<> struct dtype_traits<int4_t> { static constexpr dtype type_code = dtype::int4; };
     template<> struct dtype_traits<std::int8_t> { static constexpr dtype type_code = dtype::int8; };
