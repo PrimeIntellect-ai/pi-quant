@@ -57,7 +57,7 @@ TEST(dequantize, uint4_packing) {
         const auto adjusted_epsilon {is_int4<to> ? epsilon * 4: epsilon}; \
         for (std::size_t n {}; n < iters; ++n) { \
             std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
-            std::size_t numel_out {is_int4<to> ? (numel+1)>>1 : numel}; \
+            std::size_t numel_out {is_int2<to> ? (numel+1)>>2 : is_int4<to> ? (numel+1)>>1 : numel}; \
             \
             std::vector<ti> data_in {}; \
             std::vector<to> quantized {}; \
@@ -96,6 +96,10 @@ TEST(dequantize, uint4_packing) {
         } \
     }
 
+test_dequant(float, uint2_t, nearest, set)
+test_dequant(float, uint2_t, stochastic, set)
+test_dequant(float, uint2_t, nearest, add)
+test_dequant(float, uint2_t, stochastic, add)
 test_dequant(float, uint4_t, nearest, set)
 test_dequant(float, uint4_t, stochastic, set)
 test_dequant(float, uint4_t, nearest, add)

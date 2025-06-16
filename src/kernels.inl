@@ -583,8 +583,19 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         return r;
     }
 
+    template <const round_mode RND, typename IN, typename OUT> requires (std::is_floating_point_v<IN> && is_packed_int<OUT>)
+   [[nodiscard]] static inline auto PIQUANT_AINLINE quant_step_packed(IN a, IN b, IN c, IN d, double inv_scale, std::int64_t zp) noexcept -> OUT {
+        auto pa {quant_step_scalar<RND, IN, OUT>(a, inv_scale, zp)};
+        auto pb {quant_step_scalar<RND, IN, OUT>(b, inv_scale, zp)};
+        auto pc {quant_step_scalar<RND, IN, OUT>(c, inv_scale, zp)};
+        auto pd {quant_step_scalar<RND, IN, OUT>(d, inv_scale, zp)};
+        OUT r{0};
+        r.pack(pa.u8, pb.u8, pc.u8, pd.u8);
+        return r;
+    }
+
     template <typename IN, typename OUT, const round_mode RND>
-        requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_int4<OUT>))
+        requires (std::is_floating_point_v<IN> && (std::is_integral_v<OUT> || is_packed_int<OUT>))
     static auto PIQUANT_HOT quant_generic(
         const void* in,
         void* out,
@@ -613,18 +624,23 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 o[i>>1] = packed;
             }
         } else if constexpr (is_int2<OUT>) {
-            std::int64_t i{};
-            for (i = 0; i+3 < numel; i += 4) {
+            std::int64_t i {};
+            for (i = 0 ; i+3 < numel; i += 4) {
                 IN a {x[i]};
                 IN b {x[i+1]};
-                IN c {x[i+1]};
-                IN d {x[i+1]};
-                o[i>>2] = quant_step_packed<RND, IN, OUT>(a, b, inv_scale, zp);
+                IN c {x[i+2]};
+                IN d {x[i+3]};
+                o[i>>2] = quant_step_packed<RND, IN, OUT>(a, b, c, d, inv_scale, zp);
             }
-            if (numel & 1) {
-                // TODO
-                auto packed = quant_step_packed<RND, IN, OUT>(x[numel-1], 0, inv_scale, zp);
-                packed.u8 &= 15;
+            std::int64_t rem {numel-i};
+            if (rem) {
+                IN a {x[i]};
+                IN b {rem > 1 ? x[i+1] : IN{0}};
+                IN c {rem > 2 ? x[i+2] : IN{0}};
+                IN d {IN{0}};
+                auto packed {quant_step_packed<RND, IN, OUT>(a, b, c, d, inv_scale, zp)};
+                static constexpr std::array<std::uint8_t, 4> mask {0x03, 0x0f, 0x3f, 0xff};
+                packed.u8 &= mask[rem-1];
                 o[i>>2] = packed;
             }
         } else {
@@ -642,7 +658,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     }
 
     template <typename IN, typename OUT, const reduce_op RDO>
-            requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_packed_int<IN>))
+        requires (std::is_floating_point_v<OUT> && (std::is_integral_v<IN> || is_packed_int<IN>))
     static auto PIQUANT_HOT dequant_generic(
         const void* in,
         void* out,
@@ -687,32 +703,41 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             }
             return;
         } else if constexpr (is_int2<IN>) {
-            std::int64_t i{};
-            for (std::int64_t j{}; i+3 < numel; i += 4, j++) {
-                auto [qa, qb, qc, qd]  {x[j].unpack()};
+            std::int64_t i {};
+            std::int64_t j {};
+            for (; i+3 < numel; i += 4, ++j) {
+                auto [qa, qb, qc, qd] = x[j].unpack();
                 if constexpr (RDO == reduce_op::set) {
                     o[i] = dequant_step<IN, OUT>(scale, zp, qa);
                     o[i+1] = dequant_step<IN, OUT>(scale, zp, qb);
                     o[i+2] = dequant_step<IN, OUT>(scale, zp, qc);
                     o[i+3] = dequant_step<IN, OUT>(scale, zp, qd);
                 } else if constexpr (RDO == reduce_op::add) {
-                    o[i] += dequant_step<IN, OUT>(scale, zp, qa);
+                    o[i]     += dequant_step<IN, OUT>(scale, zp, qa);
                     o[i+1] += dequant_step<IN, OUT>(scale, zp, qb);
                     o[i+2] += dequant_step<IN, OUT>(scale, zp, qc);
                     o[i+3] += dequant_step<IN, OUT>(scale, zp, qd);
-                } else
+                } else {
                     static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
+                }
             }
-            if (numel & 1) {
-                // TODO
-                auto [qa, qb, qc, qd] {x[i>>1].unpack()};
-                OUT r = dequant_step<IN, OUT>(scale, zp, qa);
-                if constexpr (RDO == reduce_op::set)
-                    o[numel-1] = r;
-                else if constexpr (RDO == reduce_op::add)
-                    o[numel-1] += r;
-                else
+            std::int64_t rem {numel-i};
+            if (rem) {
+                auto [qa, qb, qc, qd] {x[j].unpack()};
+                OUT da {dequant_step<IN, OUT>(scale, zp, qa)};
+                OUT db {dequant_step<IN, OUT>(scale, zp, qb)};
+                OUT dc {dequant_step<IN, OUT>(scale, zp, qc)};
+                if constexpr (RDO == reduce_op::set) {
+                    o[i] = da;
+                    if (rem > 1) o[i+1] = db;
+                    if (rem > 2) o[i+2] = dc;
+                } else if constexpr (RDO == reduce_op::add) {
+                    o[i] += da;
+                    if (rem > 1) o[i+1] += db;
+                    if (rem > 2) o[i+2] += dc;
+                } else {
                     static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
+                }
             }
             return;
         }
@@ -974,6 +999,8 @@ namespace piquant {
                 switch (make_pair_perm(desc.dt_in, desc.dt_out)) {
                     impl_quant_perm(f32, uint4, float, uint4_t);
                     impl_quant_perm(f32, int4, float, int4_t);
+                    impl_quant_perm(f32, uint2, float, uint2_t);
+                    impl_quant_perm(f32, int2, float, int2_t);
                     impl_quant_perm(f32, uint8, float, uint8_t);
                     impl_quant_perm(f32, int8, float, int8_t);
                     impl_quant_perm(f32, uint16, float, uint16_t);
@@ -984,6 +1011,8 @@ namespace piquant {
                     impl_quant_perm(f32, int64, float, int64_t);
                     impl_quant_perm(f64, uint4, double, uint4_t);
                     impl_quant_perm(f64, int4, double, int4_t);
+                    impl_quant_perm(f64, uint2, double, uint2_t);
+                    impl_quant_perm(f64, int2, double, int2_t);
                     impl_quant_perm(f64, uint8, double, uint8_t);
                     impl_quant_perm(f64, int8, double, int8_t);
                     impl_quant_perm(f64, uint16, double, uint16_t);

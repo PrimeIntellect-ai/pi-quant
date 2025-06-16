@@ -259,10 +259,10 @@ namespace piquant {
         const auto& dto {dtype_info_of(dtype_out)};
         piquant_assert(!(dti.flags & dtype_flags::is_quant), "input dtype must be a dequantized type");
         piquant_assert(dto.flags & dtype_flags::is_quant, "output dtype must be a quantized type");
-        if (dto.bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
-            piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
-        } else {
-            piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
+        switch (dto.bit_size) {
+            case 4: piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
+            case 2: piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>2, "output span requires (in.size() + 1) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
+            default:  piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
         }
         quant_descriptor info {
             .type = command_type::quant,
@@ -291,10 +291,10 @@ namespace piquant {
         const auto& dto {dtype_info_of(dtype_out)};
         piquant_assert(dti.flags & dtype_flags::is_quant, "input dtype must be a quantized type");
         piquant_assert(!(dto.flags & dtype_flags::is_quant), "output dtype must be a dequantized type");
-        if (dti.bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
-            piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
-        } else {
-            piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
+        switch (dti.bit_size) {
+            case 4: piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
+            case 2: piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+1)>>2, "output span requires (out.size() + 1) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
+            default: piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3)); break;
         }
         quant_descriptor info {
             .type = command_type::dequant,
@@ -349,7 +349,7 @@ namespace piquant {
         if (width == 64) {
             return std::numeric_limits<std::uint64_t>::max();
         }
-        return (1ull << width) - 1;
+        return (1ull<<width) - 1;
     }
 
     auto context::compute_quant_config_from_data(std::span<const float> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
