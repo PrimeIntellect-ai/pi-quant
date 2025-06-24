@@ -632,16 +632,14 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 IN d {x[i+3]};
                 o[i>>2] = quant_step_packed<RND, IN, OUT>(a, b, c, d, inv_scale, zp);
             }
-            std::int64_t rem {numel-i};
-            if (rem) {
-                IN a {x[i]};
-                IN b {rem > 1 ? x[i+1] : IN{0}};
-                IN c {rem > 2 ? x[i+2] : IN{0}};
-                IN d {IN{0}};
-                auto packed {quant_step_packed<RND, IN, OUT>(a, b, c, d, inv_scale, zp)};
-                static constexpr std::array<std::uint8_t, 4> mask {0x03, 0x0f, 0x3f, 0xff};
-                packed.u8 &= mask[rem-1];
-                o[i>>2] = packed;
+            if (numel & 3) { /* Handle 1-, 2- or 3-value tail */
+                std::uint8_t p {};
+                switch (numel & 3) {
+                    case 3: p |= quant_step_scalar<RND, IN, OUT>(x[i+2], inv_scale, zp).u8 << 4;
+                    case 2: p |= quant_step_scalar<RND, IN, OUT>(x[i+1], inv_scale, zp).u8 << 2;
+                    case 1: p |= quant_step_scalar<RND, IN, OUT>(x[i], inv_scale, zp).u8;
+                }
+                o[i>>2] = p;
             }
         } else {
             for (std::int64_t i = 0; i < numel; ++i)
@@ -713,7 +711,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                     o[i+2] = dequant_step<IN, OUT>(scale, zp, qc);
                     o[i+3] = dequant_step<IN, OUT>(scale, zp, qd);
                 } else if constexpr (RDO == reduce_op::add) {
-                    o[i]     += dequant_step<IN, OUT>(scale, zp, qa);
+                    o[i] += dequant_step<IN, OUT>(scale, zp, qa);
                     o[i+1] += dequant_step<IN, OUT>(scale, zp, qb);
                     o[i+2] += dequant_step<IN, OUT>(scale, zp, qc);
                     o[i+3] += dequant_step<IN, OUT>(scale, zp, qd);
@@ -721,23 +719,11 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                     static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
                 }
             }
-            std::int64_t rem {numel-i};
-            if (rem) {
-                auto [qa, qb, qc, qd] {x[j].unpack()};
-                OUT da {dequant_step<IN, OUT>(scale, zp, qa)};
-                OUT db {dequant_step<IN, OUT>(scale, zp, qb)};
-                OUT dc {dequant_step<IN, OUT>(scale, zp, qc)};
-                if constexpr (RDO == reduce_op::set) {
-                    o[i] = da;
-                    if (rem > 1) o[i+1] = db;
-                    if (rem > 2) o[i+2] = dc;
-                } else if constexpr (RDO == reduce_op::add) {
-                    o[i] += da;
-                    if (rem > 1) o[i+1] += db;
-                    if (rem > 2) o[i+2] += dc;
-                } else {
-                    static_assert(RDO == reduce_op::set || RDO == reduce_op::add, "Invalid reduce operation");
-                }
+            if (numel & 3) { /* Handle 1-, 2- or 3-value tail */
+                auto p {x[i>>2].u8};
+                if (numel & 1) o[i] = dequant_step<IN, OUT>(scale, zp, IN{p & 3});
+                if (numel & 2) o[i+1] = dequant_step<IN, OUT>(scale, zp, IN{p>>2 & 3});
+                if (numel & 3) o[i+((numel & 3) == 3 ? 2 : 0)] = dequant_step<IN, OUT>(scale, zp, IN{p>>4 & 3});
             }
             return;
         }
