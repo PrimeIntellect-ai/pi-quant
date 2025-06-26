@@ -3,16 +3,15 @@
 #endif
 
 #include <piquant.hpp>
-#include "piquant_internal.hpp"
+#include "../piquant_internal.hpp"
 
 #include <algorithm>
 #include <bitset>
 #include <cmath>
-#include <cstdint>
 #include <numeric>
-#include <bit>
 #include <sstream>
 
+#include "kernels_specialized.inl"
 
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
