@@ -33,7 +33,11 @@ namespace piquant {
         add, // output[i] += qdeuantize(input[i])
     };
 
+    // All supported data types for quantization and dequantization. Order matters.
     enum class dtype {
+        f32 = 0,
+        f64,
+
         uint2,
         int2,
         uint4,
@@ -46,12 +50,12 @@ namespace piquant {
         int32,
         uint64,
         int64,
-        f32,
-        f64,
 
         num_
     };
     static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::num_) <= 0xff);
+    static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::f32) == 0);
+    static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::f64) == 1);
 
     struct uint2_t final {
         std::uint8_t u8;
@@ -144,6 +148,8 @@ namespace piquant {
     };
 
     constexpr std::array dtype_infos {
+        dtype_info{.name="f32", .stride=4, .bit_size=32, .flags=dtype_flags::is_float+dtype_flags::is_signed},                                                  // f32
+        dtype_info{.name="f64", .stride=8, .bit_size=64, .flags=dtype_flags::is_float+dtype_flags::is_signed},                                                  // f64
         dtype_info{.name="uint2", .stride=1, .bit_size=2,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                            // uint2
         dtype_info{.name="int2", .stride=1, .bit_size=2,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed+dtype_flags::is_signed},      // int2
         dtype_info{.name="uint4", .stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                            // uint4
@@ -155,9 +161,7 @@ namespace piquant {
         dtype_info{.name="uint32", .stride=4, .bit_size=32, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint32
         dtype_info{.name="int32", .stride=4, .bit_size=32, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                            // int32
         dtype_info{.name="uint64", .stride=8, .bit_size=64, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint64
-        dtype_info{.name="int64", .stride=8, .bit_size=64, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                            // int64
-        dtype_info{.name="f32", .stride=4, .bit_size=32, .flags=dtype_flags::is_float+dtype_flags::is_signed},                                                  // f32
-        dtype_info{.name="f64", .stride=8, .bit_size=64, .flags=dtype_flags::is_float+dtype_flags::is_signed},                                                  // f64
+        dtype_info{.name="int64", .stride=8, .bit_size=64, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed}                             // int64
     };
     static_assert([]() -> bool {
         for (auto&& info : dtype_infos) {

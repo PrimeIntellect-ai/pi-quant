@@ -257,6 +257,80 @@ namespace piquant {
         return ((255&ifrom)<<8)+(255&ito);
     }
 
+    using dispatch_fn = auto (*)(const void*, void*, std::int64_t, float, std::int64_t) noexcept -> void;
+
+    // Dispatch table for quantization kernels.  aOrder matters.
+    static constexpr std::array<std::array<std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)>, 2>, 2> stubs_quant = {
+        std::array<std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)>, 2> {
+            std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)> { // float, nearest
+                nullptr, // same type <-> not supported
+                nullptr, // same type <-> not supported
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint2_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int2_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint4_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int4_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint8_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int8_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint16_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int16_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint32_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int32_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint64_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int64_t, round_mode::nearest>
+            },
+            std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)> { // double, nearest
+                nullptr, // same type <-> not supported
+                nullptr, // same type <-> not supported
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint2_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int2_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint4_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int4_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint8_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int8_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint16_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int16_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint32_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int32_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint64_t, round_mode::nearest>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int64_t, round_mode::nearest>
+            }
+        },
+        std::array<std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)>, 2> {
+            std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)> { // float, stochastic
+                nullptr, // same type <-> not supported
+                nullptr, // same type <-> not supported
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint2_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int2_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint4_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int4_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint8_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int8_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint16_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int16_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint32_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int32_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint64_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int64_t, round_mode::stochastic>
+                },
+            std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)> { // double, stochastic
+                nullptr, // same type <-> not supported
+                nullptr, // same type <-> not supported
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint2_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int2_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint4_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int4_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint8_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int8_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint16_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int16_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint32_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int32_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint64_t, round_mode::stochastic>,
+                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int64_t, round_mode::stochastic>
+            }
+        }
+    };
+
     static auto PIQUANT_HOT quantize_dispatch(
         const void* x,
         void* o,
@@ -267,45 +341,15 @@ namespace piquant {
         const dtype_info& dt_in {dtype_info_of(desc.dt_in)};
         const dtype_info& dt_out {dtype_info_of(desc.dt_out)};
         switch (desc.type) {
-            case context::command_type::quant:  // out[i] = quantize(in[i])
+            case context::command_type::quant: {
                 piquant_assert2(!(dt_in.flags & dtype_flags::is_quant));
                 piquant_assert2(dt_out.flags & dtype_flags::is_quant);
-                #define impl_quant_perm(dti, dto, ti, to) \
-                    case make_pair_perm(dti, dto): \
-                        if (desc.rnd_mode == round_mode::stochastic) \
-                            impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<ti, to, round_mode::stochastic>(x, o, range, desc.scale, desc.zero_point); \
-                        else \
-                            impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<ti, to, round_mode::nearest>(x, o, range, desc.scale, desc.zero_point); \
-                    return
-                switch (make_pair_perm(desc.dt_in, desc.dt_out)) {
-                    impl_quant_perm(f32, uint4, float, uint4_t);
-                    impl_quant_perm(f32, int4, float, int4_t);
-                    impl_quant_perm(f32, uint2, float, uint2_t);
-                    impl_quant_perm(f32, int2, float, int2_t);
-                    impl_quant_perm(f32, uint8, float, uint8_t);
-                    impl_quant_perm(f32, int8, float, int8_t);
-                    impl_quant_perm(f32, uint16, float, uint16_t);
-                    impl_quant_perm(f32, int16, float, int16_t);
-                    impl_quant_perm(f32, uint32, float, uint32_t);
-                    impl_quant_perm(f32, int32, float, int32_t);
-                    impl_quant_perm(f32, uint64, float, uint64_t);
-                    impl_quant_perm(f32, int64, float, int64_t);
-                    impl_quant_perm(f64, uint4, double, uint4_t);
-                    impl_quant_perm(f64, int4, double, int4_t);
-                    impl_quant_perm(f64, uint2, double, uint2_t);
-                    impl_quant_perm(f64, int2, double, int2_t);
-                    impl_quant_perm(f64, uint8, double, uint8_t);
-                    impl_quant_perm(f64, int8, double, int8_t);
-                    impl_quant_perm(f64, uint16, double, uint16_t);
-                    impl_quant_perm(f64, int16, double, int16_t);
-                    impl_quant_perm(f64, uint32, double, uint32_t);
-                    impl_quant_perm(f64, int32, double, int32_t);
-                    impl_quant_perm(f64, uint64, double, uint64_t);
-                    impl_quant_perm(f64, int64, double, int64_t);
-                    default: panic("Invalid quantization pair");
-                }
-            #undef impl_quant_perm
-            return;
+                const auto& stubs_round_mode {stubs_quant[static_cast<std::size_t>(desc.rnd_mode)]};
+                const auto& stubs_dtype_fp {stubs_round_mode[static_cast<std::size_t>(desc.dt_in)]};
+                auto* kernel {stubs_dtype_fp[static_cast<std::size_t>(desc.dt_out)]};
+                piquant_assert(kernel != nullptr, "invalid quantization types: %s -> %s", dtype_info_of(desc.dt_in).name, dtype_info_of(desc.dt_out).name);
+                (*kernel)(x, o, range, desc.scale, desc.zero_point);
+            } return;
             case context::command_type::dequant:    // out[i] = dequantize(in[i])
                 piquant_assert2(dt_in.flags & dtype_flags::is_quant);
                 piquant_assert2(!(dt_out.flags & dtype_flags::is_quant));
