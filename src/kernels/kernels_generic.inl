@@ -260,9 +260,9 @@ namespace piquant {
     using dispatch_fn = auto (*)(const void*, void*, std::int64_t, float, std::int64_t) noexcept -> void;
 
     // Dispatch table for quantization kernels.  aOrder matters.
-    static constexpr std::array<std::array<std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)>, 2>, 2> stubs_quant = {
-        std::array<std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)>, 2> {
-            std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)> { // float, nearest
+    static constexpr std::array<std::array<std::array<dispatch_fn, static_cast<std::size_t>(dtype::count_)>, float_dtype_count>, static_cast<std::size_t>(round_mode::count_)> stubs_quant = {
+        std::array<std::array<dispatch_fn, static_cast<std::size_t>(dtype::count_)>, float_dtype_count> {
+            std::array<dispatch_fn, static_cast<std::size_t>(dtype::count_)> { // float, nearest
                 nullptr, // same type <-> not supported
                 nullptr, // same type <-> not supported
                 &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint2_t, round_mode::nearest>,
@@ -278,7 +278,7 @@ namespace piquant {
                 &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint64_t, round_mode::nearest>,
                 &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int64_t, round_mode::nearest>
             },
-            std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)> { // double, nearest
+            std::array<dispatch_fn, static_cast<std::size_t>(dtype::count_)> { // double, nearest
                 nullptr, // same type <-> not supported
                 nullptr, // same type <-> not supported
                 &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint2_t, round_mode::nearest>,
@@ -295,8 +295,8 @@ namespace piquant {
                 &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int64_t, round_mode::nearest>
             }
         },
-        std::array<std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)>, 2> {
-            std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)> { // float, stochastic
+        std::array<std::array<dispatch_fn, static_cast<std::size_t>(dtype::count_)>, float_dtype_count> {
+            std::array<dispatch_fn, static_cast<std::size_t>(dtype::count_)> { // float, stochastic
                 nullptr, // same type <-> not supported
                 nullptr, // same type <-> not supported
                 &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint2_t, round_mode::stochastic>,
@@ -312,7 +312,7 @@ namespace piquant {
                 &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint64_t, round_mode::stochastic>,
                 &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int64_t, round_mode::stochastic>
                 },
-            std::array<dispatch_fn, static_cast<std::size_t>(dtype::num_)> { // double, stochastic
+            std::array<dispatch_fn, static_cast<std::size_t>(dtype::count_)> { // double, stochastic
                 nullptr, // same type <-> not supported
                 nullptr, // same type <-> not supported
                 &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint2_t, round_mode::stochastic>,

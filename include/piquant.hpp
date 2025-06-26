@@ -25,12 +25,16 @@ namespace piquant {
 
     enum class round_mode {
         nearest,
-        stochastic
+        stochastic,
+
+        count_
     };
 
     enum class reduce_op {
         set, // output[i] = dequantize(input[i])
         add, // output[i] += qdeuantize(input[i])
+
+        count_
     };
 
     // All supported data types for quantization and dequantization. Order matters.
@@ -51,11 +55,13 @@ namespace piquant {
         uint64,
         int64,
 
-        num_
+        count_
     };
-    static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::num_) <= 0xff);
+    static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::count_) <= 0xff);
     static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::f32) == 0);
     static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::f64) == 1);
+
+    constexpr std::size_t float_dtype_count {2}; // Exclude quantized types
 
     struct uint2_t final {
         std::uint8_t u8;
