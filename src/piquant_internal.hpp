@@ -23,7 +23,7 @@ namespace piquant {
     #define PIQUANT_RESTRICT __restrict
     #else
     #define PIQUANT_HOT __attribute__((hot))
-    #define PIQUANT_AINLINE __attribute__((always_inline))
+    #define PIQUANT_AINLINE __attribute__((always_inline)) inline
     #define PIQUANT_RESTRICT __restrict__
     #endif
 

@@ -13,7 +13,7 @@ struct xs128p_state final {
 
     constexpr xs128p_state(std::uint64_t p1, std::uint64_t p2) noexcept : p1{p1}, p2{p2} {}
 
-    [[nodiscard]] inline auto PIQUANT_AINLINE operator ()() noexcept -> std::uint64_t {
+    [[nodiscard]] auto PIQUANT_AINLINE operator ()() noexcept -> std::uint64_t {
         std::uint64_t s1 {p1};
         std::uint64_t s0 {p2};
         p1 = s0;
@@ -22,13 +22,13 @@ struct xs128p_state final {
         return p2 + s0;
     }
 
-    [[nodiscard]] inline auto PIQUANT_AINLINE canonical() noexcept -> float {
+    [[nodiscard]] auto PIQUANT_AINLINE canonical() noexcept -> float {
         static constexpr auto bias_scale {1.0f/static_cast<float>(0x800000)};
         std::uint64_t y {~0u & (*this)()};
         return (bias_scale*(static_cast<float>(y>>9) + 0.5f));
     }
 
-    [[nodiscard]] inline auto PIQUANT_AINLINE bounded(std::array<std::uint32_t, 2> bounds) noexcept -> std::array<std::uint32_t, 2> {
+    [[nodiscard]] auto PIQUANT_AINLINE bounded(std::array<std::uint32_t, 2> bounds) noexcept -> std::array<std::uint32_t, 2> {
         auto [b1, b2] {bounds}; // [0, bound1), [0, bound2)
         std::uint64_t y {(*this)()};
         return {
