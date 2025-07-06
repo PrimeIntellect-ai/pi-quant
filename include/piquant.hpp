@@ -63,70 +63,51 @@ namespace piquant {
     constexpr std::size_t float_dtype_count {2}; // Exclude quantized types
 
     struct uint2_t final {
-        std::uint8_t u8;
-        constexpr uint2_t() noexcept : u8{} {}
-        constexpr uint2_t(int u8) noexcept : u8{static_cast<std::uint8_t>(u8)} {}
-        constexpr auto operator==(std::uint8_t y) const noexcept -> bool { return this->u8 == y; }
-        constexpr auto operator!=(std::uint8_t y) const noexcept -> bool { return !(*this == y); }
-        constexpr auto operator==(uint2_t y)  const noexcept -> bool { return this->u8 == y.u8; }
-        constexpr auto operator!=(uint2_t y)  const noexcept -> bool { return !(*this == y); }
-        constexpr auto pack(std::uint8_t v0, std::uint8_t v1, std::uint8_t v2, std::uint8_t v3) noexcept -> void {
-            u8 = static_cast<std::uint8_t>((v0 & 3) | ((v1 & 3) << 2) | ((v2 & 3) << 4) | ((v3 & 3) << 6));
-        }
-        [[nodiscard]] constexpr auto unpack() const noexcept -> std::array<std::uint8_t, 4> {
-            return {static_cast<std::uint8_t>(u8 & 3), static_cast<std::uint8_t>((u8 >> 2) & 3),
-                    static_cast<std::uint8_t>((u8 >> 4) & 3), static_cast<std::uint8_t>((u8 >> 6) & 3)};
-        }
+        using packed_storage = std::uint8_t;
+        packed_storage bits;
+
+        constexpr uint2_t() noexcept : bits{} {}
+        constexpr uint2_t(int u8) noexcept : bits{static_cast<packed_storage>(u8)} {}
+        constexpr auto operator == (uint2_t rhs) const noexcept -> bool { return bits == rhs.bits; }
+        constexpr auto operator != (uint2_t rhs) const noexcept -> bool { return !(*this == rhs); }
+        constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
+        constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
     };
 
     struct int2_t final {
-        std::int8_t u8;
-        constexpr int2_t() noexcept : u8{} {}
-        constexpr int2_t(int u8) noexcept : u8{static_cast<std::int8_t>(u8)} {}
-        constexpr auto operator==(std::int8_t y) const noexcept -> bool { return this->u8 == y; }
-        constexpr auto operator!=(std::int8_t y) const noexcept -> bool { return !(*this == y); }
-        constexpr auto operator==(int2_t y)  const noexcept -> bool { return this->u8 == y.u8; }
-        constexpr auto operator!=(int2_t y)  const noexcept -> bool { return !(*this == y); }
-        constexpr auto pack(std::int8_t v0, std::int8_t v1, std::int8_t v2, std::int8_t v3) noexcept -> void {
-            u8 = static_cast<std::int8_t>((v0 & 3) | ((v1 & 3) << 2) | ((v2 & 3) << 4) | ((v3 & 3) << 6));
-        }
-        [[nodiscard]] constexpr auto unpack() const noexcept -> std::array<std::int8_t, 4> {
-            constexpr auto se2{[](std::int8_t x) noexcept -> std::int8_t { return x & 0x2 ? static_cast<std::int8_t>(x | 0xFC) : x; }};
-            return {se2(u8 & 3), se2((u8 >> 2) & 3), se2((u8 >> 4) & 3), se2((u8 >> 6) & 3)};
-        }
+        using packed_storage = std::int8_t;
+        packed_storage bits;
+
+        constexpr int2_t() noexcept : bits{} {}
+        constexpr int2_t(int u8) noexcept : bits{static_cast<packed_storage>(u8)} {}
+        constexpr auto operator == (int2_t rhs) const noexcept -> bool { return bits == rhs.bits; }
+        constexpr auto operator != (int2_t rhs) const noexcept -> bool { return !(*this == rhs); }
+        constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
+        constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
     };
 
     struct uint4_t final {
-        std::uint8_t u8;
-        constexpr uint4_t() noexcept : u8 {} {}
-        constexpr uint4_t(int u8) noexcept : u8 {static_cast<std::uint8_t>(u8)} {}
-        constexpr auto operator == (std::uint8_t y) const noexcept -> bool { return this->u8 == y; }
-        constexpr auto operator != (std::uint8_t y) const noexcept -> bool { return !(*this == y); }
-        constexpr auto operator == (uint4_t y) const noexcept -> bool { return this->u8 == y.u8; }
-        constexpr auto operator != (uint4_t y) const noexcept -> bool { return !(*this == y); }
-        constexpr auto pack(std::uint8_t lo, std::uint8_t hi) noexcept -> void {
-            u8 = static_cast<std::uint8_t>((lo & 15) | ((hi & 15) << 4));
-        }
-        [[nodiscard]] constexpr auto unpack() const noexcept -> std::array<std::uint8_t, 2> {
-            return {static_cast<std::uint8_t>(u8 & 15), static_cast<std::uint8_t>(u8 >> 4)};
-        }
+        using packed_storage = std::uint8_t;
+        packed_storage bits;
+
+        constexpr uint4_t() noexcept : bits {} {}
+        constexpr uint4_t(int u8) noexcept : bits {static_cast<packed_storage>(u8)} {}
+        constexpr auto operator == (uint4_t rhs) const noexcept -> bool { return bits == rhs.bits; }
+        constexpr auto operator != (uint4_t rhs) const noexcept -> bool { return !(*this == rhs); }
+        constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
+        constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
     };
 
     struct int4_t final {
-        std::int8_t u8;
-        constexpr int4_t() noexcept : u8 {} {}
-        constexpr int4_t(int u8) noexcept : u8 {static_cast<std::int8_t>(u8)} {}
-        constexpr auto operator == (std::int8_t u8) const noexcept -> bool { return this->u8 == u8; }
-        constexpr auto operator != (std::int8_t y) const noexcept -> bool { return !(*this == y); }
-        constexpr auto operator == (int4_t y) const noexcept -> bool { return this->u8 == y.u8; }
-        constexpr auto operator != (int4_t y) const noexcept -> bool { return !(*this == y); }
-        constexpr auto pack(std::int8_t lo, std::int8_t hi) noexcept -> void {
-            u8 = static_cast<std::int8_t>((lo & 15) | ((hi & 15) << 4));
-        }
-        [[nodiscard]] constexpr auto unpack() const noexcept -> std::array<std::int8_t, 2> {
-            constexpr auto snex4 {[](std::int8_t x) noexcept -> std::int8_t { return x & 0x8 ? static_cast<std::int8_t>(x|0xF0) : x; }};
-            return {(snex4(u8 & 15)), (snex4(u8 >> 4))};
-        }
+        using packed_storage = std::int8_t;
+        packed_storage bits;
+
+        constexpr int4_t() noexcept : bits {} {}
+        constexpr int4_t(int u8) noexcept : bits {static_cast<packed_storage>(u8)} {}
+        constexpr auto operator == (int4_t rhs) const noexcept -> bool { return bits == rhs.bits; }
+        constexpr auto operator != (int4_t rhs) const noexcept -> bool { return !(*this == rhs); }
+        constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
+        constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
     };
 
     static_assert(sizeof(uint2_t) == 1);

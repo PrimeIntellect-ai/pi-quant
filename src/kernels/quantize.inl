@@ -38,22 +38,18 @@ template <typename In, typename Out, const round_mode RoundMode> requires is_flo
 
 template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_quant_type<Out>
 [[nodiscard]] static auto PIQUANT_AINLINE quant_step_packed(In a, In b, double inv_scale, std::int64_t zp) noexcept -> Out {
-    auto pa {quant_step_scalar<In, Out, RoundMode>(a, inv_scale, zp)};
-    auto pb {quant_step_scalar<In, Out, RoundMode>(b, inv_scale, zp)};
-    Out r{0};
-    r.pack(pa.u8, pb.u8);
-    return r;
+    auto qa {quant_step_scalar<In, Out, RoundMode>(a, inv_scale, zp).bits};
+    auto qb {quant_step_scalar<In, Out, RoundMode>(b, inv_scale, zp).bits};
+    return qa | qb<<4;
 }
 
 template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_quant_type<Out>
 [[nodiscard]] static auto PIQUANT_AINLINE quant_step_packed(In a, In b, In c, In d, double inv_scale, std::int64_t zp) noexcept -> Out {
-    auto pa {quant_step_scalar<In, Out, RoundMode>(a, inv_scale, zp)};
-    auto pb {quant_step_scalar<In, Out, RoundMode>(b, inv_scale, zp)};
-    auto pc {quant_step_scalar<In, Out, RoundMode>(c, inv_scale, zp)};
-    auto pd {quant_step_scalar<In, Out, RoundMode>(d, inv_scale, zp)};
-    Out r{0};
-    r.pack(pa.u8, pb.u8, pc.u8, pd.u8);
-    return r;
+    auto qa {quant_step_scalar<In, Out, RoundMode>(a, inv_scale, zp).bits};
+    auto qb {quant_step_scalar<In, Out, RoundMode>(b, inv_scale, zp).bits};
+    auto qc {quant_step_scalar<In, Out, RoundMode>(c, inv_scale, zp).bits};
+    auto qd {quant_step_scalar<In, Out, RoundMode>(d, inv_scale, zp).bits};
+    return qa | (qb<<2) | (qc<<4) | (qd<<6);
 }
 
 template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_int4<Out>
@@ -65,15 +61,14 @@ static auto PIQUANT_HOT quant_int4(
     std::int64_t zp
 ) noexcept -> void {
     std::int64_t i{};
-    for (i = 0; i+1 < numel; i += 2) {
+    for (i=0; i+1 < numel; i += 2) {
         In a {x[i]};
         In b {x[i+1]};
         o[i>>1] = quant_step_packed<In, Out, RoundMode>(a, b, inv_scale, zp);
     }
     if (numel & 1) {
-        auto packed = quant_step_packed<In, Out, RoundMode>(x[numel-1], 0, inv_scale, zp);
-        packed.u8 &= 15;
-        o[i>>1] = packed;
+        o[i>>1] = quant_step_packed<In, Out, RoundMode>(x[numel-1], 0, inv_scale, zp);
+        o[i>>1].bits &= 15;
     }
 }
 
@@ -86,7 +81,7 @@ static auto PIQUANT_HOT quant_int2(
     std::int64_t zp
 ) noexcept -> void {
     std::int64_t i {};
-    for (i = 0 ; i+3 < numel; i += 4) {
+    for (i=0 ; i+3 < numel; i += 4) {
         In a {x[i]};
         In b {x[i+1]};
         In c {x[i+2]};
@@ -94,11 +89,11 @@ static auto PIQUANT_HOT quant_int2(
         o[i>>2] = quant_step_packed<In, Out, RoundMode>(a, b, c, d, inv_scale, zp);
     }
     if (numel & 3) { /* Handle 1-, 2- or 3-value tail */
-        std::uint8_t p {};
+       typename Out::packed_storage p {};
         switch (numel & 3) {
-            case 3: p |= quant_step_scalar<In, Out, RoundMode>(x[i+2], inv_scale, zp).u8 << 4;
-            case 2: p |= quant_step_scalar<In, Out, RoundMode>(x[i+1], inv_scale, zp).u8 << 2;
-            case 1: p |= quant_step_scalar<In, Out, RoundMode>(x[i], inv_scale, zp).u8;
+            case 3: p |= quant_step_scalar<In, Out, RoundMode>(x[i+2], inv_scale, zp).bits << 4;
+            case 2: p |= quant_step_scalar<In, Out, RoundMode>(x[i+1], inv_scale, zp).bits << 2;
+            case 1: p |= quant_step_scalar<In, Out, RoundMode>(x[i], inv_scale, zp).bits;
         }
         o[i>>2] = p;
     }
@@ -133,6 +128,6 @@ static auto PIQUANT_HOT quant_generic(
     }
 
     // Generic quantization for other dtypes
-    for (std::int64_t i = 0; i < numel; ++i)
+    for (std::int64_t i=0; i < numel; ++i)
         o[i] = quant_step_scalar<In, Out, RoundMode>(x[i], inv_scale, zp);
 }

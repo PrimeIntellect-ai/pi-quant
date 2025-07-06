@@ -8,7 +8,7 @@ using namespace piquant;
 template <typename In, typename Out> requires is_quant_type<In> && is_float_type<Out>
 [[nodiscard]] static auto dequant_step(double scale, std::int64_t zp, const In x) noexcept -> Out {
     if constexpr (is_packed_int<In>)
-        return static_cast<Out>(static_cast<std::int64_t>(x.u8) - zp)*scale;
+        return static_cast<Out>(static_cast<std::int64_t>(x.bits) - zp)*scale;
     else
         return static_cast<Out>(static_cast<std::int64_t>(x) - zp)*scale;
 }
@@ -21,9 +21,17 @@ static auto PIQUANT_HOT dequant_int4(
     double scale,
     std::int64_t zp
 ) noexcept -> void {
+    static constexpr auto sign_extend_4 {[](std::int8_t x) noexcept -> std::int8_t {
+        return x & 0x8 ? static_cast<std::int8_t>(x | 0xf0) : x;
+    }};
+
     std::int64_t i{};
-    for (std::int64_t j{}; i+1 < numel; i += 2, j++) {
-        auto [qa, qb]  {x[j].unpack()};
+    for (std::int64_t j{}; i+1 < numel; i += 2, ++j) {
+        auto p {x[j].bits};
+        auto qa {p & 15};
+        auto qb {p >> 4};
+        if constexpr (std::is_signed_v<typename In::packed_storage>) qa = sign_extend_4(qa);
+        if constexpr (std::is_signed_v<typename In::packed_storage>) qa = sign_extend_4(qb);
         if constexpr (ReduceOp == reduce_op::set) {
             o[i] = dequant_step<In, Out>(scale, zp, qa);
             o[i+1] = dequant_step<In, Out>(scale, zp, qb);
@@ -34,7 +42,8 @@ static auto PIQUANT_HOT dequant_int4(
             static_assert(ReduceOp == reduce_op::set || ReduceOp == reduce_op::add, "Invalid reduce operation");
     }
     if (numel & 1) {
-        auto [qa, qb] {x[i>>1].unpack()};
+        auto qa {x[i>>1].bits & 15};
+        if constexpr (std::is_signed_v<typename In::packed_storage>) qa = sign_extend_4(qa);
         Out r = dequant_step<In, Out>(scale, zp, qa);
         if constexpr (ReduceOp == reduce_op::set)
             o[numel-1] = r;
@@ -56,7 +65,11 @@ static auto PIQUANT_HOT dequant_int2(
     std::int64_t i {};
     std::int64_t j {};
     for (; i+3 < numel; i += 4, ++j) {
-        auto [qa, qb, qc, qd] = x[j].unpack();
+        auto p {x[j].bits};
+        auto qa {p & 3};
+        auto qb {p>>2 & 3};
+        auto qc {p>>4 & 3};
+        auto qd {p>>6 & 3};
         if constexpr (ReduceOp == reduce_op::set) {
             o[i] = dequant_step<In, Out>(scale, zp, qa);
             o[i+1] = dequant_step<In, Out>(scale, zp, qb);
@@ -72,7 +85,7 @@ static auto PIQUANT_HOT dequant_int2(
         }
     }
     if (numel & 3) { /* Handle 1-, 2- or 3-value tail */
-        auto p {x[i>>2].u8};
+        auto p {x[i>>2].bits};
         if (numel & 1) o[i] = dequant_step<In, Out>(scale, zp, In{p & 3});
         if (numel & 2) o[i+1] = dequant_step<In, Out>(scale, zp, In{p>>2 & 3});
         if (numel & 3) o[i+((numel & 3) == 3 ? 2 : 0)] = dequant_step<In, Out>(scale, zp, In{p>>4 & 3});

@@ -42,11 +42,7 @@ TEST(dequantize, uint4_packing) {
     std::cout << std::endl;
     std::cout << "PACKED"  << std::endl;
     for (auto&& x : quantized)
-        std::cout << std::bitset<8>(x.u8) << " ";
-    std::cout << std::endl;
-    std::cout << "UNPACKED"  << std::endl;
-    for (auto&& x : quantized)
-        std::cout << +x.unpack()[0] << "|" << +x.unpack()[1] << " ";
+        std::cout << std::bitset<8>(x.bits) << " ";
     std::cout << std::endl;
 }
 
