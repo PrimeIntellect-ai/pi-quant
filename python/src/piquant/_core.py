@@ -1,3 +1,4 @@
+import weakref
 from dataclasses import dataclass
 import multiprocessing
 from enum import Enum, unique
@@ -76,11 +77,9 @@ class Context:
         """Initialize a quantization context with a given number of threads. If num_threads is None, the number of threads is set to the number of available CPUs minus 1."""
         if num_threads is None:
             num_threads = max(multiprocessing.cpu_count() - 1, 1)
-        self.__num_threads = num_threads
-        self._ctx = C.piquant_context_create(self.__num_threads)
-
-    def __del__(self) -> None:
-        C.piquant_context_destroy(self._ctx)
+        self._num_threads = num_threads
+        self._ctx = C.piquant_context_create(self._num_threads)
+        self._finalizer = weakref.finalize(self, C.piquant_context_destroy, self._ctx)
 
     @staticmethod
     @lru_cache(maxsize=1)
