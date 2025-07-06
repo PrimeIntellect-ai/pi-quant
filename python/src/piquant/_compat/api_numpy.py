@@ -11,33 +11,29 @@ def _is_cont(arr: np.ndarray) -> bool:
     return arr.flags['C_CONTIGUOUS']
 
 
+_NP_DTYPE_MAP: dict[str, QuantDtype] = { # For some reason mapping np.dtype to QuantDtype is not working, so we map the names
+    'uint8': QuantDtype.UINT8,
+    'int8': QuantDtype.INT8,
+    'uint16': QuantDtype.UINT16,
+    'int16': QuantDtype.INT16,
+    'uint32': QuantDtype.UINT32,
+    'int32': QuantDtype.INT32,
+    'uint64': QuantDtype.UINT64,
+    'int64': QuantDtype.INT64,
+    'float32': QuantDtype.F32,
+    'float64': QuantDtype.F64,
+}
+
+
 def _numpy_to_piquant_dtype(dtype: np.dtype) -> QuantDtype:
-    if dtype == np.uint8:  # For some reason a dict is not working here
-        return QuantDtype.UINT8
-    elif dtype == np.int8:
-        return QuantDtype.INT8
-    elif dtype == np.uint16:
-        return QuantDtype.UINT16
-    elif dtype == np.int16:
-        return QuantDtype.INT16
-    elif dtype == np.uint32:
-        return QuantDtype.UINT32
-    elif dtype == np.int32:
-        return QuantDtype.INT32
-    elif dtype == np.uint64:
-        return QuantDtype.UINT64
-    elif dtype == np.int64:
-        return QuantDtype.INT64
-    elif dtype == np.float32:
-        return QuantDtype.F32
-    elif dtype == np.float64:
-        return QuantDtype.F64
-    else:
-        raise ValueError(f'Unsupported np dtype: {dtype}')
+    name = str(dtype)
+    if name not in _NP_DTYPE_MAP:
+        raise ValueError(f'Unsupported target_quant_dtype: {name}')
+    return _NP_DTYPE_MAP[name]
 
 
 def compute_quant_config_numpy(
-    arr: np.ndarray, *, target_quant_dtype: QuantDtype, ctx: Union[Context, None] = None
+    arr: np.ndarray, *, target_quant_dtype: QuantDtype, ctx: Context = Context.get()
 ) -> Tuple[float, int]:
     """
     Compute the scale and zero point of a tensor.
@@ -45,8 +41,6 @@ def compute_quant_config_numpy(
         :param target_quant_dtype: Data type which the tensor will be quantized to
         :param ctx: Context to use for computation, if None, the default context will be used.
     """
-    if ctx is None:
-        ctx = Context.default()
     if not _is_cont(arr):
         arr = np.ascontiguousarray(arr)
     assert arr.dtype == np.float32, f'Expected arr of type float32, got {arr.dtype}'
@@ -58,7 +52,7 @@ def quantize_numpy(
     out_array: Union[np.ndarray, None] = None,
     *,
     config: QuantConfig = QuantConfig(),
-    ctx: Union[Context, None] = None,
+    ctx: Context = Context.get(),
 ) -> np.ndarray:
     """
     Quantize a np array using the given configuration.
@@ -68,9 +62,6 @@ def quantize_numpy(
     :param ctx: Context to use for quantization, if None, the default context will be used.
     :return: Quantized array.
     """
-
-    if ctx is None:
-        ctx = Context.default()
 
     if in_array.dtype != np.float32:
         in_array = in_array.astype(np.float32)
@@ -103,7 +94,7 @@ def dequantize_numpy(
     out_array: Union[np.ndarray, None] = None,
     *,
     config: DequantConfig = DequantConfig(),
-    ctx: Union[Context, None] = None,
+    ctx: Context = Context.get(),
 ) -> np.ndarray:
     """
     Dequantize a np array using the given configuration.
@@ -113,9 +104,6 @@ def dequantize_numpy(
     :param ctx: Context to use for dequantization, if None, the default context will be used.
     :return: Dequantized array.
     """
-
-    if ctx is None:
-        ctx = Context.default()
 
     if out_array is None:
         out_array = np.empty_like(in_array, dtype=np.float32)

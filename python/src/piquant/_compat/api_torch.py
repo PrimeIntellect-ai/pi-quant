@@ -2,27 +2,28 @@ from .._core import *
 
 import torch
 
+_TORCH_DTYPE_MAP: dict[torch.dtype, QuantDtype] = {
+    torch.uint8: QuantDtype.UINT8,
+    torch.int8: QuantDtype.INT8,
+    torch.uint16: QuantDtype.UINT16,
+    torch.int16: QuantDtype.INT16,
+    torch.uint32: QuantDtype.UINT32,
+    torch.int32: QuantDtype.INT32,
+    torch.uint64: QuantDtype.UINT64,
+    torch.int64: QuantDtype.INT64,
+    torch.float32: QuantDtype.F32,
+    torch.float64: QuantDtype.F64,
+}
+
 
 def _torch_to_piquant_dtype(dtype: torch.dtype) -> QuantDtype:
-    _dtype_map: dict[torch.dtype, QuantDtype] = {
-        torch.uint8: QuantDtype.UINT8,
-        torch.int8: QuantDtype.INT8,
-        torch.uint16: QuantDtype.UINT16,
-        torch.int16: QuantDtype.INT16,
-        torch.uint32: QuantDtype.UINT32,
-        torch.int32: QuantDtype.INT32,
-        torch.uint64: QuantDtype.UINT64,
-        torch.int64: QuantDtype.INT64,
-        torch.float32: QuantDtype.F32,
-        torch.float64: QuantDtype.F64,
-    }
-    if not dtype in _dtype_map:
+    if dtype not in _TORCH_DTYPE_MAP:
         raise ValueError(f'Unsupported target_quant_dtype: {dtype}')
-    return _dtype_map[dtype]
+    return _TORCH_DTYPE_MAP[dtype]
 
 
 def compute_quant_config_torch(
-    tensor: torch.Tensor, *, target_quant_dtype: QuantDtype, ctx: Union[Context, None] = None
+    tensor: torch.Tensor, *, target_quant_dtype: QuantDtype, ctx: Context = Context.get()
 ) -> Tuple[float, int]:
     """
     Compute the scale and zero point of a arr.
@@ -30,8 +31,6 @@ def compute_quant_config_torch(
         :param target_quant_dtype: Data type which the arr will be quantized to
         :param ctx: Context to use for computation, if None, the default context will be used.
     """
-    if ctx is None:
-        ctx = Context.default()
     if not tensor.is_contiguous():
         tensor = tensor.contiguous()
     assert tensor.dtype == torch.float32, f'Expected arr of type float32, got {tensor.dtype}'
@@ -43,7 +42,7 @@ def quantize_torch(
     out_tensor: Union[torch.Tensor, None] = None,
     *,
     config: QuantConfig = QuantConfig(),
-    ctx: Union[Context, None] = None,
+    ctx: Context = Context.get(),
 ) -> torch.Tensor:
     """
     Quantize a tensor using the given configuration.
@@ -53,9 +52,6 @@ def quantize_torch(
     :param ctx: Context to use for quantization, if None, the default context will be used.
     :return: Quantized tensor.
     """
-
-    if ctx is None:
-        ctx = Context.default()
 
     if in_tensor.dtype != torch.float32:
         in_tensor = in_tensor.float()
@@ -92,7 +88,7 @@ def dequantize_torch(
     out_tensor: Union[torch.Tensor, None] = None,
     *,
     config: DequantConfig = DequantConfig(),
-    ctx: Union[Context, None] = None,
+    ctx: Context = Context.get(),
 ) -> torch.Tensor:
     """
     Dequantize a tensor using the given configuration.
@@ -102,9 +98,6 @@ def dequantize_torch(
     :param ctx: Context to use for dequantization, if None, the default context will be used.
     :return: Dequantized tensor.
     """
-
-    if ctx is None:
-        ctx = Context.default()
 
     if out_tensor is None:
         out_tensor = torch.empty_like(in_tensor, dtype=torch.float32)

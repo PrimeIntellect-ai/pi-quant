@@ -21,6 +21,10 @@ class ReduceOp(Enum):
 
 @unique
 class QuantDtype(Enum):
+    F32 = C.PIQUANT_DTYPE_F32
+    F64 = C.PIQUANT_DTYPE_F64
+    UINT2 = C.PIQUANT_DTYPE_UINT2
+    INT2 = C.PIQUANT_DTYPE_INT2
     UINT4 = C.PIQUANT_DTYPE_UINT4
     INT4 = C.PIQUANT_DTYPE_INT4
     UINT8 = C.PIQUANT_DTYPE_UINT8
@@ -31,11 +35,11 @@ class QuantDtype(Enum):
     INT32 = C.PIQUANT_DTYPE_INT32
     UINT64 = C.PIQUANT_DTYPE_UINT64
     INT64 = C.PIQUANT_DTYPE_INT64
-    F32 = C.PIQUANT_DTYPE_F32
-    F64 = C.PIQUANT_DTYPE_F64
 
     def bit_size(self) -> int:
-        if self in (QuantDtype.UINT4, QuantDtype.INT4):
+        if self in (QuantDtype.UINT2, QuantDtype.INT2):
+            return 2
+        elif self in (QuantDtype.UINT4, QuantDtype.INT4):
             return 4
         elif self in (QuantDtype.UINT8, QuantDtype.INT8):
             return 8
@@ -80,7 +84,7 @@ class Context:
 
     @staticmethod
     @lru_cache(maxsize=1)
-    def default() -> 'Context':
+    def get() -> 'Context':
         """
         Default context for quantization.
         This is a singleton that is used to avoid creating multiple contexts.
