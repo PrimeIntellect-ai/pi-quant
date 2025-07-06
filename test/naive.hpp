@@ -47,7 +47,7 @@ template <typename T> requires piquant::is_int4<T>
 [[nodiscard]] static constexpr auto pack_nibbles(T x, T y) noexcept -> T {
     auto xi {x.bits};
     auto yi {y.bits};
-    return xi | (yi<<4);
+    return xi&15 | ((yi&15)<<4);
 }
 
 template <typename IN, typename OUT, const piquant::round_mode RND> requires requires {

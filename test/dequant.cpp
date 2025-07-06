@@ -75,13 +75,14 @@ TEST(dequantize, uint4_packing) {
                 bool is_near = delta <= adjusted_epsilon; \
                 if (!is_near) { \
                     std::cout << "Mismatch at index " << i << ": " << a << " != " << b << std::endl; \
+                    std::cout << "Numel in: " << numel << " Numel out: " << numel_out << std::endl; \
                     std::cout << "Delta: " << delta << std::endl; \
-                    std::cout << "Input: ["; \
+                    std::cout << "IN: ["; \
                     for (std::size_t j {}; j < numel; ++j) { \
                         std::cout << data_in[j] << " "; \
                     } \
                     std::cout << "]" << std::endl; \
-                    std::cout << "Dequantized: ["; \
+                    std::cout << "OT: ["; \
                     for (std::size_t j {}; j < numel; ++j) { \
                         std::cout << dequantized[j] << " "; \
                     } \

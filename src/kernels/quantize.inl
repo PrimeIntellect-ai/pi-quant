@@ -40,7 +40,7 @@ template <typename In, typename Out, const round_mode RoundMode> requires is_flo
 [[nodiscard]] static auto PIQUANT_AINLINE quant_step_packed(In a, In b, double inv_scale, std::int64_t zp) noexcept -> Out {
     auto qa {quant_step_scalar<In, Out, RoundMode>(a, inv_scale, zp).bits};
     auto qb {quant_step_scalar<In, Out, RoundMode>(b, inv_scale, zp).bits};
-    return qa | qb<<4;
+    return qa&15 | (qb&15)<<4;
 }
 
 template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_quant_type<Out>

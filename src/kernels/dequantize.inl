@@ -22,7 +22,7 @@ static auto PIQUANT_HOT dequant_int4(
     std::int64_t zp
 ) noexcept -> void {
     static constexpr auto sign_extend_4 {[](std::int8_t x) noexcept -> std::int8_t {
-        return x & 0x8 ? static_cast<std::int8_t>(x | 0xf0) : x;
+        return x & 8 ? static_cast<std::int8_t>(x | 0xf0) : x;
     }};
 
     std::int64_t i{};
@@ -30,8 +30,8 @@ static auto PIQUANT_HOT dequant_int4(
         auto p {x[j].bits};
         auto qa {p & 15};
         auto qb {p >> 4};
-        if constexpr (std::is_signed_v<typename In::packed_storage>) qa = sign_extend_4(qa);
-        if constexpr (std::is_signed_v<typename In::packed_storage>) qa = sign_extend_4(qb);
+        if constexpr (std::is_same_v<In, int4_t>) qa = sign_extend_4(qa);
+        if constexpr (std::is_same_v<In, int4_t>) qb = sign_extend_4(qb);
         if constexpr (ReduceOp == reduce_op::set) {
             o[i] = dequant_step<In, Out>(scale, zp, qa);
             o[i+1] = dequant_step<In, Out>(scale, zp, qb);
@@ -43,7 +43,7 @@ static auto PIQUANT_HOT dequant_int4(
     }
     if (numel & 1) {
         auto qa {x[i>>1].bits & 15};
-        if constexpr (std::is_signed_v<typename In::packed_storage>) qa = sign_extend_4(qa);
+        if constexpr (std::is_same_v<In, int4_t>) qa = sign_extend_4(qa);
         Out r = dequant_step<In, Out>(scale, zp, qa);
         if constexpr (ReduceOp == reduce_op::set)
             o[numel-1] = r;
