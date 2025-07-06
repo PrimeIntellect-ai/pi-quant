@@ -41,7 +41,6 @@ namespace piquant {
     enum class dtype {
         f32 = 0,
         f64,
-
         uint2,
         int2,
         uint4,

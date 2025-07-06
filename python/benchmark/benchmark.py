@@ -57,7 +57,11 @@ print(f'Torch FX quantization time for {num_runs} runs: {time_torch_fx:.6f} seco
 print(f'Torch quantization time for {num_runs} runs: {time_torch:.6f} seconds')
 print(f'Fast quantization time for {num_runs} runs: {time_fast:.6f} seconds')
 
-labels = ['torch.ao.quantization.fx._decomposed.quantize_per_tensor', 'torch.quantize_per_tensor', 'piquant.quantize_torch']
+labels = [
+    'torch.ao.quantization.fx._decomposed.quantize_per_tensor',
+    'torch.quantize_per_tensor',
+    'piquant.quantize_torch',
+]
 times = [time_torch_fx, time_torch, time_fast]
 
 plt.figure(figsize=(6, 4))

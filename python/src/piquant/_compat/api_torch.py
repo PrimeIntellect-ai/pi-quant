@@ -1,13 +1,10 @@
-import importlib
-from typing import TYPE_CHECKING, Tuple, Dict
-from piquant._quant import *
+from .._core import *
+
 import torch
 
 
-def _torch_to_piquant_dtype(dtype: 'torch.target_quant_dtype') -> QuantDtype:
-    if torch is None:
-        raise ImportError('torch is not installed')
-    _dtype_map: Dict['torch.target_quant_dtype', QuantDtype] = {
+def _torch_to_piquant_dtype(dtype: torch.dtype) -> QuantDtype:
+    _dtype_map: dict[torch.dtype, QuantDtype] = {
         torch.uint8: QuantDtype.UINT8,
         torch.int8: QuantDtype.INT8,
         torch.uint16: QuantDtype.UINT16,
@@ -25,7 +22,7 @@ def _torch_to_piquant_dtype(dtype: 'torch.target_quant_dtype') -> QuantDtype:
 
 
 def compute_quant_config_torch(
-    tensor: 'torch.Tensor', *, target_quant_dtype: QuantDtype, ctx: Union[Context, None] = None
+    tensor: torch.Tensor, *, target_quant_dtype: QuantDtype, ctx: Union[Context, None] = None
 ) -> Tuple[float, int]:
     """
     Compute the scale and zero point of a arr.
@@ -33,8 +30,6 @@ def compute_quant_config_torch(
         :param target_quant_dtype: Data type which the arr will be quantized to
         :param ctx: Context to use for computation, if None, the default context will be used.
     """
-    if torch is None:
-        raise ImportError('torch is not installed')
     if ctx is None:
         ctx = Context.default()
     if not tensor.is_contiguous():
@@ -44,12 +39,12 @@ def compute_quant_config_torch(
 
 
 def quantize_torch(
-    in_tensor: 'torch.Tensor',
-    out_tensor: Union['torch.Tensor', None] = None,
+    in_tensor: torch.Tensor,
+    out_tensor: Union[torch.Tensor, None] = None,
     *,
     config: QuantConfig = QuantConfig(),
     ctx: Union[Context, None] = None,
-) -> 'torch.Tensor':
+) -> torch.Tensor:
     """
     Quantize a tensor using the given configuration.
     :param in_tensor: Input tensor, must be of type float32.
@@ -58,8 +53,6 @@ def quantize_torch(
     :param ctx: Context to use for quantization, if None, the default context will be used.
     :return: Quantized tensor.
     """
-    if torch is None:
-        raise ImportError('torch is not installed')
 
     if ctx is None:
         ctx = Context.default()
@@ -95,12 +88,12 @@ def quantize_torch(
 
 
 def dequantize_torch(
-    in_tensor: 'torch.Tensor',
-    out_tensor: Union['torch.Tensor', None] = None,
+    in_tensor: torch.Tensor,
+    out_tensor: Union[torch.Tensor, None] = None,
     *,
     config: DequantConfig = DequantConfig(),
     ctx: Union[Context, None] = None,
-) -> 'torch.Tensor':
+) -> torch.Tensor:
     """
     Dequantize a tensor using the given configuration.
     :param in_tensor: Input tensor. Must be in a quantized format (e.g., uint8).
@@ -109,9 +102,6 @@ def dequantize_torch(
     :param ctx: Context to use for dequantization, if None, the default context will be used.
     :return: Dequantized tensor.
     """
-
-    if torch is None:
-        raise ImportError('torch is not installed')
 
     if ctx is None:
         ctx = Context.default()
