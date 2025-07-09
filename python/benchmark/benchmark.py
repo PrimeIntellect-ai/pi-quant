@@ -58,9 +58,9 @@ print(f'Torch quantization time for {num_runs} runs: {time_torch:.6f} seconds')
 print(f'Fast quantization time for {num_runs} runs: {time_fast:.6f} seconds')
 
 labels = [
-    'torch.ao.quantization.fx._decomposed.quantize_per_tensor',
-    'torch.quantize_per_tensor',
-    'piquant.quantize_torch',
+    'Torch FX Quantize',
+    'Torch Quantize',
+    'piquant',
 ]
 times = [time_torch_fx, time_torch, time_fast]
 
