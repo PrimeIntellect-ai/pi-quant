@@ -231,23 +231,19 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
       double scale,
       std::int64_t zp
     ) noexcept -> void {
-        /* TODO
         const auto* PIQUANT_RESTRICT x {static_cast<const In*>(in)};
-        auto* PIQUANT_RESTRICT o {static_cast<Out*>(out)};
+        auto* PIQUANT_RESTRICT o {static_cast<In*>(out)};
         double inv_scale {1.0 / scale};
-
         if constexpr (ReduceOp == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
                 o[i] = dequant_step<Out, In>(scale, zp, quant_step_scalar<In, Out, RoundMode>(x[i], inv_scale, zp));
             return;
         }
-
         if constexpr (ReduceOp == reduce_op::add) {
             for (std::int64_t i {}; i < numel; ++i)
                 o[i] += dequant_step<Out, In>(scale, zp, quant_step_scalar<In, Out, RoundMode>(x[i], inv_scale, zp));
             return;
         }
-        */
     }
 };
 
