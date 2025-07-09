@@ -23,6 +23,9 @@ namespace piquant {
     // (u/int4 only) Amount of standard deviations/sigmas (left and right of 0) to use for the quantization range
     static constexpr double stddev_scale_int4 {2.7};
 
+    // (u/int2 only) Amount of standard deviations/sigmas (left and right of 0) to use for the quantization range
+    static constexpr double stddev_scale_int2 {1.4};
+
     enum class round_mode {
         nearest,
         stochastic,

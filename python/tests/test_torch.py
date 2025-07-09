@@ -6,7 +6,6 @@ from piquant import *
 INT_EPSILON = 2
 FLOAT_EPSILON = 1e-5
 
-
 def test_dequant_config_compute_torch() -> None:
     tensor = torch.rand(8192)
     scale, zero_point = compute_quant_config_torch(tensor, target_quant_dtype=QuantDtype.UINT8)

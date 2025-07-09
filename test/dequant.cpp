@@ -52,7 +52,7 @@ TEST(dequantize, uint2_packing) {
     std::vector input {-1.0f, 1.0f, 2.0f, 3.0f, 0.5f};
 
     auto [scale, zp] {ctx.compute_quant_config_from_data(input, dtype::uint2)};
-    std::cout << "scale: " << scale << " zp: " << +zp << std::endl;
+    std::cout << "scale: " << scale << " zp: " << zp << std::endl;
 
     std::vector<uint2_t> quantized {};
     quantized.resize((input.size()+3)/4);

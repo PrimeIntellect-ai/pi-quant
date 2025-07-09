@@ -106,10 +106,10 @@ static auto PIQUANT_HOT dequant_generic(
     // Use SIMD optimized kernels for some dtype permutations
     if constexpr (std::is_same_v<In, std::uint8_t> && std::is_same_v<Out, float>) {
         if constexpr (ReduceOp == reduce_op::set) {
-            dequant_uint8_to_f32<false>(static_cast<const std::uint8_t*>(in), static_cast<float*>(out), numel, static_cast<float>(scale), static_cast<std::int32_t>(zp));
+            dequant_uint8_to_f32<false>(static_cast<const std::uint8_t*>(in), static_cast<float*>(out), numel, scale, static_cast<std::int32_t>(zp));
             return;
         } else if constexpr (ReduceOp == reduce_op::add) {
-            dequant_uint8_to_f32<true>(static_cast<const std::uint8_t*>(in), static_cast<float*>(out), numel, static_cast<float>(scale), static_cast<std::int32_t>(zp));
+            dequant_uint8_to_f32<true>(static_cast<const std::uint8_t*>(in), static_cast<float*>(out), numel, scale, static_cast<std::int32_t>(zp));
             return;
         }
     }
