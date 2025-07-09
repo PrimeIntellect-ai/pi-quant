@@ -256,147 +256,65 @@ namespace piquant {
 
     using quant_fn = auto (*)(const void*, void*, std::int64_t, float, std::int64_t) noexcept -> void;
 
+    template <typename Src, typename Dst, round_mode M>
+    [[nodiscard]] consteval auto quant_entry() -> quant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<Src, Dst, M>; }
+
+    template <typename Src, typename Dst, reduce_op R>
+    [[nodiscard]] consteval auto dequant_entry() -> quant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<Dst, Src, R>; }
+
+    template <typename...> struct type_set {};
+
+    template <typename Src, round_mode M, typename TL> struct make_quant_row;
+
+    template <typename Src, round_mode M, typename... Dst>
+    struct make_quant_row<Src, M, type_set<Dst...>> {
+        static constexpr std::array<quant_fn, 2+sizeof...(Dst)> value = {nullptr, nullptr, quant_entry<Src, Dst, M>()...};
+    };
+
+    template <typename Src, reduce_op R, typename TL> struct make_dequant_row;
+
+    template <typename Src, reduce_op R, typename... Dst>
+    struct make_dequant_row<Src, R, type_set<Dst...>> {
+        static constexpr std::array<quant_fn, 2+sizeof...(Dst)> value = {nullptr, nullptr, dequant_entry<Src, Dst, R>()...};
+    };
+
+    using quant_types = type_set<
+        uint2_t, int2_t, uint4_t, int4_t,
+        uint8_t, int8_t, uint16_t, int16_t,
+        uint32_t, int32_t, uint64_t, int64_t
+    >;
+
+    using fp_types = type_set<float, double>;
+
     // Dispatch table for quantization kernels. Order matters.
-    static constexpr std::array<std::array<std::array<quant_fn, static_cast<std::size_t>(dtype::count_)>, float_dtype_count>, static_cast<std::size_t>(round_mode::count_)> quant_functions = {
-        std::array<std::array<quant_fn, static_cast<std::size_t>(dtype::count_)>, float_dtype_count> { // nearest rounding mode
-            std::array<quant_fn, static_cast<std::size_t>(dtype::count_)> { // float, nearest
-                nullptr, // same type <-> not supported
-                nullptr, // same type <-> not supported
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint2_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int2_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint4_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int4_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint8_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int8_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint16_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int16_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint32_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int32_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint64_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int64_t, round_mode::nearest>
+    static constexpr std::array quant_functions {
+        std::array {
+            std::array {
+                make_quant_row<float, round_mode::nearest, quant_types>::value,
+                make_quant_row<double, round_mode::nearest, quant_types>::value
             },
-            std::array<quant_fn, static_cast<std::size_t>(dtype::count_)> { // double, nearest
-                nullptr, // same type <-> not supported
-                nullptr, // same type <-> not supported
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint2_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int2_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint4_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int4_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint8_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int8_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint16_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int16_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint32_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int32_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint64_t, round_mode::nearest>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int64_t, round_mode::nearest>
-            }
         },
-        std::array<std::array<quant_fn, static_cast<std::size_t>(dtype::count_)>, float_dtype_count> { // stochastic rounding mode
-            std::array<quant_fn, static_cast<std::size_t>(dtype::count_)> { // float, stochastic
-                nullptr, // same type <-> not supported
-                nullptr, // same type <-> not supported
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint2_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int2_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint4_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int4_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint8_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int8_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint16_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int16_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint32_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int32_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, uint64_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<float, int64_t, round_mode::stochastic>
-                },
-            std::array<quant_fn, static_cast<std::size_t>(dtype::count_)> { // double, stochastic
-                nullptr, // same type <-> not supported
-                nullptr, // same type <-> not supported
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint2_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int2_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint4_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int4_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint8_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int8_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint16_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int16_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint32_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int32_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, uint64_t, round_mode::stochastic>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<double, int64_t, round_mode::stochastic>
-            }
+        std::array {
+            std::array {
+                make_quant_row<float, round_mode::stochastic, quant_types>::value,
+                make_quant_row<double, round_mode::stochastic, quant_types>::value
+            },
         }
     };
 
     // Dispatch table for dequantization kernels. Order matters.
-    static constexpr std::array<std::array<std::array<quant_fn, static_cast<std::size_t>(dtype::count_)>, float_dtype_count>, static_cast<std::size_t>(round_mode::count_)> dequant_functions = {
-        std::array<std::array<quant_fn, static_cast<std::size_t>(dtype::count_)>, float_dtype_count> { // set reduce op
-            std::array<quant_fn, static_cast<std::size_t>(dtype::count_)> { // float, set
-                nullptr, // same type <-> not supported
-                nullptr, // same type <-> not supported
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint2_t, float, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int2_t, float, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint4_t, float, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int4_t, float, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint8_t, float, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int8_t, float, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint16_t, float, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int16_t, float, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint32_t, float, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int32_t, float, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint64_t, float, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int64_t, float, reduce_op::set>
+    static constexpr std::array dequant_functions {
+        std::array {
+            std::array {
+                make_dequant_row<float, reduce_op::set, quant_types>::value,
+                make_dequant_row<double, reduce_op::set, quant_types>::value
             },
-            std::array<quant_fn, static_cast<std::size_t>(dtype::count_)> { // double, set
-                nullptr, // same type <-> not supported
-                nullptr, // same type <-> not supported
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint2_t, double, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int2_t, double, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint4_t, double, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int4_t, double, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint8_t, double, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int8_t, double, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint16_t, double, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int16_t, double, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint32_t, double, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int32_t, double, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint64_t, double, reduce_op::set>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int64_t, double, reduce_op::set>
-            }
         },
-        std::array<std::array<quant_fn, static_cast<std::size_t>(dtype::count_)>, float_dtype_count> { // add reduce op
-            std::array<quant_fn, static_cast<std::size_t>(dtype::count_)> { // float, add
-                nullptr, // same type <-> not supported
-                nullptr, // same type <-> not supported
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint2_t, float, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int2_t, float, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint4_t, float, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int4_t, float, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint8_t, float, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int8_t, float, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint16_t, float, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int16_t, float, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint32_t, float, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int32_t, float, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint64_t, float, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int64_t, float, reduce_op::add>
+        std::array {
+            std::array {
+                make_dequant_row<float, reduce_op::add, quant_types>::value,
+                make_dequant_row<double, reduce_op::add, quant_types>::value
             },
-            std::array<quant_fn, static_cast<std::size_t>(dtype::count_)> { // double, add
-                nullptr, // same type <-> not supported
-                nullptr, // same type <-> not supported
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint2_t, double, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int2_t, double, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint4_t, double, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int4_t, double, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint8_t, double, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int8_t, double, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint16_t, double, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int16_t, double, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint32_t, double, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int32_t, double, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<uint64_t, double, reduce_op::add>,
-                &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<int64_t, double, reduce_op::add>
-            }
         }
     };
 
