@@ -57,7 +57,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
                 __m128 suq {_mm_add_ps(loq, hiq)};
                 __m128 hid {_mm_movehl_ps(suq, suq)};
                 __m128 sud {_mm_add_ps(suq, hid)};
-                __m128 hi {_mm_shuffle_ps(sud, sud, 0x1)};git
+                __m128 hi {_mm_shuffle_ps(sud, sud, 0x1)};
                 return _mm_cvtss_f32(_mm_add_ss(sud, hi));
             }};
             __m256 vsum1 {_mm256_setzero_ps()};
@@ -76,15 +76,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             __m256 vsum_sq6 {_mm256_setzero_ps()};
             __m256 vsum_sq7 {_mm256_setzero_ps()};
             __m256 vsum_sq8 {_mm256_setzero_ps()};
-            for (; i+63 < x.size(); i += 64) {
-                __m256 v1 {_mm256_loadu_ps(p+i+8*0)};
-                __m256 v2 {_mm256_loadu_ps(p+i+8*1)};
-                __m256 v3 {_mm256_loadu_ps(p+i+8*2)};
-                __m256 v4 {_mm256_loadu_ps(p+i+8*3)};
-                __m256 v5 {_mm256_loadu_ps(p+i+8*4)};
-                __m256 v6 {_mm256_loadu_ps(p+i+8*5)};
-                __m256 v7 {_mm256_loadu_ps(p+i+8*6)};
-                __m256 v8 {_mm256_loadu_ps(p+i+8*7)};
+            for (; i+63 < in.size(); i += 64) {
+                __m256 v1 {_mm256_loadu_ps(p+i+(0<<3))};
+                __m256 v2 {_mm256_loadu_ps(p+i+(1<<3))};
+                __m256 v3 {_mm256_loadu_ps(p+i+(2<<3))};
+                __m256 v4 {_mm256_loadu_ps(p+i+(3<<3))};
+                __m256 v5 {_mm256_loadu_ps(p+i+(4<<3))};
+                __m256 v6 {_mm256_loadu_ps(p+i+(5<<3))};
+                __m256 v7 {_mm256_loadu_ps(p+i+(6<<3))};
+                __m256 v8 {_mm256_loadu_ps(p+i+(7<<3))};
                 vsum1 = _mm256_add_ps(vsum1, v1);
                 vsum2 = _mm256_add_ps(vsum2, v2);
                 vsum3 = _mm256_add_ps(vsum3, v3);
@@ -123,15 +123,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             __m128 vsum_sq6 {_mm_setzero_ps()};
             __m128 vsum_sq7 {_mm_setzero_ps()};
             __m128 vsum_sq8 {_mm_setzero_ps()};
-            for (; i+31 < x.size(); i += 32) {
-                __m128 v1 {_mm_loadu_ps(p+i+4*0)};
-                __m128 v2 {_mm_loadu_ps(p+i+4*1)};
-                __m128 v3 {_mm_loadu_ps(p+i+4*2)};
-                __m128 v4 {_mm_loadu_ps(p+i+4*3)};
-                __m128 v5 {_mm_loadu_ps(p+i+4*4)};
-                __m128 v6 {_mm_loadu_ps(p+i+4*5)};
-                __m128 v7 {_mm_loadu_ps(p+i+4*6)};
-                __m128 v8 {_mm_loadu_ps(p+i+4*7)};
+            for (; i+31 < in.size(); i += 32) {
+                __m128 v1 {_mm_loadu_ps(p+i+(0<<2))};
+                __m128 v2 {_mm_loadu_ps(p+i+(1<<2))};
+                __m128 v3 {_mm_loadu_ps(p+i+(2<<2))};
+                __m128 v4 {_mm_loadu_ps(p+i+(3<<2))};
+                __m128 v5 {_mm_loadu_ps(p+i+(4<<2))};
+                __m128 v6 {_mm_loadu_ps(p+i+(5<<2))};
+                __m128 v7 {_mm_loadu_ps(p+i+(6<<2))};
+                __m128 v8 {_mm_loadu_ps(p+i+(7<<2))};
                 vsum1 = _mm_add_ps(vsum1, v1);
                 vsum2 = _mm_add_ps(vsum2, v2);
                 vsum3 = _mm_add_ps(vsum3, v3);
