@@ -232,7 +232,7 @@ namespace piquant {
        }()
     };
 
-    [[nodiscard]] static auto autotune_k(std::uint64_t type_max) noexcept -> double {
+    [[nodiscard]] static auto optimal_k(std::uint64_t type_max) noexcept -> double {
         if (type_max == 0) return 0.0;
         if (const auto it {optimal_k_lookup.find(type_max)}; it != optimal_k_lookup.end()) [[likely]]
             return it->second;
@@ -266,8 +266,10 @@ namespace piquant {
         double variance {(sum_sq - sum*sum / fnumel) / (fnumel-1.0)};
         double stddev {std::sqrt(variance)};
         std::uint64_t type_max {compute_type_max(quant_dst_type)};
-        double tuned_k {std::floor(100.0*autotune_k(type_max))/100.0};
-        double scale {tuned_k * stddev / static_cast<double>(type_max)};
+        double k {std::floor(100.0*optimal_k(type_max))/100.0};
+        k += 1e-1; // Add a small constant to avoid numerical issues with zero stddev
+        std::cout<<"K="<<k<<std::endl;
+        double scale {k*stddev / static_cast<double>(type_max)};
         if (scale == 0.0) [[unlikely]]
             return {1.0f, (type_max+1)>>1};
         std::size_t smax {type_max == std::numeric_limits<std::uint64_t>::max() ?  1ull<<63 : (type_max + 1)>>1};
