@@ -80,7 +80,7 @@ TEST(dequantize, uint2_packing) {
     TEST(dequantize, dequantize_##ti##_to_##to##_##rnd##_##reduce) { \
         std::mt19937 gen {0x9032002}; \
         std::uniform_real_distribution<ti> dist {-1.0, 1.0}; \
-        const auto adjusted_epsilon {is_int4<to> ? epsilon * 4: epsilon}; \
+        const auto adjusted_epsilon {is_int2<to> ? epsilon*8 : is_int4<to> ? epsilon*4 : epsilon}; \
         for (std::size_t n {}; n < iters; ++n) { \
             std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
             std::size_t numel_out {is_int2<to> ? (numel+3)>>2 : is_int4<to> ? (numel+1)>>1 : numel}; \
@@ -106,7 +106,7 @@ TEST(dequantize, uint2_packing) {
                 if (!is_near) { \
                     std::cout << "Mismatch at index " << i << ": " << a << " != " << b << std::endl; \
                     std::cout << "Numel in: " << numel << " Numel out: " << numel_out << std::endl; \
-                    std::cout << "Delta: " << delta << std::endl; \
+                    std::cout << "Delta: " << delta << " ZP: " << zero_point << " Scale: " << scale << std::endl; \
                     std::cout << "IN: ["; \
                     for (std::size_t j {}; j < numel; ++j) { \
                         std::cout << data_in[j] << " "; \

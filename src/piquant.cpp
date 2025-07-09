@@ -268,7 +268,6 @@ namespace piquant {
         std::uint64_t type_max {compute_type_max(quant_dst_type)};
         double k {std::floor(100.0*optimal_k(type_max))/100.0};
         k += 1e-1; // Add a small constant to avoid numerical issues with zero stddev
-        std::cout<<"K="<<k<<std::endl;
         double scale {k*stddev / static_cast<double>(type_max)};
         if (scale == 0.0) [[unlikely]]
             return {1.0f, (type_max+1)>>1};
