@@ -46,6 +46,36 @@ TEST(dequantize, uint4_packing) {
     std::cout << std::endl;
 }
 
+TEST(dequantize, uint2_packing) {
+    context ctx {1};
+
+    std::vector input {-1.0f, 1.0f, 2.0f, 3.0f, 0.5f};
+
+    auto [scale, zp] {ctx.compute_quant_config_from_data(input, dtype::uint2)};
+    std::cout << "scale: " << scale << " zp: " << +zp << std::endl;
+
+    std::vector<uint2_t> quantized {};
+    quantized.resize((input.size()+3)/4);
+    ctx.quantize_generic<float, uint2_t>(input, quantized, scale, zp, round_mode::nearest);
+
+    std::vector<float> dequantized {};
+    dequantized.resize(input.size());
+    ctx.dequantize_generic<uint2_t, float>(quantized, dequantized, scale, zp, reduce_op::set);
+
+    std::cout << "INPUT"  << std::endl;
+    for (auto&& x : input)
+        std::cout << x << " ";
+    std::cout << std::endl;
+    std::cout << "OUTPUT"  << std::endl;
+    for (auto&& x : dequantized)
+        std::cout << x << " ";
+    std::cout << std::endl;
+    std::cout << "PACKED"  << std::endl;
+    for (auto&& x : quantized)
+        std::cout << std::bitset<8>(x.bits) << " ";
+    std::cout << std::endl;
+}
+
 #define test_dequant(ti, to, rnd, reduce) \
     TEST(dequantize, dequantize_##ti##_to_##to##_##rnd##_##reduce) { \
         std::mt19937 gen {0x9032002}; \
@@ -53,7 +83,7 @@ TEST(dequantize, uint4_packing) {
         const auto adjusted_epsilon {is_int4<to> ? epsilon * 4: epsilon}; \
         for (std::size_t n {}; n < iters; ++n) { \
             std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
-            std::size_t numel_out {is_int2<to> ? (numel+1)>>2 : is_int4<to> ? (numel+1)>>1 : numel}; \
+            std::size_t numel_out {is_int2<to> ? (numel+3)>>2 : is_int4<to> ? (numel+1)>>1 : numel}; \
             \
             std::vector<ti> data_in {}; \
             std::vector<to> quantized {}; \

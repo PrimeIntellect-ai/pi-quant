@@ -97,7 +97,7 @@ static auto PIQUANT_HOT dequant_generic(
     const void* in,
     void* out,
     std::int64_t numel,
-    double scale,
+    float scale,
     std::int64_t zp
 ) noexcept -> void {
     const auto* PIQUANT_RESTRICT x {static_cast<const In*>(in)};

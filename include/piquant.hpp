@@ -325,16 +325,16 @@ namespace piquant {
         };
 
         struct quant_descriptor final {
-            command_type type{command_type::quant};
-            const std::byte* in{};
-            std::byte* out{};
-            std::int64_t numel{};
+            command_type type {command_type::quant};
+            const std::byte* in {};
+            std::byte* out {};
+            std::int64_t numel {};
             float scale{};
-            std::int64_t zero_point{};
-            dtype dt_in{};
-            dtype dt_out{};
-            round_mode rnd_mode{};
-            reduce_op reduce{};
+            std::int64_t zero_point {};
+            dtype dt_in {};
+            dtype dt_out {};
+            round_mode rounding {};
+            reduce_op reducing {};
         };
 
     private:

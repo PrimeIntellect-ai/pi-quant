@@ -261,7 +261,7 @@ namespace piquant {
         piquant_assert(dto.flags & dtype_flags::is_quant, "output dtype must be a quantized type");
         switch (dto.bit_size) {
             case 4: piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
-            case 2: piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>2, "output span requires (in.size() + 1) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
+            case 2: piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+3)>>2, "output span requires (in.size() + 1) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
             default:  piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
         }
         quant_descriptor info {
@@ -273,7 +273,7 @@ namespace piquant {
             .zero_point = zero_point,
             .dt_in = dtype_in,
             .dt_out = dtype_out,
-            .rnd_mode = mode
+            .rounding = mode
         };
         (*this->m_pimpl)(info);
     }
@@ -293,7 +293,7 @@ namespace piquant {
         piquant_assert(!(dto.flags & dtype_flags::is_quant), "output dtype must be a dequantized type");
         switch (dti.bit_size) {
             case 4: piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
-            case 2: piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+1)>>2, "output span requires (out.size() + 1) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
+            case 2: piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+3)>>2, "output span requires (out.size() + 3) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
             default: piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3)); break;
         }
         quant_descriptor info {
@@ -305,7 +305,7 @@ namespace piquant {
             .zero_point = zero_point,
             .dt_in = dtype_in,
             .dt_out = dtype_out,
-            .reduce = op
+            .reducing = op
         };
         (*this->m_pimpl)(info);
     }
@@ -333,8 +333,8 @@ namespace piquant {
             .zero_point = zero_point,
             .dt_in = dtype_in_out,
             .dt_out = quant_type,
-            .rnd_mode = mode,
-            .reduce = op
+            .rounding = mode,
+            .reducing = op
         };
         (*this->m_pimpl)(info);
     }
