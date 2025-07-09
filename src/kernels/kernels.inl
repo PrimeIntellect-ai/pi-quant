@@ -224,11 +224,11 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     }
 
     template <typename In, typename Out, const round_mode RoundMode, const reduce_op ReduceOp>
-    static auto PIQUANT_HOT quant_dequant_generic(
+    static auto PIQUANT_HOT requant_generic(
       const void* in,
       void* out,
       std::int64_t numel,
-      double scale,
+      float scale,
       std::int64_t zp
     ) noexcept -> void {
         const auto* PIQUANT_RESTRICT x {static_cast<const In*>(in)};
@@ -257,26 +257,18 @@ namespace piquant {
     using quant_fn = auto (*)(const void*, void*, std::int64_t, float, std::int64_t) noexcept -> void;
 
     template <typename Src, typename Dst, round_mode M>
-    [[nodiscard]] consteval auto quant_entry() -> quant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<Src, Dst, M>; }
+    [[nodiscard]] consteval auto quant_entry() noexcept -> quant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<Src, Dst, M>; }
 
     template <typename Src, typename Dst, reduce_op R>
-    [[nodiscard]] consteval auto dequant_entry() -> quant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<Dst, Src, R>; }
+    [[nodiscard]] consteval auto dequant_entry() noexcept -> quant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<Dst, Src, R>; }
+
+    template <typename Src, typename Dst, round_mode M, reduce_op R>
+    [[nodiscard]] consteval auto requant_entry() noexcept -> quant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::requant_generic<Src, Dst, M, R>; }
 
     template <typename...> struct type_set {};
 
-    template <typename Src, round_mode M, typename TL> struct make_quant_row;
-
-    template <typename Src, round_mode M, typename... Dst>
-    struct make_quant_row<Src, M, type_set<Dst...>> {
-        static constexpr std::array<quant_fn, 2+sizeof...(Dst)> value = {nullptr, nullptr, quant_entry<Src, Dst, M>()...};
-    };
-
-    template <typename Src, reduce_op R, typename TL> struct make_dequant_row;
-
-    template <typename Src, reduce_op R, typename... Dst>
-    struct make_dequant_row<Src, R, type_set<Dst...>> {
-        static constexpr std::array<quant_fn, 2+sizeof...(Dst)> value = {nullptr, nullptr, dequant_entry<Src, Dst, R>()...};
-    };
+    template <typename TL> struct type_set_size;
+    template <typename... Ts> struct type_set_size<type_set<Ts...>>  : std::integral_constant<std::size_t, sizeof...(Ts)> {};
 
     using quant_types = type_set<
         uint2_t, int2_t, uint4_t, int4_t,
@@ -286,7 +278,34 @@ namespace piquant {
 
     using fp_types = type_set<float, double>;
 
-    // Dispatch table for quantization kernels. Order matters.
+    template <typename Src, round_mode M, typename TL> struct make_quant_row;
+    template <typename Src, round_mode M, typename... Dst>
+    struct make_quant_row<Src, M, type_set<Dst...>> {
+        static constexpr std::array<quant_fn, 2+sizeof...(Dst)> value = {nullptr, nullptr, quant_entry<Src, Dst, M>()...};
+    };
+
+    template <typename Src, reduce_op R, typename TL> struct make_dequant_row;
+    template <typename Src, reduce_op R, typename... Dst>
+    struct make_dequant_row<Src, R, type_set<Dst...>> {
+        static constexpr std::array<quant_fn, 2+sizeof...(Dst)> value = {nullptr, nullptr, dequant_entry<Src, Dst, R>()...};
+    };
+
+    template <typename Src, round_mode M, reduce_op R, typename TL> struct make_requant_row;
+    template <typename Src, round_mode M, reduce_op R, typename... Dst>
+    struct make_requant_row<Src, M, R, type_set<Dst...>> {
+        static constexpr std::array<quant_fn, 2+sizeof...(Dst)> value = {nullptr, nullptr, requant_entry<Src, Dst, M, R>()...};
+    };
+
+    template <round_mode M, reduce_op R, typename FPSrcSet> struct make_requant_block;
+
+    template <round_mode M, reduce_op R, typename... Src>
+    struct make_requant_block<M, R, type_set<Src...>> {
+        static constexpr std::array<std::array<quant_fn, 2+type_set_size<quant_types>::value>, sizeof...(Src)> value {
+            make_requant_row<Src, M, R, quant_types>::value...
+        };
+    };
+
+    // 3D Dispatch table for quantization kernels. Order matters.
     static constexpr std::array quant_functions {
         std::array {
             std::array {
@@ -302,7 +321,7 @@ namespace piquant {
         }
     };
 
-    // Dispatch table for dequantization kernels. Order matters.
+    // 3D Dispatch table for dequantization kernels. Order matters.
     static constexpr std::array dequant_functions {
         std::array {
             std::array {
@@ -315,6 +334,18 @@ namespace piquant {
                 make_dequant_row<float, reduce_op::add, quant_types>::value,
                 make_dequant_row<double, reduce_op::add, quant_types>::value
             },
+        }
+    };
+
+    // 4D Dispatch table for requantization kernels. Order matters.
+    static constexpr std::array requant_functions {
+        std::array{
+            make_requant_block<round_mode::nearest, reduce_op::set, fp_types>::value,
+            make_requant_block<round_mode::nearest, reduce_op::add, fp_types>::value
+        },
+        std::array{
+            make_requant_block<round_mode::stochastic, reduce_op::set, fp_types>::value,
+            make_requant_block<round_mode::stochastic, reduce_op::add, fp_types>::value
         }
     };
 
@@ -347,55 +378,21 @@ namespace piquant {
         const dtype_info& dt_in {dtype_info_of(desc.dt_in)};
         const dtype_info& dt_out {dtype_info_of(desc.dt_out)};
         piquant_assert2(!(dt_in.flags & dtype_flags::is_quant));
-                piquant_assert2(dt_out.flags & dtype_flags::is_quant); // dt_out acts as the quantized type, but dtype in == dtype out
-               #define impl_quant_perm(dti, dto, ti, to) \
-                    case make_pair_perm(dti, dto): \
-                        if (desc.reducing == reduce_op::set) \
-                            if (desc.rounding == round_mode::stochastic) \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::set>(in, out, range, desc.scale, desc.zero_point); \
-                            else \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::set>(in, out, range, desc.scale, desc.zero_point); \
-                        else \
-                            if (desc.rounding == round_mode::stochastic) \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::add>(in, out, range, desc.scale, desc.zero_point); \
-                            else \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::add>(in, out, range, desc.scale, desc.zero_point); \
-                    return
-                switch (make_pair_perm(desc.dt_in, desc.dt_out)) {
-                    impl_quant_perm(f32, uint4, float, uint4_t);
-                    impl_quant_perm(f32, int4, float, int4_t);
-                    impl_quant_perm(f32, uint2, float, uint2_t);
-                    impl_quant_perm(f32, int2, float, int2_t);
-                    impl_quant_perm(f32, uint8, float, uint8_t);
-                    impl_quant_perm(f32, int8, float, int8_t);
-                    impl_quant_perm(f32, uint16, float, uint16_t);
-                    impl_quant_perm(f32, int16, float, int16_t);
-                    impl_quant_perm(f32, uint32, float, uint32_t);
-                    impl_quant_perm(f32, int32, float, int32_t);
-                    impl_quant_perm(f32, uint64, float, uint64_t);
-                    impl_quant_perm(f32, int64, float, int64_t);
-                    impl_quant_perm(f64, uint4, double, uint4_t);
-                    impl_quant_perm(f64, int4, double, int4_t);
-                    impl_quant_perm(f64, uint2, double, uint2_t);
-                    impl_quant_perm(f64, int2, double, int2_t);
-                    impl_quant_perm(f64, uint8, double, uint8_t);
-                    impl_quant_perm(f64, int8, double, int8_t);
-                    impl_quant_perm(f64, uint16, double, uint16_t);
-                    impl_quant_perm(f64, int16, double, int16_t);
-                    impl_quant_perm(f64, uint32, double, uint32_t);
-                    impl_quant_perm(f64, int32, double, int32_t);
-                    impl_quant_perm(f64, uint64, double, uint64_t);
-                    impl_quant_perm(f64, int64, double, int64_t);
-                    default: panic("Invalid quantization pair");
-            }
+        piquant_assert2(dt_out.flags & dtype_flags::is_quant);
+        const auto& stubs_round_mode {requant_functions[static_cast<std::size_t>(desc.rounding)]};
+        const auto& stubs_reduce_op {stubs_round_mode[static_cast<std::size_t>(desc.reducing)]};
+        const auto& stubs_fp {stubs_reduce_op[static_cast<std::size_t>(desc.dt_in)]};
+        auto* kernel {stubs_fp[static_cast<std::size_t>(desc.dt_out)]};
+        piquant_assert(kernel != nullptr, "invalid requantization types: %s -> %s", dtype_info_of(desc.dt_in).name, dtype_info_of(desc.dt_out).name);
+        (*kernel)(in, out, range, desc.scale, desc.zero_point);
     }
 
-    static auto PIQUANT_HOT quantize_dispatch(const void* in, void* out, std::int64_t range, const context::quant_descriptor& desc
-    ) noexcept -> void {
+    static auto PIQUANT_HOT quantize_dispatch(const void* in, void* out, std::int64_t range, const context::quant_descriptor& desc) noexcept -> void {
         switch (desc.type) {
             case context::command_type::quant: dispatch_quantize(in, out, range, desc); return;
             case context::command_type::dequant: dispatch_dequantize(in, out, range, desc); return;
             case context::command_type::quant_dequant: dispatch_requantize(in, out, range, desc); return;
+            default: panic("invalid quantization command type: %d", static_cast<int>(desc.type));
         }
     }
 
