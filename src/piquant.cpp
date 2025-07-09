@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <iostream>
 #include <numeric>
+#include <numbers>
 #include <condition_variable>
 
 #include <pithreadpool/threadpool.hpp>
@@ -183,11 +184,59 @@ namespace piquant {
 
     [[nodiscard]] static auto compute_type_max(dtype dt) noexcept -> std::uint64_t {
         dtype_info info {dtype_info_of(dt)};
+        piquant_assert(info.flags & dtype_flags::is_quant && info.flags & dtype_flags::is_int, "type %s is not a quantization type", info.name.data());
         std::size_t width {dtype_info_of(dt).bit_size};
         piquant_assert(width > 0 && width <= 64, "invalid width %zu for type %s", width, info.name.data());
         if (info.flags & dtype_flags::is_signed) --width;
         if (width == 64) return std::numeric_limits<std::uint64_t>::max();
         return (1ull<<width) - 1;
+    }
+
+    static constexpr double sqrt2 {1.414213562373095048801688724209698078569671875376};     // √2
+    static constexpr double inv_sqrt_2pi {std::numbers::inv_sqrtpi / sqrt2};                // 1/√(2π)
+    static constexpr double inv_sqrt_2 {1.0/sqrt2};                                         // 1/√2
+
+    [[nodiscard]] static auto gaussian_mse(double k, double Q) noexcept -> double {
+        double Δ {2.0*k / (2.0*Q + 1.0)};
+        double tail {0.5 * std::erfc(k * inv_sqrt_2)};
+        double φ {inv_sqrt_2pi * std::exp(-0.5 * k*k)};
+        double pin {1.0 - 2.0*tail};
+        double mse_q {(Δ*Δ / 12.0)*pin};
+        double mse_clip {2.0*((1.0 + k*k)*tail - k*φ)};
+        return mse_q + mse_clip;
+    }
+
+    template <const unsigned Steps = 16>
+    [[nodiscard]] static auto solve_optimal_k(std::uint64_t Q) noexcept -> double { // Returns k that minimises the analytic MSE for a given Q
+        /* One-dim golden-section search, Steps iterations */
+        double a {0.5}, b {10.0};
+        static constexpr double gr {0.6180339887498949};
+        double c {b - gr*(b - a)};
+        double d {a + gr*(b - a)};
+        for (unsigned i=0; i < Steps; ++i) {
+            if (gaussian_mse(c, static_cast<double>(Q)) < gaussian_mse(d, static_cast<double>(Q))) b = d, d = c, c = b - gr*(b - a);
+            else  a = c, c = d, d = a + gr*(b - a);
+        }
+        return 0.5*(a + b);
+    }
+
+    static const std::unordered_map<std::uint64_t, double> optimal_k_lookup {
+       [] {
+           std::unordered_map<std::uint64_t, double> result {};
+              for (auto i {static_cast<std::underlying_type_t<dtype>>(dtype::f64)+1}; i < static_cast<std::underlying_type_t<dtype>>(dtype::count_); ++i) {
+                std::uint64_t type_max {compute_type_max(static_cast<dtype>(i))};
+                if (type_max == 0) continue;
+                result[type_max] = solve_optimal_k(type_max);
+              }
+           return result;
+       }()
+    };
+
+    [[nodiscard]] static auto autotune_k(std::uint64_t type_max) noexcept -> double {
+        if (type_max == 0) return 0.0;
+        if (const auto it {optimal_k_lookup.find(type_max)}; it != optimal_k_lookup.end()) [[likely]]
+            return it->second;
+        return solve_optimal_k(type_max);
     }
 
     template <typename T, typename F> requires std::is_floating_point_v<T>
@@ -216,9 +265,9 @@ namespace piquant {
         double mean {sum / fnumel};
         double variance {(sum_sq - sum*sum / fnumel) / (fnumel-1.0)};
         double stddev {std::sqrt(variance)};
-        const auto& dto {dtype_info_of(quant_dst_type)};
         std::uint64_t type_max {compute_type_max(quant_dst_type)};
-        double scale {(dto.bit_size == 2 ? stddev_scale_int2 : dto.bit_size == 4 ? stddev_scale_int4 : stddev_scale)*stddev / static_cast<double>(type_max)};
+        double tuned_k {std::floor(100.0*autotune_k(type_max))/100.0};
+        double scale {tuned_k * stddev / static_cast<double>(type_max)};
         if (scale == 0.0) [[unlikely]]
             return {1.0f, (type_max+1)>>1};
         std::size_t smax {type_max == std::numeric_limits<std::uint64_t>::max() ?  1ull<<63 : (type_max + 1)>>1};

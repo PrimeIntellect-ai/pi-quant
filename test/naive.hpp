@@ -110,7 +110,7 @@ template <typename T> requires std::is_floating_point_v<T>
         }
     ))};
     const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
-    const auto scale {static_cast<T>(piquant::stddev_scale*std/static_cast<T>(tmax))};
+    const auto scale {static_cast<T>(12.0*std/static_cast<T>(tmax))};
     const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
     return {scale, zp};
 }
