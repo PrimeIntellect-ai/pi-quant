@@ -318,49 +318,48 @@ namespace piquant {
         }
     };
 
-    static auto PIQUANT_HOT quantize_dispatch(
-        const void* x,
-        void* o,
-        std::int64_t range,
-        const context::quant_descriptor& desc
-    ) noexcept -> void {
+    static void dispatch_quantize(const void* in, void* out, std::int64_t range, const context::quant_descriptor& desc) {
+        const dtype_info& dt_in {dtype_info_of(desc.dt_in)};
+        const dtype_info& dt_out {dtype_info_of(desc.dt_out)};
+        piquant_assert2(!(dt_in.flags & dtype_flags::is_quant));
+        piquant_assert2(dt_out.flags & dtype_flags::is_quant);
+        const auto& stubs_round_mode {quant_functions[static_cast<std::size_t>(desc.rounding)]};
+        const auto& stubs_dtype_fp {stubs_round_mode[static_cast<std::size_t>(desc.dt_in)]};
+        auto* kernel {stubs_dtype_fp[static_cast<std::size_t>(desc.dt_out)]};
+        piquant_assert(kernel != nullptr, "invalid quantization types: %s -> %s", dtype_info_of(desc.dt_in).name, dtype_info_of(desc.dt_out).name);
+        (*kernel)(in, out, range, desc.scale, desc.zero_point);
+    }
+
+    static void dispatch_dequantize(const void* in, void* out, std::int64_t range, const context::quant_descriptor& desc) {
+        const dtype_info& dt_in {dtype_info_of(desc.dt_in)};
+        const dtype_info& dt_out {dtype_info_of(desc.dt_out)};
+        piquant_assert2(dt_in.flags & dtype_flags::is_quant);
+        piquant_assert2(!(dt_out.flags & dtype_flags::is_quant));
+        const auto& stubs_reduce_mode {dequant_functions[static_cast<std::size_t>(desc.reducing)]};
+        const auto& stubs_dtype_fp {stubs_reduce_mode[static_cast<std::size_t>(desc.dt_out)]};
+        auto* kernel {stubs_dtype_fp[static_cast<std::size_t>(desc.dt_in)]};
+        piquant_assert(kernel != nullptr, "invalid dequantization types: %s -> %s", dtype_info_of(desc.dt_in).name, dtype_info_of(desc.dt_out).name);
+        (*kernel)(in, out, range, desc.scale, desc.zero_point);
+    }
+
+    static void dispatch_requantize(const void* in, void* out, std::int64_t range, const context::quant_descriptor& desc) {
         using enum dtype;
         const dtype_info& dt_in {dtype_info_of(desc.dt_in)};
         const dtype_info& dt_out {dtype_info_of(desc.dt_out)};
-        switch (desc.type) {
-            case context::command_type::quant: { // out[i] = Q(in[i])
-                piquant_assert2(!(dt_in.flags & dtype_flags::is_quant));
-                piquant_assert2(dt_out.flags & dtype_flags::is_quant);
-                const auto& stubs_round_mode {quant_functions[static_cast<std::size_t>(desc.rounding)]};
-                const auto& stubs_dtype_fp {stubs_round_mode[static_cast<std::size_t>(desc.dt_in)]};
-                auto* kernel {stubs_dtype_fp[static_cast<std::size_t>(desc.dt_out)]};
-                piquant_assert(kernel != nullptr, "invalid quantization types: %s -> %s", dtype_info_of(desc.dt_in).name, dtype_info_of(desc.dt_out).name);
-                (*kernel)(x, o, range, desc.scale, desc.zero_point);
-            } return;
-            case context::command_type::dequant: { // out[i] = D(in[i])
-                    piquant_assert2(dt_in.flags & dtype_flags::is_quant);
-                    piquant_assert2(!(dt_out.flags & dtype_flags::is_quant));
-                    const auto& stubs_reduce_mode {dequant_functions[static_cast<std::size_t>(desc.reducing)]};
-                    const auto& stubs_dtype_fp {stubs_reduce_mode[static_cast<std::size_t>(desc.dt_out)]};
-                    auto* kernel {stubs_dtype_fp[static_cast<std::size_t>(desc.dt_in)]};
-                    piquant_assert(kernel != nullptr, "invalid dequantization types: %s -> %s", dtype_info_of(desc.dt_in).name, dtype_info_of(desc.dt_out).name);
-                    (*kernel)(x, o, range, desc.scale, desc.zero_point);
-            } return;
-            case context::command_type::quant_dequant:  // out[i] = dequantize(quantize(in[i])))
-                piquant_assert2(!(dt_in.flags & dtype_flags::is_quant));
+        piquant_assert2(!(dt_in.flags & dtype_flags::is_quant));
                 piquant_assert2(dt_out.flags & dtype_flags::is_quant); // dt_out acts as the quantized type, but dtype in == dtype out
                #define impl_quant_perm(dti, dto, ti, to) \
                     case make_pair_perm(dti, dto): \
                         if (desc.reducing == reduce_op::set) \
                             if (desc.rounding == round_mode::stochastic) \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::set>(x, o, range, desc.scale, desc.zero_point); \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::set>(in, out, range, desc.scale, desc.zero_point); \
                             else \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::set>(x, o, range, desc.scale, desc.zero_point); \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::set>(in, out, range, desc.scale, desc.zero_point); \
                         else \
                             if (desc.rounding == round_mode::stochastic) \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::add>(x, o, range, desc.scale, desc.zero_point); \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::stochastic, reduce_op::add>(in, out, range, desc.scale, desc.zero_point); \
                             else \
-                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::add>(x, o, range, desc.scale, desc.zero_point); \
+                                impl_namespace(QUANT_KERNEL_IMPL, _)::quant_dequant_generic<ti, to, round_mode::nearest, reduce_op::add>(in, out, range, desc.scale, desc.zero_point); \
                     return
                 switch (make_pair_perm(desc.dt_in, desc.dt_out)) {
                     impl_quant_perm(f32, uint4, float, uint4_t);
@@ -388,8 +387,15 @@ namespace piquant {
                     impl_quant_perm(f64, uint64, double, uint64_t);
                     impl_quant_perm(f64, int64, double, int64_t);
                     default: panic("Invalid quantization pair");
-                }
-            return;
+            }
+    }
+
+    static auto PIQUANT_HOT quantize_dispatch(const void* in, void* out, std::int64_t range, const context::quant_descriptor& desc
+    ) noexcept -> void {
+        switch (desc.type) {
+            case context::command_type::quant: dispatch_quantize(in, out, range, desc); return;
+            case context::command_type::dequant: dispatch_dequantize(in, out, range, desc); return;
+            case context::command_type::quant_dequant: dispatch_requantize(in, out, range, desc); return;
         }
     }
 
