@@ -30,42 +30,36 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     #include "dequantize.inl"
 
     template <typename T> requires std::is_floating_point_v<T>
-    [[nodiscard]] auto compute_quant_config_from_data(std::span<const T> x) -> std::array<T, 2> {
-        if (x.empty()) [[unlikely]] return {0.0, 0.0};
+    [[nodiscard]] auto compute_quant_config_from_data(std::span<const T> in) -> std::array<T, 2> {
+        if (in.empty()) [[unlikely]] return {0.0, 0.0};
         T sum {};
         T sum_sq {};
-        for (T v : x) {
+        for (T v : in) {
             sum += v;
             sum_sq += v*v;
         }
         return {sum, sum_sq};
     }
 
-    #ifdef __AVX2__
-        [[nodiscard]] static auto avx2_hsum256(__m256 x) noexcept -> float {
-            __m128 hiQuad = _mm256_extractf128_ps(x, 1);
-            __m128 loQuad = _mm256_castps256_ps128(x);
-            __m128 sumQuad = _mm_add_ps(loQuad, hiQuad);
-            __m128 loDual = sumQuad;
-            __m128 hiDual = _mm_movehl_ps(sumQuad, sumQuad);
-            __m128 sumDual = _mm_add_ps(loDual, hiDual);
-            __m128 lo = sumDual;
-            __m128 hi = _mm_shuffle_ps(sumDual, sumDual, 0x1);
-            __m128 sum = _mm_add_ss(lo, hi);
-            return _mm_cvtss_f32(sum);
-        }
-    #endif
-
     template <>
-    [[nodiscard]] auto compute_quant_config_from_data(std::span<const float> x) -> std::array<float, 2> {
-        if (x.empty()) [[unlikely]] return {0.0f, 0.0};
-        const auto* p {x.data()};
+    [[nodiscard]] auto compute_quant_config_from_data(std::span<const float> in) -> std::array<float, 2> {
+        if (in.empty()) [[unlikely]] return {0.0f, 0.0};
+        const auto* p {in.data()};
         float sum {};
         float sum_sq {};
         std::int64_t i {};
         #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
 
         #elif defined(__AVX2__)
+            static constexpr auto hsum {[](__m256 x) noexcept -> float {
+                __m128 hiq {_mm256_extractf128_ps(x, 1)};
+                __m128 loq {_mm256_castps256_ps128(x)};
+                __m128 suq {_mm_add_ps(loq, hiq)};
+                __m128 hid {_mm_movehl_ps(suq, suq)};
+                __m128 sud {_mm_add_ps(suq, hid)};
+                __m128 hi {_mm_shuffle_ps(sud, sud, 0x1)};git
+                return _mm_cvtss_f32(_mm_add_ss(sud, hi));
+            }};
             __m256 vsum1 {_mm256_setzero_ps()};
             __m256 vsum2 {_mm256_setzero_ps()};
             __m256 vsum3 {_mm256_setzero_ps()};
@@ -110,8 +104,8 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             }
             __m256 vsum_total {_mm256_add_ps(vsum1, _mm256_add_ps(vsum2, _mm256_add_ps(vsum3, _mm256_add_ps(vsum4, _mm256_add_ps(vsum5, _mm256_add_ps(vsum6, _mm256_add_ps(vsum7, vsum8)))))))};
             __m256 vsum_sq_total {_mm256_add_ps(vsum_sq1, _mm256_add_ps(vsum_sq2, _mm256_add_ps(vsum_sq3, _mm256_add_ps(vsum_sq4, _mm256_add_ps(vsum_sq5, _mm256_add_ps(vsum_sq6, _mm256_add_ps(vsum_sq7, vsum_sq8)))))))};
-            sum = avx2_hsum256(vsum_total);
-            sum_sq = avx2_hsum256(vsum_sq_total);
+            sum = hsum(vsum_total);
+            sum_sq = hsum(vsum_sq_total);
         #elif defined(__SSE4_2__)
             __m128 vsum1 {_mm_setzero_ps()};
             __m128 vsum2 {_mm_setzero_ps()};
@@ -176,7 +170,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             float32x4_t vsum_sq6 {vdupq_n_f32(0.0f)};
             float32x4_t vsum_sq7 {vdupq_n_f32(0.0f)};
             float32x4_t vsum_sq8 {vdupq_n_f32(0.0f)};
-            for (; i+31 < x.size(); i += 32) {
+            for (; i+31 < in.size(); i += 32) {
                 float32x4_t v1 {vld1q_f32(p+i+(0<<2))};
                 float32x4_t v2 {vld1q_f32(p+i+(1<<2))};
                 float32x4_t v3 {vld1q_f32(p+i+(2<<2))};
@@ -207,7 +201,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
             sum = vaddvq_f32(vsum_total);
             sum_sq = vaddvq_f32(vsum_sq_total);
         #endif
-        for (; i < x.size(); ++i) {
+        for (; i < in.size(); ++i) {
             float v {p[i]};
             sum += v;
             sum_sq += v*v;
@@ -215,12 +209,12 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         return {sum, sum_sq};
     }
 
-    static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> x) noexcept -> std::array<float, 2> {
-        return compute_quant_config_from_data(x);
+    static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> in) noexcept -> std::array<float, 2> {
+        return compute_quant_config_from_data(in);
     }
 
-    static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> x) noexcept -> std::array<double, 2> {
-        return compute_quant_config_from_data(x);
+    static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> in) noexcept -> std::array<double, 2> {
+        return compute_quant_config_from_data(in);
     }
 
     template <typename In, typename Out, const round_mode RoundMode, const reduce_op ReduceOp>
