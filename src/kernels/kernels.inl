@@ -242,12 +242,6 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 };
 
 namespace piquant {
-    [[nodiscard]] constexpr auto make_pair_perm(dtype from,dtype to) noexcept -> std::uint16_t {
-        auto ito {static_cast<std::underlying_type_t<decltype(to)>>(to)};
-        auto ifrom {static_cast<std::underlying_type_t<decltype(from)>>(from)};
-        return ((255&ifrom)<<8)+(255&ito);
-    }
-
     using quant_fn = auto (*)(const void*, void*, std::int64_t, float, std::int64_t) noexcept -> void;
 
     template <typename Src, typename Dst, round_mode M>
