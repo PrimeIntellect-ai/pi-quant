@@ -215,7 +215,7 @@ namespace piquant {
         double d {a + gr*(b - a)};
         for (unsigned i=0; i < Steps; ++i) {
             if (gaussian_mse(c, static_cast<double>(Q)) < gaussian_mse(d, static_cast<double>(Q))) b = d, d = c, c = b - gr*(b - a);
-            else  a = c, c = d, d = a + gr*(b - a);
+            else a = c, c = d, d = a + gr*(b - a);
         }
         return 0.5*(a + b);
     }

@@ -209,11 +209,11 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         return {sum, sum_sq};
     }
 
-    static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> in) noexcept -> std::array<float, 2> {
+    [[nodiscard]] static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> in) noexcept -> std::array<float, 2> {
         return compute_quant_config_from_data(in);
     }
 
-    static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> in) noexcept -> std::array<double, 2> {
+    [[nodiscard]] static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> in) noexcept -> std::array<double, 2> {
         return compute_quant_config_from_data(in);
     }
 
