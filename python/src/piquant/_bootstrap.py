@@ -50,7 +50,7 @@ extern  void piquant_quantize(
     piquant_dtype_t dtype_out,
     size_t numel,
     float scale,
-    int32_t zero_point,
+    int64_t zero_point,
     piquant_round_mode_t mode
 );
 
@@ -62,7 +62,7 @@ extern  void piquant_dequantize(
     piquant_dtype_t dtype_out,
     size_t numel,
     float scale,
-    int32_t zero_point,
+    int64_t zero_point,
     piquant_reduce_op_t op
 );
 

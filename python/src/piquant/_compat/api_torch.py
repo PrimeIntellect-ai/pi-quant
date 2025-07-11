@@ -26,10 +26,12 @@ _TORCH_QUANT_STORAGE_MAP: dict[DataType, torch.dtype] = {
     DataType.INT4: torch.int8,
 }
 
+
 def torch_to_piquant_dtype(dtype: torch.dtype) -> DataType:
     if dtype not in _TORCH_DTYPE_MAP:
-        raise ValueError(f'Unsupported target_quant_dtype: {dtype}')
+        raise ValueError(f'Unsupported quant_dtype: {dtype}')
     return _TORCH_DTYPE_MAP[dtype]
+
 
 def piquant_to_torch_dtype(dtype: DataType) -> torch.dtype:
     for torch_dtype, piquant_dtype in _TORCH_DTYPE_MAP.items():
@@ -37,19 +39,21 @@ def piquant_to_torch_dtype(dtype: DataType) -> torch.dtype:
             return torch_dtype
     raise ValueError(f'Unsupported quantized dtype: {dtype}')
 
+
 def _get_quantized_storage_dtype(dtype: DataType) -> torch.dtype:
     if dtype in _TORCH_QUANT_STORAGE_MAP:
         return _TORCH_QUANT_STORAGE_MAP[dtype]
     else:
         return piquant_to_torch_dtype(dtype)
 
+
 def compute_quant_config_torch(
-    tensor: torch.Tensor, *, target_quant_dtype: DataType, ctx: Context = Context.get()
+    tensor: torch.Tensor, *, quant_dtype: DataType, ctx: Context = Context.get()
 ) -> Tuple[float, int]:
     """
     Compute the scale and zero point of a arr.
         :param tensor: Input arr, must be of type float32.
-        :param target_quant_dtype: Data type which the arr will be quantized to
+        :param quant_dtype: Data type which the arr will be quantized to
         :param ctx: Context to use for computation, if None, the default context will be used.
     """
     if not tensor.is_contiguous():
@@ -57,14 +61,15 @@ def compute_quant_config_torch(
     if tensor.dtype != torch.float32:
         tensor = tensor.float()
     assert tensor.dtype == torch.float32, f'Expected arr of type float32, got {tensor.dtype}'
-    return ctx.compute_quant_config_raw_ptr(tensor.data_ptr(), target_quant_dtype, tensor.numel())
+    return ctx.compute_quant_config_raw_ptr(tensor.data_ptr(), quant_dtype, tensor.numel())
+
 
 def quantize_torch(
     in_tensor: torch.Tensor,
     *,
     scale: float,
     zero_point: int,
-    output_dtype: DataType,
+    quant_dtype: DataType,
     round_mode: RoundMode = RoundMode.NEAREST,
     ctx: Context = Context.get(),
     out_tensor: Union[torch.Tensor, None] = None,
@@ -82,7 +87,7 @@ def quantize_torch(
         in_tensor = in_tensor.float()
 
     if out_tensor is None:
-        out_tensor = torch.empty(in_tensor.shape, dtype=_get_quantized_storage_dtype(output_dtype))
+        out_tensor = torch.empty(in_tensor.shape, dtype=_get_quantized_storage_dtype(quant_dtype))
 
     if not in_tensor.is_contiguous():
         in_tensor = in_tensor.contiguous()
@@ -113,7 +118,7 @@ def dequantize_torch(
     *,
     scale: float,
     zero_point: int,
-    reduce_op: ReduceOp=ReduceOp.SET,
+    reduce_op: ReduceOp = ReduceOp.SET,
     out_tensor: Union[torch.Tensor, None] = None,
     ctx: Context = Context.get(),
 ) -> torch.Tensor:

@@ -11,7 +11,9 @@ def _is_cont(arr: np.ndarray) -> bool:
     return arr.flags['C_CONTIGUOUS']
 
 
-_NP_DTYPE_MAP: dict[str, DataType] = { # For some reason mapping np.dtype to DataType is not working, so we map the names
+_NP_DTYPE_MAP: dict[
+    str, DataType
+] = {  # For some reason mapping np.dtype to DataType is not working, so we map the names
     'uint8': DataType.UINT8,
     'int8': DataType.INT8,
     'uint16': DataType.UINT16,
@@ -25,26 +27,37 @@ _NP_DTYPE_MAP: dict[str, DataType] = { # For some reason mapping np.dtype to Dat
 }
 
 
-def _numpy_to_piquant_dtype(dtype: np.dtype) -> DataType:
+def numpy_to_piquant_dtype(dtype: np.dtype) -> DataType:
     name = str(dtype)
+    if 'numpy' in name:
+        name = name.split("'")[1].replace('numpy.', '')
     if name not in _NP_DTYPE_MAP:
-        raise ValueError(f'Unsupported target_quant_dtype: {name}')
+        raise ValueError(f'Unsupported quant_dtype: {name}')
     return _NP_DTYPE_MAP[name]
 
 
+def piquant_to_numpy_dtype(dtype: DataType) -> np.dtype:
+    for np_dtype, piquant_dtype in _NP_DTYPE_MAP.items():
+        if piquant_dtype == dtype:
+            return np.dtype(np_dtype)
+    raise ValueError(f'Unsupported quantized dtype: {dtype}')
+
+
 def compute_quant_config_numpy(
-    arr: np.ndarray, *, target_quant_dtype: DataType, ctx: Context = Context.get()
+    arr: np.ndarray, *, quant_dtype: DataType, ctx: Context = Context.get()
 ) -> Tuple[float, int]:
     """
     Compute the scale and zero point of a tensor.
         :param arr: Input array, must be of type float32.
-        :param target_quant_dtype: Data type which the tensor will be quantized to
+        :param quant_dtype: Data type which the tensor will be quantized to
         :param ctx: Context to use for computation, if None, the default context will be used.
     """
     if not _is_cont(arr):
         arr = np.ascontiguousarray(arr)
+    if arr.dtype != np.float32:
+        arr = arr.astype(np.float32)
     assert arr.dtype == np.float32, f'Expected arr of type float32, got {arr.dtype}'
-    return ctx.compute_quant_config_raw_ptr(_get_data_ptr(arr), target_quant_dtype, arr.size)
+    return ctx.compute_quant_config_raw_ptr(_get_data_ptr(arr), quant_dtype, arr.size)
 
 
 def quantize_numpy(
@@ -52,7 +65,7 @@ def quantize_numpy(
     *,
     scale: float,
     zero_point: int,
-    output_dtype: np.dtype,
+    quant_dtype: DataType,
     round_mode: RoundMode = RoundMode.NEAREST,
     out_array: Union[np.ndarray, None] = None,
     ctx: Context = Context.get(),
@@ -70,7 +83,7 @@ def quantize_numpy(
         in_array = in_array.astype(np.float32)
 
     if out_array is None:
-        out_array = np.empty_like(in_array, dtype=output_dtype)
+        out_array = np.empty_like(in_array, dtype=piquant_to_numpy_dtype(quant_dtype))
 
     if not _is_cont(in_array):
         in_array = np.ascontiguousarray(in_array)
@@ -81,9 +94,9 @@ def quantize_numpy(
 
     ctx.quantize_raw_ptr(
         _get_data_ptr(in_array),
-        _numpy_to_piquant_dtype(in_array.dtype),
+        numpy_to_piquant_dtype(in_array.dtype),
         _get_data_ptr(out_array),
-        _numpy_to_piquant_dtype(out_array.dtype),
+        numpy_to_piquant_dtype(out_array.dtype),
         numel=in_array.size,
         scale=scale,
         zero_point=zero_point,
@@ -98,7 +111,7 @@ def dequantize_numpy(
     *,
     scale: float,
     zero_point: int,
-    reduce_op: ReduceOp,
+    reduce_op: ReduceOp = ReduceOp.SET,
     ctx: Context = Context.get(),
 ) -> np.ndarray:
     """
@@ -126,9 +139,9 @@ def dequantize_numpy(
 
     ctx.dequantize_raw_ptr(
         _get_data_ptr(in_array),
-        _numpy_to_piquant_dtype(in_array.dtype),
+        numpy_to_piquant_dtype(in_array.dtype),
         _get_data_ptr(out_array),
-        _numpy_to_piquant_dtype(out_array.dtype),
+        numpy_to_piquant_dtype(out_array.dtype),
         numel=in_array.size,
         scale=scale,
         zero_point=zero_point,
