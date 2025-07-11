@@ -34,8 +34,8 @@ namespace piquant {
           std::int64_t numel,
           const context::quant_descriptor& desc
         ) noexcept -> void;
-        auto (*quant_config_kernel_f32)(std::span<const float> x) noexcept -> std::array<float, 2>;
-        auto (*quant_config_kernel_f64)(std::span<const double> x) noexcept -> std::array<double, 2>;
+        auto (*find_min_max_f32)(std::span<const float> x) noexcept -> std::array<float, 2>;
+        auto (*find_min_max_f64)(std::span<const double> x) noexcept -> std::array<double, 2>;
     };
 
     template <typename T>

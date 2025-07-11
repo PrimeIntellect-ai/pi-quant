@@ -30,191 +30,15 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     #include "dequantize.inl"
 
     template <typename T> requires std::is_floating_point_v<T>
-    [[nodiscard]] auto compute_quant_config_from_data(std::span<const T> in) -> std::array<T, 2> {
+    [[nodiscard]] static auto find_min_max(std::span<const T> in) noexcept -> std::array<T, 2> {
         if (in.empty()) [[unlikely]] return {0.0, 0.0};
-        T sum {};
-        T sum_sq {};
-        for (T v : in) {
-            sum += v;
-            sum_sq += v*v;
+        T min {std::numeric_limits<T>::max()};
+        T max {std::numeric_limits<T>::min()};
+        for (T x : in) {
+            min = std::min(min, x);
+            max = std::max(max, x);
         }
-        return {sum, sum_sq};
-    }
-
-    template <>
-    [[nodiscard]] auto compute_quant_config_from_data(std::span<const float> in) -> std::array<float, 2> {
-        if (in.empty()) [[unlikely]] return {0.0f, 0.0};
-        const auto* p {in.data()};
-        float sum {};
-        float sum_sq {};
-        std::int64_t i {};
-        #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
-
-        #elif defined(__AVX2__)
-            static constexpr auto hsum {[](__m256 x) noexcept -> float {
-                __m128 hiq {_mm256_extractf128_ps(x, 1)};
-                __m128 loq {_mm256_castps256_ps128(x)};
-                __m128 suq {_mm_add_ps(loq, hiq)};
-                __m128 hid {_mm_movehl_ps(suq, suq)};
-                __m128 sud {_mm_add_ps(suq, hid)};
-                __m128 hi {_mm_shuffle_ps(sud, sud, 0x1)};
-                return _mm_cvtss_f32(_mm_add_ss(sud, hi));
-            }};
-            __m256 vsum1 {_mm256_setzero_ps()};
-            __m256 vsum2 {_mm256_setzero_ps()};
-            __m256 vsum3 {_mm256_setzero_ps()};
-            __m256 vsum4 {_mm256_setzero_ps()};
-            __m256 vsum5 {_mm256_setzero_ps()};
-            __m256 vsum6 {_mm256_setzero_ps()};
-            __m256 vsum7 {_mm256_setzero_ps()};
-            __m256 vsum8 {_mm256_setzero_ps()};
-            __m256 vsum_sq1 {_mm256_setzero_ps()};
-            __m256 vsum_sq2 {_mm256_setzero_ps()};
-            __m256 vsum_sq3 {_mm256_setzero_ps()};
-            __m256 vsum_sq4 {_mm256_setzero_ps()};
-            __m256 vsum_sq5 {_mm256_setzero_ps()};
-            __m256 vsum_sq6 {_mm256_setzero_ps()};
-            __m256 vsum_sq7 {_mm256_setzero_ps()};
-            __m256 vsum_sq8 {_mm256_setzero_ps()};
-            for (; i+63 < in.size(); i += 64) {
-                __m256 v1 {_mm256_loadu_ps(p+i+(0<<3))};
-                __m256 v2 {_mm256_loadu_ps(p+i+(1<<3))};
-                __m256 v3 {_mm256_loadu_ps(p+i+(2<<3))};
-                __m256 v4 {_mm256_loadu_ps(p+i+(3<<3))};
-                __m256 v5 {_mm256_loadu_ps(p+i+(4<<3))};
-                __m256 v6 {_mm256_loadu_ps(p+i+(5<<3))};
-                __m256 v7 {_mm256_loadu_ps(p+i+(6<<3))};
-                __m256 v8 {_mm256_loadu_ps(p+i+(7<<3))};
-                vsum1 = _mm256_add_ps(vsum1, v1);
-                vsum2 = _mm256_add_ps(vsum2, v2);
-                vsum3 = _mm256_add_ps(vsum3, v3);
-                vsum4 = _mm256_add_ps(vsum4, v4);
-                vsum5 = _mm256_add_ps(vsum5, v5);
-                vsum6 = _mm256_add_ps(vsum6, v6);
-                vsum7 = _mm256_add_ps(vsum7, v7);
-                vsum8 = _mm256_add_ps(vsum8, v8);
-                vsum_sq1 = _mm256_fmadd_ps(v1, v1, vsum_sq1);
-                vsum_sq2 = _mm256_fmadd_ps(v2, v2, vsum_sq2);
-                vsum_sq3 = _mm256_fmadd_ps(v3, v3, vsum_sq3);
-                vsum_sq4 = _mm256_fmadd_ps(v4, v4, vsum_sq4);
-                vsum_sq5 = _mm256_fmadd_ps(v5, v5, vsum_sq5);
-                vsum_sq6 = _mm256_fmadd_ps(v6, v6, vsum_sq6);
-                vsum_sq7 = _mm256_fmadd_ps(v7, v7, vsum_sq7);
-                vsum_sq8 = _mm256_fmadd_ps(v8, v8, vsum_sq8);
-            }
-            __m256 vsum_total {_mm256_add_ps(vsum1, _mm256_add_ps(vsum2, _mm256_add_ps(vsum3, _mm256_add_ps(vsum4, _mm256_add_ps(vsum5, _mm256_add_ps(vsum6, _mm256_add_ps(vsum7, vsum8)))))))};
-            __m256 vsum_sq_total {_mm256_add_ps(vsum_sq1, _mm256_add_ps(vsum_sq2, _mm256_add_ps(vsum_sq3, _mm256_add_ps(vsum_sq4, _mm256_add_ps(vsum_sq5, _mm256_add_ps(vsum_sq6, _mm256_add_ps(vsum_sq7, vsum_sq8)))))))};
-            sum = hsum(vsum_total);
-            sum_sq = hsum(vsum_sq_total);
-        #elif defined(__SSE4_2__)
-            __m128 vsum1 {_mm_setzero_ps()};
-            __m128 vsum2 {_mm_setzero_ps()};
-            __m128 vsum3 {_mm_setzero_ps()};
-            __m128 vsum4 {_mm_setzero_ps()};
-            __m128 vsum5 {_mm_setzero_ps()};
-            __m128 vsum6 {_mm_setzero_ps()};
-            __m128 vsum7 {_mm_setzero_ps()};
-            __m128 vsum8 {_mm_setzero_ps()};
-            __m128 vsum_sq1 {_mm_setzero_ps()};
-            __m128 vsum_sq2 {_mm_setzero_ps()};
-            __m128 vsum_sq3 {_mm_setzero_ps()};
-            __m128 vsum_sq4 {_mm_setzero_ps()};
-            __m128 vsum_sq5 {_mm_setzero_ps()};
-            __m128 vsum_sq6 {_mm_setzero_ps()};
-            __m128 vsum_sq7 {_mm_setzero_ps()};
-            __m128 vsum_sq8 {_mm_setzero_ps()};
-            for (; i+31 < in.size(); i += 32) {
-                __m128 v1 {_mm_loadu_ps(p+i+(0<<2))};
-                __m128 v2 {_mm_loadu_ps(p+i+(1<<2))};
-                __m128 v3 {_mm_loadu_ps(p+i+(2<<2))};
-                __m128 v4 {_mm_loadu_ps(p+i+(3<<2))};
-                __m128 v5 {_mm_loadu_ps(p+i+(4<<2))};
-                __m128 v6 {_mm_loadu_ps(p+i+(5<<2))};
-                __m128 v7 {_mm_loadu_ps(p+i+(6<<2))};
-                __m128 v8 {_mm_loadu_ps(p+i+(7<<2))};
-                vsum1 = _mm_add_ps(vsum1, v1);
-                vsum2 = _mm_add_ps(vsum2, v2);
-                vsum3 = _mm_add_ps(vsum3, v3);
-                vsum4 = _mm_add_ps(vsum4, v4);
-                vsum5 = _mm_add_ps(vsum5, v5);
-                vsum6 = _mm_add_ps(vsum6, v6);
-                vsum7 = _mm_add_ps(vsum7, v7);
-                vsum8 = _mm_add_ps(vsum8, v8);
-                vsum_sq1 = _mm_add_ps(vsum_sq1, _mm_mul_ps(v1, v1));
-                vsum_sq2 = _mm_add_ps(vsum_sq2, _mm_mul_ps(v2, v2));
-                vsum_sq3 = _mm_add_ps(vsum_sq3, _mm_mul_ps(v3, v3));
-                vsum_sq4 = _mm_add_ps(vsum_sq4, _mm_mul_ps(v4, v4));
-                vsum_sq5 = _mm_add_ps(vsum_sq5, _mm_mul_ps(v5, v5));
-                vsum_sq6 = _mm_add_ps(vsum_sq6, _mm_mul_ps(v6, v6));
-                vsum_sq7 = _mm_add_ps(vsum_sq7, _mm_mul_ps(v7, v7));
-                vsum_sq8 = _mm_add_ps(vsum_sq8, _mm_mul_ps(v8, v8));
-            }
-            __m128 vsum_total {_mm_add_ps(vsum1, _mm_add_ps(vsum2, _mm_add_ps(vsum3, _mm_add_ps(vsum4, _mm_add_ps(vsum5, _mm_add_ps(vsum6, _mm_add_ps(vsum7, vsum8)))))))};
-            __m128 vsum_sq_total {_mm_add_ps(vsum_sq1, _mm_add_ps(vsum_sq2, _mm_add_ps(vsum_sq3, _mm_add_ps(vsum_sq4, _mm_add_ps(vsum_sq5, _mm_add_ps(vsum_sq6, _mm_add_ps(vsum_sq7, vsum_sq8)))))))};
-            sum = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(vsum_total, vsum_total), vsum_total));
-            sum_sq = _mm_cvtss_f32(_mm_hadd_ps(_mm_hadd_ps(vsum_sq_total, vsum_sq_total), vsum_sq_total));
-        #elif defined(__aarch64__) && defined(__ARM_NEON__)
-            float32x4_t vsum1 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum2 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum3 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum4 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum5 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum6 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum7 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum8 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum_sq1 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum_sq2 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum_sq3 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum_sq4 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum_sq5 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum_sq6 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum_sq7 {vdupq_n_f32(0.0f)};
-            float32x4_t vsum_sq8 {vdupq_n_f32(0.0f)};
-            for (; i+31 < in.size(); i += 32) {
-                float32x4_t v1 {vld1q_f32(p+i+(0<<2))};
-                float32x4_t v2 {vld1q_f32(p+i+(1<<2))};
-                float32x4_t v3 {vld1q_f32(p+i+(2<<2))};
-                float32x4_t v4 {vld1q_f32(p+i+(3<<2))};
-                float32x4_t v5 {vld1q_f32(p+i+(4<<2))};
-                float32x4_t v6 {vld1q_f32(p+i+(5<<2))};
-                float32x4_t v7 {vld1q_f32(p+i+(6<<2))};
-                float32x4_t v8 {vld1q_f32(p+i+(7<<2))};
-                vsum1 = vaddq_f32(vsum1, v1);
-                vsum2 = vaddq_f32(vsum2, v2);
-                vsum3 = vaddq_f32(vsum3, v3);
-                vsum4 = vaddq_f32(vsum4, v4);
-                vsum5 = vaddq_f32(vsum5, v5);
-                vsum6 = vaddq_f32(vsum6, v6);
-                vsum7 = vaddq_f32(vsum7, v7);
-                vsum8 = vaddq_f32(vsum8, v8);
-                vsum_sq1 = vmlaq_f32(vsum_sq1, v1, v1);
-                vsum_sq2 = vmlaq_f32(vsum_sq2, v2, v2);
-                vsum_sq3 = vmlaq_f32(vsum_sq3, v3, v3);
-                vsum_sq4 = vmlaq_f32(vsum_sq4, v4, v4);
-                vsum_sq5 = vmlaq_f32(vsum_sq5, v5, v5);
-                vsum_sq6 = vmlaq_f32(vsum_sq6, v6, v6);
-                vsum_sq7 = vmlaq_f32(vsum_sq7, v7, v7);
-                vsum_sq8 = vmlaq_f32(vsum_sq8, v8, v8);
-            }
-            float32x4_t vsum_total {vaddq_f32(vsum1, vaddq_f32(vsum2, vaddq_f32(vsum3, vaddq_f32(vsum4, vaddq_f32(vsum5, vaddq_f32(vsum6, vaddq_f32(vsum7, vsum8)))))))};
-            float32x4_t vsum_sq_total {vaddq_f32(vsum_sq1, vaddq_f32(vsum_sq2, vaddq_f32(vsum_sq3, vaddq_f32(vsum_sq4, vaddq_f32(vsum_sq5, vaddq_f32(vsum_sq6, vaddq_f32(vsum_sq7, vsum_sq8)))))))};
-            sum = vaddvq_f32(vsum_total);
-            sum_sq = vaddvq_f32(vsum_sq_total);
-        #endif
-        for (; i < in.size(); ++i) {
-            float v {p[i]};
-            sum += v;
-            sum_sq += v*v;
-        }
-        return {sum, sum_sq};
-    }
-
-    [[nodiscard]] static auto PIQUANT_HOT quant_config_kernel_f32(std::span<const float> in) noexcept -> std::array<float, 2> {
-        return compute_quant_config_from_data(in);
-    }
-
-    [[nodiscard]] static auto PIQUANT_HOT quant_config_kernel_f64(std::span<const double> in) noexcept -> std::array<double, 2> {
-        return compute_quant_config_from_data(in);
+        return {min, max};
     }
 
     template <typename In, typename Out, const round_mode RoundMode, const reduce_op ReduceOp>
@@ -387,8 +211,8 @@ namespace piquant {
     auto QUANT_KERNEL_IMPL() noexcept -> kernel_registry {
         return kernel_registry {
             .quant_kernel = &quantize_dispatch,
-            .quant_config_kernel_f32 = &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_config_kernel_f32,
-            .quant_config_kernel_f64 = &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_config_kernel_f64,
+            .find_min_max_f32 = &impl_namespace(QUANT_KERNEL_IMPL, _)::find_min_max<float>,
+            .find_min_max_f64 = &impl_namespace(QUANT_KERNEL_IMPL, _)::find_min_max<double>,
         };
     }
 }

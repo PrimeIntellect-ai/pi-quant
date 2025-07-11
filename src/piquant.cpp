@@ -192,53 +192,6 @@ namespace piquant {
         return (1ull<<width) - 1;
     }
 
-    static constexpr double sqrt2 {1.414213562373095048801688724209698078569671875376};     // √2
-    static constexpr double inv_sqrt_2pi {std::numbers::inv_sqrtpi / sqrt2};                // 1/√(2π)
-    static constexpr double inv_sqrt_2 {1.0/sqrt2};                                         // 1/√2
-
-    [[nodiscard]] static auto gaussian_mse(double k, double Q) noexcept -> double {
-        double Δ {2.0*k / (2.0*Q + 1.0)};
-        double tail {0.5 * std::erfc(k * inv_sqrt_2)};
-        double φ {inv_sqrt_2pi * std::exp(-0.5 * k*k)};
-        double pin {1.0 - 2.0*tail};
-        double mse_q {(Δ*Δ / 12.0)*pin};
-        double mse_clip {2.0*((1.0 + k*k)*tail - k*φ)};
-        return mse_q + mse_clip;
-    }
-
-    template <const unsigned Steps = 16>
-    [[nodiscard]] static auto solve_optimal_k(std::uint64_t Q) noexcept -> double { // Returns k that minimises the analytic MSE for a given Q
-        /* One-dim golden-section search, Steps iterations */
-        double a {0.5}, b {10.0};
-        static constexpr double gr {0.6180339887498949};
-        double c {b - gr*(b - a)};
-        double d {a + gr*(b - a)};
-        for (unsigned i=0; i < Steps; ++i) {
-            if (gaussian_mse(c, static_cast<double>(Q)) < gaussian_mse(d, static_cast<double>(Q))) b = d, d = c, c = b - gr*(b - a);
-            else a = c, c = d, d = a + gr*(b - a);
-        }
-        return 0.5*(a + b);
-    }
-
-    static const std::unordered_map<std::uint64_t, double> optimal_k_lookup {
-       [] {
-           std::unordered_map<std::uint64_t, double> result {};
-              for (auto i {static_cast<std::underlying_type_t<dtype>>(dtype::f64)+1}; i < static_cast<std::underlying_type_t<dtype>>(dtype::count_); ++i) {
-                std::uint64_t type_max {compute_type_max(static_cast<dtype>(i))};
-                if (type_max == 0) continue;
-                result[type_max] = solve_optimal_k(type_max);
-              }
-           return result;
-       }()
-    };
-
-    [[nodiscard]] static auto optimal_k(std::uint64_t type_max) noexcept -> double {
-        if (type_max == 0) return 0.0;
-        if (const auto it {optimal_k_lookup.find(type_max)}; it != optimal_k_lookup.end()) [[likely]]
-            return it->second;
-        return solve_optimal_k(type_max);
-    }
-
     template <typename T, typename F> requires std::is_floating_point_v<T>
     static auto compute_quant_config(
         pi::threadpool::ThreadPool& pool,
@@ -254,36 +207,36 @@ namespace piquant {
             return std::invoke(kernel, x);
         });
         jobs_future.join();
-        double sum {};
-        double sum_sq {};
+        double r_min {std::numeric_limits<double>::max()};
+        double r_max {std::numeric_limits<double>::min()};
         for (std::size_t i {}; i < jobs_future.size(); ++i) {
-            auto [s, ss] {jobs_future.get(i)};
-            sum += static_cast<double>(s);
-            sum_sq += static_cast<double>(ss);
+            auto [min, max] {jobs_future.get(i)};
+            r_min = std::min(r_min, static_cast<double>(min));
+            r_max = std::max(r_max, static_cast<double>(max));
         }
-        double fnumel {static_cast<double>(x.size())};
-        double mean {sum / fnumel};
-        double variance {(sum_sq - sum*sum / fnumel) / (fnumel-1.0)};
-        double stddev {std::sqrt(variance)};
         std::uint64_t type_max {compute_type_max(quant_dst_type)};
-        double k {std::floor(100.0*optimal_k(type_max))/100.0};
-        k += 1e-1; // Add a small constant to avoid numerical issues with zero stddev
-        double scale {k*stddev / static_cast<double>(type_max)};
-        if (scale == 0.0) [[unlikely]]
-            return {1.0f, (type_max+1)>>1};
-        std::size_t smax {type_max == std::numeric_limits<std::uint64_t>::max() ?  1ull<<63 : (type_max + 1)>>1};
-        std::int64_t zpo {static_cast<std::int64_t>(std::round(mean / scale))};
-        std::int64_t zpi {static_cast<std::int64_t>(smax - zpo)};
-        return {scale, zpi};
+        std::int64_t type_min {0};
+        if (dtype_info_of(quant_dst_type).flags & dtype_flags::is_signed)
+            type_min = -static_cast<std::int64_t>(type_max) - 1;
+        if (r_max == r_min) [[unlikely]] {
+            const std::int64_t mid = (type_max + type_min) >> 1;
+            return {1.0f, mid};
+        }
+        double q_min {static_cast<double>(type_min)};
+        double q_max {static_cast<double>(type_max)};
+        double scale = (r_max - r_min)/(q_max - q_min);
+        double zero_point = q_min - r_min/scale;
+        zero_point = std::max(std::min(static_cast<double>(static_cast<std::int64_t>(std::round(zero_point))), q_max), q_min);
+        return {scale, zero_point};
     }
 
     auto context::pimpl::operator()(std::span<const float> x, dtype quant_dst_type) -> std::pair<float, std::int64_t> {
-        auto& kernel {(*registry.quant_config_kernel_f32)};
+        auto& kernel {(*registry.find_min_max_f32)};
         return compute_quant_config(m_pool, kernel, x, quant_dst_type);
     }
 
     auto context::pimpl::operator()(std::span<const double> x, dtype quant_dst_type) -> std::pair<float, std::int64_t> {
-        auto& kernel {(*registry.quant_config_kernel_f64)};
+        auto& kernel {(*registry.find_min_max_f64)};
         return compute_quant_config(m_pool, kernel, x, quant_dst_type);
     }
 
