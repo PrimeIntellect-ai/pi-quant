@@ -113,7 +113,7 @@ def dequantize_torch(
     *,
     scale: float,
     zero_point: int,
-    reduce_op: ReduceOp,
+    reduce_op: ReduceOp=ReduceOp.SET,
     out_tensor: Union[torch.Tensor, None] = None,
     ctx: Context = Context.get(),
 ) -> torch.Tensor:
@@ -127,7 +127,7 @@ def dequantize_torch(
     """
 
     if out_tensor is None:
-        out_tensor = torch.empty_like(in_tensor, dtype=torch.float32)
+        out_tensor = torch.empty(in_tensor.shape, dtype=torch.float32)
 
     if not in_tensor.is_contiguous():
         in_tensor = in_tensor.contiguous()
