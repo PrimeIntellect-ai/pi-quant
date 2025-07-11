@@ -107,6 +107,7 @@ TEST(dequantize, uint2_packing) {
                     std::cout << "Mismatch at index " << i << ": " << a << " != " << b << std::endl; \
                     std::cout << "Numel in: " << numel << " Numel out: " << numel_out << std::endl; \
                     std::cout << "Delta: " << delta << " ZP: " << zero_point << " Scale: " << scale << std::endl; \
+                    std::cout << "Zero point: " << zero_point << " Scale: " << scale << std::endl; \
                     std::cout << "IN: ["; \
                     for (std::size_t j {}; j < numel; ++j) { \
                         std::cout << data_in[j] << " "; \

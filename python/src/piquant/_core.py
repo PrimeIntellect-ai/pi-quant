@@ -21,7 +21,7 @@ class ReduceOp(Enum):
 
 
 @unique
-class QuantDtype(Enum):
+class DataType(Enum):
     F32 = C.PIQUANT_DTYPE_F32
     F64 = C.PIQUANT_DTYPE_F64
     UINT2 = C.PIQUANT_DTYPE_UINT2
@@ -38,38 +38,23 @@ class QuantDtype(Enum):
     INT64 = C.PIQUANT_DTYPE_INT64
 
     def bit_size(self) -> int:
-        if self in (QuantDtype.UINT2, QuantDtype.INT2):
+        if self in (DataType.UINT2, DataType.INT2):
             return 2
-        elif self in (QuantDtype.UINT4, QuantDtype.INT4):
+        elif self in (DataType.UINT4, DataType.INT4):
             return 4
-        elif self in (QuantDtype.UINT8, QuantDtype.INT8):
+        elif self in (DataType.UINT8, DataType.INT8):
             return 8
-        elif self in (QuantDtype.UINT16, QuantDtype.INT16):
+        elif self in (DataType.UINT16, DataType.INT16):
             return 16
-        elif self in (QuantDtype.UINT32, QuantDtype.INT32, QuantDtype.F32):
+        elif self in (DataType.UINT32, DataType.INT32, DataType.F32):
             return 32
-        elif self in (QuantDtype.UINT64, QuantDtype.INT64, QuantDtype.F64):
+        elif self in (DataType.UINT64, DataType.INT64, DataType.F64):
             return 64
         else:
             raise ValueError(f'Unsupported dtype: {self}')
 
     def byte_size(self) -> int:
         return min(8, self.bit_size()) >> 3
-
-
-@dataclass
-class QuantConfig:
-    scale: float = 1.0
-    zero_point: int = 0
-    mode: RoundMode = RoundMode.NEAREST
-    output_dtype: QuantDtype = QuantDtype.UINT8
-
-
-@dataclass
-class DequantConfig:
-    scale: float = 1.0
-    zero_point: int = 0
-    reduce_op: ReduceOp = ReduceOp.SET
 
 
 class Context:
@@ -93,9 +78,9 @@ class Context:
     def quantize_raw_ptr(
         self,
         ptr_in: int,
-        dtype_in: QuantDtype,
+        dtype_in: DataType,
         ptr_out: int,
-        dtype_out: QuantDtype,
+        dtype_out: DataType,
         numel: int,
         scale: float,
         zero_point: int,
@@ -112,9 +97,9 @@ class Context:
     def dequantize_raw_ptr(
         self,
         ptr_in: int,
-        dtype_in: QuantDtype,
+        dtype_in: DataType,
         ptr_out: int,
-        dtype_out: QuantDtype,
+        dtype_out: DataType,
         numel: int,
         scale: float,
         zero_point: int,
@@ -128,7 +113,7 @@ class Context:
             self._ctx, ptr_in, dtype_in.value, ptr_out, dtype_out.value, numel, scale, zero_point, reduce_op.value
         )
 
-    def compute_quant_config_raw_ptr(self, ptr: int, target_quant_dtype: QuantDtype, numel: int) -> Tuple[float, int]:
+    def compute_quant_config_raw_ptr(self, ptr: int, target_quant_dtype: DataType, numel: int) -> Tuple[float, int]:
         """
         Compute the scale and zero point of a arr.
         :param ptr: p input arr data pointer (must point to a valid, contiguous memory region of type float (in C float*))

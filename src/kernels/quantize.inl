@@ -89,7 +89,7 @@ static auto PIQUANT_HOT quant_int2(
         o[i>>2] = quant_step_packed<In, Out, RoundMode>(a, b, c, d, inv_scale, zp);
     }
     if (numel & 3) { /* Handle 1-, 2- or 3-value tail */
-       typename Out::packed_storage p {};
+        typename Out::packed_storage p {};
         switch (numel & 3) {
             case 3: p |= quant_step_scalar<In, Out, RoundMode>(x[i+2], inv_scale, zp).bits << 4;
             case 2: p |= quant_step_scalar<In, Out, RoundMode>(x[i+1], inv_scale, zp).bits << 2;
