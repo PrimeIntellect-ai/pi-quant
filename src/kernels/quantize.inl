@@ -49,7 +49,7 @@ template <typename In, typename Out, const round_mode RoundMode> requires is_flo
     auto qb {quant_step_scalar<In, Out, RoundMode>(b, inv_scale, zp).bits};
     auto qc {quant_step_scalar<In, Out, RoundMode>(c, inv_scale, zp).bits};
     auto qd {quant_step_scalar<In, Out, RoundMode>(d, inv_scale, zp).bits};
-    return qa | (qb<<2) | (qc<<4) | (qd<<6);
+    return (qa&3) | ((qb&3)<<2) | ((qc&3)<<4) | ((qd&3)<<6);
 }
 
 template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_int4<Out>

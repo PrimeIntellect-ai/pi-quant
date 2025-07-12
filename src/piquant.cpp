@@ -208,7 +208,7 @@ namespace piquant {
         });
         jobs_future.join();
         double r_min {std::numeric_limits<double>::max()};
-        double r_max {std::numeric_limits<double>::min()};
+        double r_max {std::numeric_limits<double>::lowest()};
         for (std::size_t i {}; i < jobs_future.size(); ++i) {
             auto [min, max] {jobs_future.get(i)};
             r_min = std::min(r_min, static_cast<double>(min));

@@ -33,7 +33,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     [[nodiscard]] static auto find_min_max(std::span<const T> in) noexcept -> std::array<T, 2> {
         if (in.empty()) [[unlikely]] return {0.0, 0.0};
         T min {std::numeric_limits<T>::max()};
-        T max {std::numeric_limits<T>::min()};
+        T max {std::numeric_limits<T>::lowest()};
         for (T x : in) {
             min = std::min(min, x);
             max = std::max(max, x);
