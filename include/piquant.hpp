@@ -158,19 +158,19 @@ namespace piquant {
     };
     template<> struct dtype_limits<uint2_t> final {
         static constexpr std::uint8_t min{0};
-        static constexpr std::uint8_t max{0x3};
+        static constexpr std::uint8_t max{3};
     };
     template<> struct dtype_limits<int2_t> final {
-        static constexpr std::int8_t  min{-0x2};
-        static constexpr std::int8_t  max{0x1};
+        static constexpr std::int8_t  min{-2};
+        static constexpr std::int8_t  max{1};
     };
     template<> struct dtype_limits<uint4_t> final {
         static constexpr std::uint8_t min{0};
-        static constexpr std::uint8_t max{0xf};
+        static constexpr std::uint8_t max{15};
     };
     template<> struct dtype_limits<int4_t> final {
-        static constexpr std::int8_t min{-0x8};
-        static constexpr std::int8_t max{0x7};
+        static constexpr std::int8_t min{-8};
+        static constexpr std::int8_t max{7};
     };
 
     template<typename T> concept is_int2 = std::is_same_v<T, uint2_t> || std::is_same_v<T, int2_t>;

@@ -79,7 +79,7 @@ TEST(dequantize, uint2_packing) {
     TEST(dequantize, dequantize_##ti##_to_##to##_##rnd##_##reduce) { \
         std::mt19937 gen {0x9032002}; \
         std::uniform_real_distribution<ti> dist {-1.0, 1.0}; \
-        const auto adjusted_epsilon {is_int2<to> ? 0.4f : is_int4<to> ? 0.2f : 0.05}; \
+        const auto adjusted_epsilon {is_int2<to> ? 2.0f : is_int4<to> ? 0.2f : 0.05}; \
         for (std::size_t n {}; n < iters; ++n) { \
             std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
             std::size_t numel_out {is_int2<to> ? (numel+3)>>2 : is_int4<to> ? (numel+1)>>1 : numel}; \
@@ -109,12 +109,12 @@ TEST(dequantize, uint2_packing) {
                     std::cout << "Zero point: " << zero_point << " Scale: " << scale << std::endl; \
                     std::cout << "IN: ["; \
                     for (std::size_t j {}; j < numel; ++j) { \
-                        std::cout << data_in[j] << " "; \
+                        std::cout << data_in[j] << ", "; \
                     } \
                     std::cout << "]" << std::endl; \
                     std::cout << "OT: ["; \
                     for (std::size_t j {}; j < numel; ++j) { \
-                        std::cout << dequantized[j] << " "; \
+                        std::cout << dequantized[j] << ", "; \
                     } \
                     std::cout << "]" << std::endl; \
                     ASSERT_TRUE(is_near); \

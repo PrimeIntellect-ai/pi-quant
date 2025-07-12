@@ -50,5 +50,4 @@ def test_quantize_roundtrip(dtype_in: torch.dtype, dtype_quantized: torch.dtype)
     assert dequantized_torch.dtype == dequantized_pi.dtype
     assert dequantized_pi.dtype == torch.float32
     assert torch.allclose(dequantized_torch, dequantized_pi, atol=1e-3)
-    input_q_atol = 0.2 if dtype_quantized == torch.quint2x4 else 0.05
-    assert torch.allclose(dequantized_pi, input.float(), atol=input_q_atol)
+    assert torch.allclose(dequantized_pi, input.float(), atol=scale*0.5 + 1e-6)
