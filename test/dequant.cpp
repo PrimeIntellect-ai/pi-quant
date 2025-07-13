@@ -12,7 +12,6 @@
 #include <gtest/gtest.h>
 
 constexpr std::size_t iters {10};
-constexpr double epsilon {1e-1};
 
 using namespace piquant;
 
@@ -42,11 +41,37 @@ TEST(dequantize, uint4_packing) {
     std::cout << std::endl;
     std::cout << "PACKED"  << std::endl;
     for (auto&& x : quantized)
-        std::cout << std::bitset<8>(x.u8) << " ";
+        std::cout << std::bitset<8>(x.bits) << " ";
     std::cout << std::endl;
-    std::cout << "UNPACKED"  << std::endl;
+}
+
+TEST(dequantize, uint2_packing) {
+    context ctx {1};
+
+    std::vector input {-1.0f, 1.0f, 2.0f, 3.0f, 0.5f};
+
+    auto [scale, zp] {ctx.compute_quant_config_from_data(input, dtype::uint2)};
+    std::cout << "scale: " << scale << " zp: " << zp << std::endl;
+
+    std::vector<uint2_t> quantized {};
+    quantized.resize((input.size()+3)/4);
+    ctx.quantize_generic<float, uint2_t>(input, quantized, scale, zp, round_mode::nearest);
+
+    std::vector<float> dequantized {};
+    dequantized.resize(input.size());
+    ctx.dequantize_generic<uint2_t, float>(quantized, dequantized, scale, zp, reduce_op::set);
+
+    std::cout << "INPUT"  << std::endl;
+    for (auto&& x : input)
+        std::cout << x << " ";
+    std::cout << std::endl;
+    std::cout << "OUTPUT"  << std::endl;
+    for (auto&& x : dequantized)
+        std::cout << x << " ";
+    std::cout << std::endl;
+    std::cout << "PACKED"  << std::endl;
     for (auto&& x : quantized)
-        std::cout << +x.unpack()[0] << "|" << +x.unpack()[1] << " ";
+        std::cout << std::bitset<8>(x.bits) << " ";
     std::cout << std::endl;
 }
 
@@ -54,10 +79,10 @@ TEST(dequantize, uint4_packing) {
     TEST(dequantize, dequantize_##ti##_to_##to##_##rnd##_##reduce) { \
         std::mt19937 gen {0x9032002}; \
         std::uniform_real_distribution<ti> dist {-1.0, 1.0}; \
-        const auto adjusted_epsilon {is_int4<to> ? epsilon * 4: epsilon}; \
+        const auto adjusted_epsilon {is_int2<to> ? 2.0f : is_int4<to> ? 0.2f : 0.05}; \
         for (std::size_t n {}; n < iters; ++n) { \
             std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
-            std::size_t numel_out {is_int4<to> ? (numel+1)>>1 : numel}; \
+            std::size_t numel_out {is_int2<to> ? (numel+3)>>2 : is_int4<to> ? (numel+1)>>1 : numel}; \
             \
             std::vector<ti> data_in {}; \
             std::vector<to> quantized {}; \
@@ -79,15 +104,17 @@ TEST(dequantize, uint4_packing) {
                 bool is_near = delta <= adjusted_epsilon; \
                 if (!is_near) { \
                     std::cout << "Mismatch at index " << i << ": " << a << " != " << b << std::endl; \
-                    std::cout << "Delta: " << delta << std::endl; \
-                    std::cout << "Input: ["; \
+                    std::cout << "Numel in: " << numel << " Numel out: " << numel_out << std::endl; \
+                    std::cout << "Delta: " << delta << " ZP: " << zero_point << " Scale: " << scale << std::endl; \
+                    std::cout << "Zero point: " << zero_point << " Scale: " << scale << std::endl; \
+                    std::cout << "IN: ["; \
                     for (std::size_t j {}; j < numel; ++j) { \
-                        std::cout << data_in[j] << " "; \
+                        std::cout << data_in[j] << ", "; \
                     } \
                     std::cout << "]" << std::endl; \
-                    std::cout << "Dequantized: ["; \
+                    std::cout << "OT: ["; \
                     for (std::size_t j {}; j < numel; ++j) { \
-                        std::cout << dequantized[j] << " "; \
+                        std::cout << dequantized[j] << ", "; \
                     } \
                     std::cout << "]" << std::endl; \
                     ASSERT_TRUE(is_near); \
@@ -96,6 +123,10 @@ TEST(dequantize, uint4_packing) {
         } \
     }
 
+test_dequant(float, uint2_t, nearest, set)
+test_dequant(float, uint2_t, stochastic, set)
+test_dequant(float, uint2_t, nearest, add)
+test_dequant(float, uint2_t, stochastic, add)
 test_dequant(float, uint4_t, nearest, set)
 test_dequant(float, uint4_t, stochastic, set)
 test_dequant(float, uint4_t, nearest, add)

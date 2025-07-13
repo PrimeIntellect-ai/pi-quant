@@ -28,7 +28,11 @@ typedef enum piquant_reduce_op_t {
     PIQUANT_REDUCE_OP_ADD, /* output[i] += quantize(input[i]) */
 } piquant_reduce_op_t;
 
-typedef enum piquant_dtype_t {
+typedef enum piquant_dtype_t { // Order must match dtype enum class in piquant.hpp
+    PIQUANT_DTYPE_F32 = 0,
+    PIQUANT_DTYPE_F64,
+    PIQUANT_DTYPE_UINT2,
+    PIQUANT_DTYPE_INT2,
     PIQUANT_DTYPE_UINT4,
     PIQUANT_DTYPE_INT4,
     PIQUANT_DTYPE_UINT8,
@@ -39,8 +43,6 @@ typedef enum piquant_dtype_t {
     PIQUANT_DTYPE_INT32,
     PIQUANT_DTYPE_UINT64,
     PIQUANT_DTYPE_INT64,
-    PIQUANT_DTYPE_F32,
-    PIQUANT_DTYPE_F64
 } piquant_dtype_t;
 
 extern PIQUANT_EXPORT piquant_context_t* piquant_context_create(size_t num_threads);
@@ -54,7 +56,7 @@ extern PIQUANT_EXPORT void piquant_quantize(
     piquant_dtype_t dtype_out,
     size_t numel,
     float scale,
-    int32_t zero_point,
+    int64_t zero_point,
     piquant_round_mode_t mode
 );
 
@@ -66,7 +68,7 @@ extern PIQUANT_EXPORT void piquant_dequantize(
     piquant_dtype_t dtype_out,
     size_t numel,
     float scale,
-    int32_t zero_point,
+    int64_t zero_point,
     piquant_reduce_op_t op
 );
 

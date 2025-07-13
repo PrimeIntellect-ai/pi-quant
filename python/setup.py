@@ -18,7 +18,7 @@ class BuildException(Exception):
 
 
 class CMakeBuildExtension(Extension):
-    def __init__(self, name, root_dir = ''):
+    def __init__(self, name, root_dir=''):
         super().__init__(name, sources=[])
         self.root_dir = os.path.abspath(root_dir)
 
@@ -46,7 +46,7 @@ class CMakeBuildExecutor(build_ext):
         os.makedirs(self.build_temp)
 
         cmake_args = [
-            '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + os.path.abspath(os.path.join(self.build_lib, "piquant")),
+            '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + os.path.abspath(os.path.join(self.build_lib, 'piquant')),
             '-DCMAKE_BUILD_TYPE=Release',
         ]
         build_args = [
@@ -62,7 +62,7 @@ setup(
     name='pypiquant',
     author='Mario Sieg',
     author_email='mario@primeintellect.ai',
-    packages=['piquant'],
+    packages=['piquant', 'piquant._compat'],
     package_dir={'': 'src'},  # tell setuptools packages are under src/
     package_data={
         'piquant': ['libquant.so', 'libquant.dylib', 'libquant.dll'],

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <iostream>
 #include <numeric>
+#include <numbers>
 #include <condition_variable>
 
 #include <pithreadpool/threadpool.hpp>
@@ -106,8 +107,8 @@ namespace piquant {
         pi::threadpool::ThreadPool m_pool;
 
         auto operator ()(const quant_descriptor& desc) const -> void;
-        auto operator ()(std::span<const float> x, std::uint64_t type_max) -> std::pair<float, std::int64_t>;
-        auto operator ()(std::span<const double> x, std::uint64_t type_max) -> std::pair<float, std::int64_t>;
+        auto operator ()(std::span<const float> x, dtype quant_dst_type) -> std::pair<float, std::int64_t>;
+        auto operator ()(std::span<const double> x, dtype quant_dst_type) -> std::pair<float, std::int64_t>;
         auto job_entry(partition& pl, const quant_descriptor& cmd) const -> void;
     };
 
@@ -116,23 +117,19 @@ namespace piquant {
         const std::int64_t ti {pl.ti};
         const auto partition_row {[&] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
             std::int64_t chunk_size {(cmd.numel + tc - 1)/tc};
-
             // If we have nibble input or output, we really don't want the chunk size to be and odd number of elements
             // because it would trigger trailing element handling in every thread. We want to avoid that to eliminate
             // the need for synchronization, as now two threads want to modify the same output byte to place their respective nibble-parts.
             // Hence, we round up to the next even number if we have a packed type.
             {
-                const bool packed_input  {dtype_info_of(cmd.dt_in ).bit_size < 8};
-                const bool packed_output {dtype_info_of(cmd.dt_out).bit_size < 8};
-                const bool split_by_pairs {
+                bool packed_input {dtype_info_of(cmd.dt_in ).bit_size < 8};
+                bool packed_output {dtype_info_of(cmd.dt_out).bit_size < 8};
+                bool split_by_pairs {
                     (cmd.type == command_type::quant && packed_output) ||
                     (cmd.type == command_type::dequant && packed_input ) ||
-                    (cmd.type == command_type::quant_dequant && packed_output)};
-                if (split_by_pairs) {
-                    if (chunk_size & 1) {
-                        ++chunk_size;
-                    }
-                }
+                    (cmd.type == command_type::quant_dequant && packed_output)
+                };
+                if (split_by_pairs && chunk_size & 1) ++chunk_size;
             }
             std::int64_t ra {chunk_size*ti};
             std::int64_t rb {std::min(ra + chunk_size, cmd.numel)};
@@ -186,12 +183,22 @@ namespace piquant {
         jobs_future.join();
     }
 
+    [[nodiscard]] static auto compute_type_max(dtype dt) noexcept -> std::uint64_t {
+        dtype_info info {dtype_info_of(dt)};
+        piquant_assert(info.flags & dtype_flags::is_quant && info.flags & dtype_flags::is_int, "type %s is not a quantization type", info.name.data());
+        std::size_t width {dtype_info_of(dt).bit_size};
+        piquant_assert(width > 0 && width <= 64, "invalid width %zu for type %s", width, info.name.data());
+        if (info.flags & dtype_flags::is_signed) --width;
+        if (width == 64) return std::numeric_limits<std::uint64_t>::max();
+        return (1ull<<width) - 1;
+    }
+
     template <typename T, typename F> requires std::is_floating_point_v<T>
     static auto compute_quant_config(
         pi::threadpool::ThreadPool& pool,
         F&& kernel,
         std::span<const T> x,
-        std::uint64_t type_max
+        dtype quant_dst_type
     ) -> std::pair<float, std::int64_t> {
         const auto* base {x.data()};
         pi::threadpool::MultiTaskResult jobs_future = pool.scheduleBlocks<std::array<T, 2>>(0u, x.size(), [base, &kernel](std::size_t start, std::size_t end) -> std::array<T, 2> {
@@ -201,43 +208,37 @@ namespace piquant {
             return std::invoke(kernel, x);
         });
         jobs_future.join();
-        double sum {};
-        double sum_sq {};
-        for (size_t i = 0; i < jobs_future.size(); ++i) {
-            auto [s, ss] {jobs_future.get(i)};
-            sum += static_cast<double>(s);
-            sum_sq += static_cast<double>(ss);
+        double r_min {std::numeric_limits<double>::max()};
+        double r_max {std::numeric_limits<double>::lowest()};
+        for (std::size_t i {}; i < jobs_future.size(); ++i) {
+            auto [min, max] {jobs_future.get(i)};
+            r_min = std::min(r_min, static_cast<double>(min));
+            r_max = std::max(r_max, static_cast<double>(max));
         }
-        double fnumel {static_cast<double>(x.size())};
-        double mean {sum / fnumel};
-        double variance {(sum_sq - sum*sum / fnumel) / (fnumel-1.0)};
-        double stddev {std::sqrt(variance)};
-        double scale {(type_max == 15 || type_max == 7 ? stddev_scale_int4 : stddev_scale)*stddev / static_cast<double>(type_max)};
-
-        if (scale == 0.0) [[unlikely]] {
-            return {1.0f, (type_max+1)>>1};
+        std::uint64_t type_max {compute_type_max(quant_dst_type)};
+        std::int64_t type_min {0};
+        if (dtype_info_of(quant_dst_type).flags & dtype_flags::is_signed)
+            type_min = -static_cast<std::int64_t>(type_max) - 1;
+        if (r_max == r_min) [[unlikely]] {
+            const std::int64_t mid = (type_max + type_min) >> 1;
+            return {1.0f, mid};
         }
-        size_t signed_max;
-        if (type_max == UINT64_MAX) {
-            signed_max = 1ull << 63;
-        } else {
-            // convert to next clean power of 2 and divide by 2 ; assert dtype is unsigned, max pattern will be all ones
-            signed_max = (type_max + 1) >> 1;
-        }
-        const auto zpo = static_cast<std::int64_t>(std::round(mean / scale));
-        const size_t zp = {signed_max - zpo};
-        const auto zpi = static_cast<std::int64_t>(zp);
-        return {scale, zpi};
+        double q_min {static_cast<double>(type_min)};
+        double q_max {static_cast<double>(type_max)};
+        double scale = (r_max - r_min)/(q_max - q_min);
+        double zero_point = q_min - r_min/scale;
+        zero_point = std::max(std::min(static_cast<double>(static_cast<std::int64_t>(std::round(zero_point))), q_max), q_min);
+        return {scale, zero_point};
     }
 
-    auto context::pimpl::operator()(std::span<const float> x, std::uint64_t type_max) -> std::pair<float, std::int64_t> {
-        auto& kernel {(*registry.quant_config_kernel_f32)};
-        return compute_quant_config(m_pool, kernel, x, type_max);
+    auto context::pimpl::operator()(std::span<const float> x, dtype quant_dst_type) -> std::pair<float, std::int64_t> {
+        auto& kernel {(*registry.find_min_max_f32)};
+        return compute_quant_config(m_pool, kernel, x, quant_dst_type);
     }
 
-    auto context::pimpl::operator()(std::span<const double> x, std::uint64_t type_max) -> std::pair<float, std::int64_t> {
-        auto& kernel {(*registry.quant_config_kernel_f64)};
-        return compute_quant_config(m_pool, kernel, x, type_max);
+    auto context::pimpl::operator()(std::span<const double> x, dtype quant_dst_type) -> std::pair<float, std::int64_t> {
+        auto& kernel {(*registry.find_min_max_f64)};
+        return compute_quant_config(m_pool, kernel, x, quant_dst_type);
     }
 
     context::context(std::size_t num_threads) {
@@ -259,10 +260,10 @@ namespace piquant {
         const auto& dto {dtype_info_of(dtype_out)};
         piquant_assert(!(dti.flags & dtype_flags::is_quant), "input dtype must be a dequantized type");
         piquant_assert(dto.flags & dtype_flags::is_quant, "output dtype must be a quantized type");
-        if (dto.bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
-            piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
-        } else {
-            piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
+        switch (dto.bit_size) {
+            case 4: piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
+            case 2: piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+3)>>2, "output span requires (in.size() + 1) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
+            default:  piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
         }
         quant_descriptor info {
             .type = command_type::quant,
@@ -273,7 +274,7 @@ namespace piquant {
             .zero_point = zero_point,
             .dt_in = dtype_in,
             .dt_out = dtype_out,
-            .rnd_mode = mode
+            .rounding = mode
         };
         (*this->m_pimpl)(info);
     }
@@ -291,10 +292,10 @@ namespace piquant {
         const auto& dto {dtype_info_of(dtype_out)};
         piquant_assert(dti.flags & dtype_flags::is_quant, "input dtype must be a quantized type");
         piquant_assert(!(dto.flags & dtype_flags::is_quant), "output dtype must be a dequantized type");
-        if (dti.bit_size < 8) { // Packed (sub 1 byte) types require a splitted numel of all pairs
-            piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size());
-        } else {
-            piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
+        switch (dti.bit_size) {
+            case 4: piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
+            case 2: piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+3)>>2, "output span requires (out.size() + 3) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
+            default: piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3)); break;
         }
         quant_descriptor info {
             .type = command_type::dequant,
@@ -305,7 +306,7 @@ namespace piquant {
             .zero_point = zero_point,
             .dt_in = dtype_in,
             .dt_out = dtype_out,
-            .reduce = op
+            .reducing = op
         };
         (*this->m_pimpl)(info);
     }
@@ -333,33 +334,20 @@ namespace piquant {
             .zero_point = zero_point,
             .dt_in = dtype_in_out,
             .dt_out = quant_type,
-            .rnd_mode = mode,
-            .reduce = op
+            .rounding = mode,
+            .reducing = op
         };
         (*this->m_pimpl)(info);
     }
 
-    [[nodiscard]] static auto compute_type_max(dtype dt) noexcept -> std::uint64_t {
-        dtype_info info {dtype_info_of(dt)};
-        std::size_t width {dtype_info_of(dt).bit_size};
-        piquant_assert(width > 0 && width <= 64, "invalid width %zu for type %s", width, info.name.data());
-        if (info.flags & dtype_flags::is_signed) {
-            width -= 1;
-        }
-        if (width == 64) {
-            return std::numeric_limits<std::uint64_t>::max();
-        }
-        return (1ull << width) - 1;
-    }
-
     auto context::compute_quant_config_from_data(std::span<const float> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
-        auto result {(*this->m_pimpl)(x, compute_type_max(quant_dst_dtype))};
+        auto result {(*this->m_pimpl)(x, quant_dst_dtype)};
         piquant_assert(!std::isnan(result.first) && result.first >= 0.0f, "scale must be positive");
         return result;
     }
 
     auto context::compute_quant_config_from_data(std::span<const double> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
-        auto result {(*this->m_pimpl)(x, compute_type_max(quant_dst_dtype))};
+        auto result {(*this->m_pimpl)(x, quant_dst_dtype)};
         piquant_assert(result.first >= 0.0f, "scale must be positive");
         return result;
     }

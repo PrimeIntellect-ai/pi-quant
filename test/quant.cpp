@@ -19,7 +19,7 @@ using namespace piquant;
 
 template <const std::uint8_t IDX, typename T>
 [[nodiscard]] constexpr auto unpack_nibble(T val, bool is_signed) noexcept -> int {
-    const uint8_t raw = (static_cast<std::uint8_t>(val.u8) >> (IDX<<2)) & 0xF;
+    const uint8_t raw = (static_cast<std::uint8_t>(val.bits) >> (IDX<<2)) & 0xF;
     if (!is_signed) {
         return raw;
     }
@@ -96,7 +96,7 @@ template <const std::uint8_t IDX, typename T>
                     eq = eq && (a == a_naive) && (b == b_naive); \
                 } \
                 if (!eq) { \
-                    std::cout << "Mismatch at index " << i << ": " << "(" << a << ", " << b << ") != (" << a_naive << ", " << b_naive << ") -> " << (int)static_cast<uint8_t>(data_out[i].u8) << " != " << (int)static_cast<uint8_t>(data_out_naive[i].u8) << std::endl; \
+                    std::cout << "Mismatch at index " << i << ": " << "(" << a << ", " << b << ") != (" << a_naive << ", " << b_naive << ") -> " << (int)(data_out[i].bits) << " != " << (int)(data_out_naive[i].bits) << std::endl; \
                     std::cout << "Input: " << data_in[i] << std::endl; \
                     std::cout << "Data in: ["; \
                     for (std::size_t j {}; j < numel; ++j) { \
@@ -105,12 +105,12 @@ template <const std::uint8_t IDX, typename T>
                     std::cout << "]" << std::endl; \
                     std::cout << "Data out (f): ["; \
                     for (std::size_t j {}; j < numel_out; ++j) { \
-                        std::cout << static_cast<int>(data_out[j].u8) << " "; \
+                        std::cout << static_cast<int>(data_out[j].bits) << " "; \
                     } \
                     std::cout << "]" << std::endl; \
                     std::cout << "Data out (n): ["; \
                     for (std::size_t j {}; j < numel_out; ++j) { \
-                        std::cout << static_cast<int>(data_out_naive[j].u8) << " "; \
+                        std::cout << static_cast<int>(data_out_naive[j].bits) << " "; \
                     } \
                     std::cout << "]" << std::endl; \
                     std::cout << "Num el out: " << numel_out << std::endl; \

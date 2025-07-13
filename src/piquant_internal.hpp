@@ -17,6 +17,16 @@ namespace piquant {
     }
     #define piquant_assert2(expr) piquant_assert(expr, "")
 
+    #ifdef _MSC_VER
+    #define PIQUANT_HOT
+    #define PIQUANT_AINLINE __forceinline
+    #define PIQUANT_RESTRICT __restrict
+    #else
+    #define PIQUANT_HOT __attribute__((hot))
+    #define PIQUANT_AINLINE __attribute__((always_inline)) inline
+    #define PIQUANT_RESTRICT __restrict__
+    #endif
+
     struct kernel_registry final {
         auto (*quant_kernel)(
           const void* x,
@@ -24,7 +34,13 @@ namespace piquant {
           std::int64_t numel,
           const context::quant_descriptor& desc
         ) noexcept -> void;
-        auto (*quant_config_kernel_f32)(std::span<const float> x) noexcept -> std::array<float, 2>;
-        auto (*quant_config_kernel_f64)(std::span<const double> x) noexcept -> std::array<double, 2>;
+        auto (*find_min_max_f32)(std::span<const float> x) noexcept -> std::array<float, 2>;
+        auto (*find_min_max_f64)(std::span<const double> x) noexcept -> std::array<double, 2>;
     };
+
+    template <typename T>
+    concept is_float_type = std::is_floating_point_v<T>;
+
+    template <typename T>
+    concept is_quant_type = std::is_integral_v<T> || is_packed_int<T>;
 }

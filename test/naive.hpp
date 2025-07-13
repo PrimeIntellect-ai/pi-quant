@@ -43,12 +43,11 @@ static constinit xs128p_state s_sprng {0x123456789abcdef0, 0x0fedcba987654321};
     return s_sprng.canonical();
 }
 
-template <typename OUT> requires piquant::is_int4<OUT>
-[[nodiscard]] static constexpr auto pack_nibbles(OUT x, OUT y) -> OUT {
-    auto xi {x.u8};
-    auto yi {y.u8};
-    auto pa {static_cast<std::uint8_t>((0xf&xi)<<4|0xf&yi)};
-    return OUT{pa};
+template <typename T> requires piquant::is_int4<T>
+[[nodiscard]] static constexpr auto pack_nibbles(T x, T y) noexcept -> T {
+    auto xi {x.bits};
+    auto yi {y.bits};
+    return xi&15 | ((yi&15)<<4);
 }
 
 template <typename IN, typename OUT, const piquant::round_mode RND> requires requires {
@@ -79,21 +78,16 @@ auto quantize_naive(
         }
     }};
     if constexpr (piquant::is_int4<OUT>) {
-        std::size_t numel_out {x.size()};
-        std::size_t i{};
-        for (i = 0; i + 1 < numel_out; i += 2) {
+        std::size_t numel {x.size()};
+        std::size_t i {};
+        for (i=0; i+1 < numel; i += 2) {
             IN a {x[i]};
             IN b {x[i+1]};
-            OUT r{0};
-            auto qa = Q(a);
-            auto qb = Q(b);
-            o[i>>1].pack(qa.u8, qb.u8);
+            o[i>>1] = pack_nibbles(Q(a), Q(b));
         }
-        if (numel_out & 1) { // Handle odd numel
-            OUT packed{};
-            packed.pack(Q(x[x.size()-1]).u8, 0);
-            packed.u8 &= 15;
-            o[i>>1] = packed;
+        if (numel & 1) { // Handle odd numel
+            o[i>>1] = pack_nibbles(Q(x[numel-1]), OUT{0});
+            o[i>>1].bits &= 15;
         }
     } else {
         for (std::int64_t i {}; i < x.size(); ++i) {
@@ -116,7 +110,7 @@ template <typename T> requires std::is_floating_point_v<T>
         }
     ))};
     const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
-    const auto scale {static_cast<T>(piquant::stddev_scale*std/static_cast<T>(tmax))};
+    const auto scale {static_cast<T>(12.0*std/static_cast<T>(tmax))};
     const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
     return {scale, zp};
 }
