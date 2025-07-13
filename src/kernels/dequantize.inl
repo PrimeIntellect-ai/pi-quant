@@ -7,10 +7,7 @@ using namespace piquant;
 
 template <typename In, typename Out> requires is_quant_type<In> && is_float_type<Out>
 [[nodiscard]] static auto dequant_step(double scale, std::int64_t zp, const In x) noexcept -> Out {
-    if constexpr (is_packed_int<In>)
-        return static_cast<Out>(static_cast<std::int64_t>(x.bits) - zp)*scale;
-    else
-        return static_cast<Out>(static_cast<std::int64_t>(x) - zp)*scale;
+    return static_cast<Out>(static_cast<std::int64_t>(x) - zp)*scale;
 }
 
 template <typename In, typename Out, const reduce_op ReduceOp> requires is_int4<In> && is_float_type<Out>

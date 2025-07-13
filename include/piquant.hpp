@@ -66,6 +66,8 @@ namespace piquant {
         constexpr auto operator != (uint2_t rhs) const noexcept -> bool { return !(*this == rhs); }
         constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
         constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
+        constexpr explicit operator std::uint8_t() const noexcept { return bits; }
+        constexpr explicit operator std::int64_t() const noexcept { return bits; }
     };
 
     struct int2_t final {
@@ -78,6 +80,8 @@ namespace piquant {
         constexpr auto operator != (int2_t rhs) const noexcept -> bool { return !(*this == rhs); }
         constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
         constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
+        constexpr explicit operator std::int8_t() const noexcept { return bits; }
+        constexpr explicit operator std::int64_t() const noexcept { return bits; }
     };
 
     struct uint4_t final {
@@ -90,6 +94,8 @@ namespace piquant {
         constexpr auto operator != (uint4_t rhs) const noexcept -> bool { return !(*this == rhs); }
         constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
         constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
+        constexpr explicit operator std::uint8_t() const noexcept { return bits; }
+        constexpr explicit operator std::int64_t() const noexcept { return bits; }
     };
 
     struct int4_t final {
@@ -102,6 +108,8 @@ namespace piquant {
         constexpr auto operator != (int4_t rhs) const noexcept -> bool { return !(*this == rhs); }
         constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
         constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
+        constexpr explicit operator std::int8_t() const noexcept { return bits; }
+        constexpr explicit operator std::int64_t() const noexcept { return bits; }
     };
 
     static_assert(sizeof(uint2_t) == 1);
