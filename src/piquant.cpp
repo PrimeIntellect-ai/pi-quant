@@ -122,12 +122,13 @@ namespace piquant {
             // the need for synchronization, as now two threads want to modify the same output byte to place their respective nibble-parts.
             // Hence, we round up to the next even number if we have a packed type.
             {
-                bool packed_input  {dtype_info_of(cmd.dt_in ).bit_size < 8};
+                bool packed_input {dtype_info_of(cmd.dt_in ).bit_size < 8};
                 bool packed_output {dtype_info_of(cmd.dt_out).bit_size < 8};
                 bool split_by_pairs {
                     (cmd.type == command_type::quant && packed_output) ||
                     (cmd.type == command_type::dequant && packed_input ) ||
-                    (cmd.type == command_type::quant_dequant && packed_output)};
+                    (cmd.type == command_type::quant_dequant && packed_output)
+                };
                 if (split_by_pairs && chunk_size & 1) ++chunk_size;
             }
             std::int64_t ra {chunk_size*ti};

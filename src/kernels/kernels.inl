@@ -32,11 +32,16 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     template <typename T> requires std::is_floating_point_v<T>
     [[nodiscard]] static auto find_min_max(std::span<const T> in) noexcept -> std::array<T, 2> {
         if (in.empty()) [[unlikely]] return {0.0, 0.0};
+        if constexpr (std::is_same_v<T, float>) {
+            return find_min_max_fp32(in.data(), in.size());
+        }
         T min {std::numeric_limits<T>::max()};
         T max {std::numeric_limits<T>::lowest()};
-        for (T x : in) {
-            min = std::min(min, x);
-            max = std::max(max, x);
+        const T* __restrict__ p {in.data()};
+        std::size_t numel {in.size()};
+        for (std::size_t i {}; i < numel; ++i) {
+            min = std::min(min, p[i]);
+            max = std::max(max, p[i]);
         }
         return {min, max};
     }

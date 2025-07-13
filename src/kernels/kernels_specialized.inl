@@ -204,28 +204,47 @@ static auto PIQUANT_HOT dequant_uint8_to_f32(
     std::int32_t zp
 ) noexcept -> void {
     std::int64_t i {};
-    #if defined(__AVX512F__) && defined(__AVX512BW__) && 0
-
+    #if defined(__AVX512F__) && defined(__AVX512BW__)
+    __m512i vzp {_mm512_set1_epi32(zp)};
+    __m512  vscale {_mm512_set1_ps(scale)};
+    for (; i+63 < numel; i += 64) {
+        __m128i in0 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x + i +  0))};
+        __m128i in1 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x + i + 16))};
+        __m128i in2 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x + i + 32))};
+        __m128i in3 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x + i + 48))};
+        __m512i s0 {_mm512_cvtepu8_epi32(in0)};
+        __m512i s1 {_mm512_cvtepu8_epi32(in1)};
+        __m512i s2 {_mm512_cvtepu8_epi32(in2)};
+        __m512i s3 {_mm512_cvtepu8_epi32(in3)};
+        s0 = _mm512_sub_epi32(s0, vzp);
+        s1 = _mm512_sub_epi32(s1, vzp);
+        s2 = _mm512_sub_epi32(s2, vzp);
+        s3 = _mm512_sub_epi32(s3, vzp);
+        __m512 f0 {_mm512_mul_ps(_mm512_cvtepi32_ps(s0), vscale)};
+        __m512 f1 {_mm512_mul_ps(_mm512_cvtepi32_ps(s1), vscale)};
+        __m512 f2 {_mm512_mul_ps(_mm512_cvtepi32_ps(s2), vscale)};
+        __m512 f3 {_mm512_mul_ps(_mm512_cvtepi32_ps(s3), vscale)};
+        if constexpr (SUM) {
+            f0 = _mm512_add_ps(f0, _mm512_loadu_ps(o+i+ 0));
+            f1 = _mm512_add_ps(f1, _mm512_loadu_ps(o+i+16));
+            f2 = _mm512_add_ps(f2, _mm512_loadu_ps(o+i+32));
+            f3 = _mm512_add_ps(f3, _mm512_loadu_ps(o+i+48));
+        }
+        _mm512_storeu_ps(o+i+ 0, f0);
+        _mm512_storeu_ps(o+i+16, f1);
+        _mm512_storeu_ps(o+i+32, f2);
+        _mm512_storeu_ps(o+i+48, f3);
+    }
     #elif defined(__AVX2__)
-        __m256i vzp256    {_mm256_set1_epi32(zp)};
-        __m256  vscale256 {_mm256_set1_ps(scale)};
-        static constexpr auto expand_u8_to_s32_avx2_fast = [](const __m256i &v) {
-            __m256i zero {_mm256_setzero_si256()};
-            __m256i w_lo {_mm256_unpacklo_epi8(v, zero)};
-            __m256i w_hi {_mm256_unpackhi_epi8(v, zero)};
-            __m256i d0 {_mm256_unpacklo_epi16(w_lo, zero)};
-            __m256i d1 {_mm256_unpackhi_epi16(w_lo, zero)};
-            __m256i d2 {_mm256_unpacklo_epi16(w_hi, zero)};
-            __m256i d3 {_mm256_unpackhi_epi16(w_hi, zero)};
-            return std::array{d0,d1,d2,d3};
-        };
-        static constexpr auto expand_u8_to_s32_avx2 = [](const __m256i &v) {
-            __m128i lo128 = _mm256_castsi256_si128(v);
-            __m128i hi128 = _mm256_extracti128_si256(v, 1);
-            __m256i a0 = _mm256_cvtepu8_epi32(lo128);
-            __m256i a1 = _mm256_cvtepu8_epi32(_mm_srli_si128(lo128, 8));
-            __m256i b0 = _mm256_cvtepu8_epi32(hi128);
-            __m256i b1 = _mm256_cvtepu8_epi32(_mm_srli_si128(hi128, 8));
+        __m256i vzp256 {_mm256_set1_epi32(zp)};
+        __m256 vscale256 {_mm256_set1_ps(scale)};
+        static constexpr auto expand_u8_to_s32_avx2 = [](__m256i v) noexcept {
+            __m128i lo128 {_mm256_castsi256_si128(v)};
+            __m128i hi128 {_mm256_extracti128_si256(v, 1)};
+            __m256i a0 {_mm256_cvtepu8_epi32(lo128)};
+            __m256i a1 {_mm256_cvtepu8_epi32(_mm_srli_si128(lo128, 8))};
+            __m256i b0 {_mm256_cvtepu8_epi32(hi128)};
+            __m256i b1 {_mm256_cvtepu8_epi32(_mm_srli_si128(hi128, 8))};
             return std::array{a0, a1, b0, b1};
         };
         for (; i+63 < numel; i += 64) {
@@ -455,4 +474,37 @@ static auto PIQUANT_HOT dequant_uint8_to_f32(
         if constexpr (SUM) o[i] += dq;
         else o[i] = dq;
     }
+}
+
+static auto PIQUANT_HOT find_min_max_fp32(const float* PIQUANT_RESTRICT x, std::int64_t numel) noexcept -> std::array<float, 2> {
+    std::int64_t i {};
+    float min {std::numeric_limits<float>::max()};
+    float max {std::numeric_limits<float>::lowest()};
+    #if defined(__AVX512F__) && defined(__AVX512BW__)
+        __m512 vmin {_mm512_set1_ps(min)};
+        __m512 vmax {_mm512_set1_ps(max)};
+        for (; i+63 < numel; i += 63) {
+            __m512 v0 {_mm512_loadu_ps(x+i)};
+            __m512 v1 {_mm512_loadu_ps(x+i+16)};
+            __m512 v2 {_mm512_loadu_ps(x+i+32)};
+            __m512 v3 {_mm512_loadu_ps(x+i+48)};
+            vmin = _mm512_min_ps(vmin, v0);
+            vmax = _mm512_max_ps(vmax, v0);
+            vmin = _mm512_min_ps(vmin, v1);
+            vmax = _mm512_max_ps(vmax, v1);
+            vmin = _mm512_min_ps(vmin, v2);
+            vmax = _mm512_max_ps(vmax, v2);
+            vmin = _mm512_min_ps(vmin, v3);
+            vmax = _mm512_max_ps(vmax, v3);
+        }
+        min = _mm512_reduce_min_ps(vmin);
+        max = _mm512_reduce_max_ps(vmax);
+    #elif defined(__AVX2__)
+    #elif defined(__aarch64__) && defined(__ARM_NEON__)
+    #endif
+    for (; i < numel; ++i) {
+        if (x[i] < min) min = x[i];
+        if (x[i] > max) max = x[i];
+    }
+    return {min, max};
 }
