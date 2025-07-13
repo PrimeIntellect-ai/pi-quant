@@ -549,8 +549,8 @@ static auto PIQUANT_HOT quant_f32_to_uint4_nearest(
     #endif
 
     const auto quant_step_packed {[=](float a, float b) noexcept -> std::uint8_t {
-        auto qa {std::clamp(static_cast<std::int64_t>(std::round(a * scale)) + zp, 0L, 15L)};
-        auto qb {std::clamp(static_cast<std::int64_t>(std::round(b * scale)) + zp, 0L, 15L)};
+        auto qa {std::clamp(static_cast<std::int32_t>(std::round(a * scale)) + zp, 0, 15)};
+        auto qb {std::clamp(static_cast<std::int32_t>(std::round(b * scale)) + zp, 0, 15)};
         return qa & 15 | (qb & 15)<<4;
     }};
 
