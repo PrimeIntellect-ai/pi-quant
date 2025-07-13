@@ -2,71 +2,65 @@ import os
 import timeit
 import multiprocessing
 
-from piquant import QuantDtype
+os.environ['CUDA_VISIBLE_DEVICES'] = "" # Disable CUDA
+os.environ['OMP_NUM_THREADS'] = str(multiprocessing.cpu_count())  # OpenMP
+os.environ['MKL_NUM_THREADS'] = str(multiprocessing.cpu_count())  # MKL
 
-os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Force CPU usage
-os.environ['OMP_NUM_THREADS'] = str(multiprocessing.cpu_count())
-os.environ['MKL_NUM_THREADS'] = str(multiprocessing.cpu_count())
-
-import torch
-from torch.ao.quantization.fx._decomposed import quantize_per_tensor
 import piquant
+import torch
+import numpy as np
 import matplotlib.pyplot as plt
+from piquant import DataType  # noqa: E402 (import after torch env)
 
-num_runs = 1000
-numel = 27264000  #  Value from realistic test
-
-
-def quantize_torch_fx(tensor: torch.Tensor, scale: int, zero_point: float) -> None:
-    return quantize_per_tensor(
-        tensor, scale=scale, zero_point=zero_point, quant_min=0, quant_max=255, dtype=torch.uint8
-    )
-
-
-def quantize_torch_builtin(tensor: torch.Tensor, scale: int, zero_point: float) -> None:
-    return torch.quantize_per_tensor(tensor, scale=scale, zero_point=zero_point, dtype=torch.quint8).int_repr()
-
-
-def quantize_fast(tensor: torch.Tensor, scale: int, zero_point: float) -> None:
-    return piquant.quantize_torch(
-        tensor, config=piquant.QuantConfig(output_dtype=piquant.QuantDtype.UINT8, scale=scale, zero_point=zero_point)
-    )
-
-
-tensor = torch.rand(numel, device='cpu')
-scale, zero_point = piquant.compute_quant_config_torch(tensor, target_quant_dtype=QuantDtype.UINT8)
-
-
-def benchmark_torch_fx_quant() -> None:
-    quantize_torch_fx(tensor, scale, zero_point)
-
-
-def benchmark_torch_quant() -> None:
-    quantize_torch_builtin(tensor, scale, zero_point)
-
-
-def benchmark_fast_quant() -> None:
-    quantize_fast(tensor, scale, zero_point)
-
-
-time_torch_fx = timeit.timeit(benchmark_torch_fx_quant, number=num_runs)
-time_torch = timeit.timeit(benchmark_torch_quant, number=num_runs)
-time_fast = timeit.timeit(benchmark_fast_quant, number=num_runs)
-
-print(f'Torch FX quantization time for {num_runs} runs: {time_torch_fx:.6f} seconds')
-print(f'Torch quantization time for {num_runs} runs: {time_torch:.6f} seconds')
-print(f'Fast quantization time for {num_runs} runs: {time_fast:.6f} seconds')
-
-labels = [
-    'Torch FX Quantize',
-    'Torch Quantize',
-    'piquant',
+NUM_RUNS: int = 1_000
+NUMEL: int = 100_000_000
+QUANT_DTYPES_TO_BENCH: list[torch.dtype] = [
+    torch.quint8,
+    torch.quint4x2,
 ]
-times = [time_torch_fx, time_torch, time_fast]
 
-plt.figure(figsize=(6, 4))
-plt.bar(labels, times)
-plt.ylabel(f'Time (seconds) for {num_runs} runs')
-plt.title('Quantization Benchmark')
-plt.savefig('benchmark.png', dpi=300)
+def quantize_torch(t: torch.Tensor,  scale: float, zp: int, dtype: torch.dtype) -> None:
+    torch.quantize_per_tensor(t, scale=scale, zero_point=zp, dtype=dtype).int_repr()
+
+
+def quantize_piquant(t: torch.Tensor, scale: float, zp: int, qdtype: DataType) -> None:
+    piquant.quantize_torch(t, quant_dtype=qdtype, scale=scale, zero_point=zp)
+
+dtype_labels: list[str] = []
+torch_times: list[float] = []
+piquant_times: list[float] = []
+
+tensor = torch.rand(NUMEL, dtype=torch.float32, device='cpu')
+
+for torch_d in QUANT_DTYPES_TO_BENCH:
+    piq_d = piquant.torch_to_piquant_dtype(torch_d)
+    scale, zp = piquant.compute_quant_config_torch(tensor, quant_dtype=piq_d)
+    zp = int(zp)
+    def _bench_torch() -> None:
+        quantize_torch(tensor, scale, zp, torch_d)
+    def _bench_piquant() -> None:
+        quantize_piquant(tensor, scale, zp, piq_d)
+
+    # Warmup runs
+    _bench_torch()
+    _bench_piquant()
+
+    torch_time = timeit.timeit(_bench_torch,   number=NUM_RUNS)
+    piquant_time = timeit.timeit(_bench_piquant, number=NUM_RUNS)
+    dtype_labels.append(str(torch_d).replace('torch.', ""))
+    torch_times.append(torch_time)
+    piquant_times.append(piquant_time)
+    print(f'{dtype_labels[-1]:<10} | torch: {torch_time:.6f}s ' f'| piquant: {piquant_time:.6f}s')
+
+x = np.arange(len(dtype_labels))
+width = 0.35
+plt.figure(figsize=(8, 5))
+plt.bar(x - width/2, torch_times,   width, label='torch')
+plt.bar(x + width/2, piquant_times, width, label='piquant')
+plt.ylabel(f'Total time for {NUM_RUNS} runs (s)')
+plt.xticks(x, dtype_labels)
+plt.title('Quantization Benchmark: PyTorch vs. piquant')
+plt.legend()
+plt.tight_layout()
+plt.savefig('quant_benchmark.png', dpi=300)
 plt.show()
