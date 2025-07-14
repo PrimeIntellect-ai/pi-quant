@@ -17,12 +17,11 @@ constexpr double epsilon {1e-1};
 
 using namespace piquant;
 
-
 #define test_requant(ti, to, rnd, reduce) \
     TEST(requantize, requantize_##ti##_to_##to##_##rnd##_##reduce) { \
     std::random_device rd {}; \
     std::mt19937 gen {rd()}; \
-    std::uniform_real_distribution<ti> dist {-1.0, 1.0}; \
+    std::uniform_real_distribution<fp32_t> dist {-1.0, 1.0}; \
     const auto adjusted_epsilon {std::is_same_v<uint4_t, to> ? epsilon * 4: epsilon}; \
     for (std::size_t n {}; n < iters; ++n) { \
         std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
@@ -38,16 +37,24 @@ using namespace piquant;
         std::ranges::fill(requantized, prev); \
         ctx.quantize_dequantize_fused_generic<ti, to>(data_in, requantized, scale, zero_point, piquant::round_mode::rnd, piquant::reduce_op::reduce); \
         for (std::size_t i {}; i < numel; ++i) { \
-            ASSERT_NEAR(data_in[i], requantized[i]-prev, adjusted_epsilon); \
+            ASSERT_NEAR(static_cast<fp32_t>(data_in[i]), static_cast<fp32_t>(requantized[i]-prev), adjusted_epsilon); \
         } \
         } \
     }
 
-test_requant(float32_t, uint4_t, nearest, set)
-test_requant(float32_t, uint4_t, stochastic, set)
-test_requant(float32_t, uint4_t, nearest, add)
-test_requant(float32_t, uint4_t, stochastic, add)
-test_requant(float32_t, uint8_t, nearest, set)
-test_requant(float32_t, uint8_t, stochastic, set)
-test_requant(float32_t, uint8_t, nearest, add)
-test_requant(float32_t, uint8_t, stochastic, add)
+test_requant(fp32_t, uint4_t, nearest, set)
+test_requant(fp32_t, uint4_t, stochastic, set)
+test_requant(fp32_t, uint4_t, nearest, add)
+test_requant(fp32_t, uint4_t, stochastic, add)
+test_requant(fp32_t, uint8_t, nearest, set)
+test_requant(fp32_t, uint8_t, stochastic, set)
+test_requant(fp32_t, uint8_t, nearest, add)
+test_requant(fp32_t, uint8_t, stochastic, add)
+test_requant(bfp16_t, uint4_t, nearest, set)
+test_requant(bfp16_t, uint4_t, stochastic, set)
+test_requant(bfp16_t, uint4_t, nearest, add)
+test_requant(bfp16_t, uint4_t, stochastic, add)
+test_requant(bfp16_t, uint8_t, nearest, set)
+test_requant(bfp16_t, uint8_t, stochastic, set)
+test_requant(bfp16_t, uint8_t, nearest, add)
+test_requant(bfp16_t, uint8_t, stochastic, add)

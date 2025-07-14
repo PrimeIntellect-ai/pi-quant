@@ -24,7 +24,7 @@ extern "C" auto piquant_quantize(
     void* out,
     piquant_dtype_t dtype_out,
     size_t numel,
-    float32_t scale,
+    fp32_t scale,
     int64_t zero_point,
     piquant_round_mode_t mode
 ) -> void {
@@ -48,7 +48,7 @@ extern "C" auto piquant_dequantize(
     void* out,
     piquant_dtype_t dtype_out,
     size_t numel,
-    float32_t scale,
+    fp32_t scale,
     int64_t zero_point,
     piquant_reduce_op_t op
 ) -> void {
@@ -65,7 +65,7 @@ extern "C" auto piquant_dequantize(
     );
 }
 
-extern "C" auto piquant_compute_quant_config_from_data(piquant_context_t* ctx, const float32_t* const x, const std::size_t n, const piquant_dtype_t target_quant_dtype, float32_t* const out_scale, int64_t* const out_zero_point) -> void {
+extern "C" auto piquant_compute_quant_config_from_data(piquant_context_t* ctx, const fp32_t* const x, const std::size_t n, const piquant_dtype_t target_quant_dtype, fp32_t* const out_scale, int64_t* const out_zero_point) -> void {
     const auto [scale, zero_point] {
         std::bit_cast<context*>(ctx)->compute_quant_config_from_data(std::span{x, n}, static_cast<dtype>(target_quant_dtype))
     };

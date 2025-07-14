@@ -29,34 +29,17 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
     #include "quantize.inl"
     #include "dequantize.inl"
 
-    template <typename T> requires std::is_floating_point_v<T>
-    [[nodiscard]] static auto find_min_max(std::span<const T> in) noexcept -> std::array<T, 2> {
-        if (in.empty()) [[unlikely]] return {0.0, 0.0};
-        if constexpr (std::is_same_v<T, float32_t>) {
-            return find_min_max_f32(in.data(), in.size());
-        }
-        T min {std::numeric_limits<T>::max()};
-        T max {std::numeric_limits<T>::lowest()};
-        const T* __restrict__ p {in.data()};
-        std::size_t numel {in.size()};
-        for (std::size_t i {}; i < numel; ++i) {
-            min = std::min(min, p[i]);
-            max = std::max(max, p[i]);
-        }
-        return {min, max};
-    }
-
     template <typename In, typename Out, const round_mode RoundMode, const reduce_op ReduceOp>
     static auto PIQUANT_HOT requant_generic(
       const void* in,
       void* out,
       std::int64_t numel,
-      float32_t scale,
+      fp32_t scale,
       std::int64_t zp
     ) noexcept -> void {
         const auto* PIQUANT_RESTRICT x {static_cast<const In*>(in)};
         auto* PIQUANT_RESTRICT o {static_cast<In*>(out)};
-        float32_t inv_scale {1.0f / scale};
+        fp32_t inv_scale {1.0f / scale};
         if constexpr (ReduceOp == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
                 o[i] = dequant_step<Out, In>(scale, zp, quant_step_scalar<In, Out, RoundMode>(x[i], inv_scale, zp));
@@ -71,7 +54,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 };
 
 namespace piquant {
-    using quant_fn = auto (*)(const void*, void*, std::int64_t, float32_t, std::int64_t) noexcept -> void;
+    using quant_fn = auto (*)(const void*, void*, std::int64_t, fp32_t, std::int64_t) noexcept -> void;
 
     template <typename Src, typename Dst, round_mode M>
     [[nodiscard]] consteval auto quant_entry() noexcept -> quant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<Src, Dst, M>; }
@@ -89,7 +72,7 @@ namespace piquant {
 
     using quant_types = type_set<uint2_t, uint4_t, uint8_t>;
 
-    using fp_types = type_set<float32_t, bfloat16_t>;
+    using fp_types = type_set<fp32_t, bfp16_t>;
 
     template <typename Src, round_mode M, typename TL> struct make_quant_row;
     template <typename Src, round_mode M, typename... Dst>
@@ -125,14 +108,14 @@ namespace piquant {
     static constexpr std::array quant_functions {
         std::array {
             std::array {
-                make_quant_row<float32_t, round_mode::nearest, quant_types>::value,
-                make_quant_row<bfloat16_t, round_mode::nearest, quant_types>::value,
+                make_quant_row<fp32_t, round_mode::nearest, quant_types>::value,
+                make_quant_row<bfp16_t, round_mode::nearest, quant_types>::value,
             },
         },
         std::array {
             std::array {
-                make_quant_row<float32_t, round_mode::stochastic, quant_types>::value,
-                make_quant_row<bfloat16_t, round_mode::stochastic, quant_types>::value
+                make_quant_row<fp32_t, round_mode::stochastic, quant_types>::value,
+                make_quant_row<bfp16_t, round_mode::stochastic, quant_types>::value
             },
         }
     };
@@ -141,14 +124,14 @@ namespace piquant {
     static constexpr std::array dequant_functions {
         std::array {
             std::array {
-                make_dequant_row<float32_t, reduce_op::set, quant_types>::value,
-                make_dequant_row<bfloat16_t, reduce_op::set, quant_types>::value
+                make_dequant_row<fp32_t, reduce_op::set, quant_types>::value,
+                make_dequant_row<bfp16_t, reduce_op::set, quant_types>::value
             },
         },
         std::array {
             std::array {
-                make_dequant_row<float32_t, reduce_op::add, quant_types>::value,
-                make_dequant_row<bfloat16_t, reduce_op::add, quant_types>::value
+                make_dequant_row<fp32_t, reduce_op::add, quant_types>::value,
+                make_dequant_row<bfp16_t, reduce_op::add, quant_types>::value
             },
         }
     };
@@ -215,7 +198,8 @@ namespace piquant {
     auto QUANT_KERNEL_IMPL() noexcept -> kernel_registry {
         return kernel_registry {
             .quant_kernel = &quantize_dispatch,
-            .find_min_max = &impl_namespace(QUANT_KERNEL_IMPL, _)::find_min_max<float32_t>,
+            .find_min_max_float32 = &impl_namespace(QUANT_KERNEL_IMPL, _)::find_min_max_f32,
+            .find_min_max_bfloat16 = &impl_namespace(QUANT_KERNEL_IMPL, _)::find_min_max_bf16,
         };
     }
 }

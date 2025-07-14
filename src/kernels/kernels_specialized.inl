@@ -12,10 +12,10 @@ using namespace piquant;
 #endif
 
 static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
-    const float32_t* PIQUANT_RESTRICT x,
+    const fp32_t* PIQUANT_RESTRICT x,
     std::uint8_t* PIQUANT_RESTRICT o,
     std::int64_t numel,
-    float32_t scale,
+    fp32_t scale,
     std::int32_t zp
 ) noexcept -> void {
     scale = 1.0f / scale;
@@ -29,15 +29,15 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
         __m512i vmin {_mm512_setzero_si512()};
         __m512i vmax {_mm512_set1_epi32(0xff)};
         for (; i < numel && ((std::bit_cast<std::uintptr_t>(x+i)&63) != 0); ++i) {
-            float32_t r {std::round(x[i]*scale)};
+            fp32_t r {std::round(x[i]*scale)};
             std::int32_t q32 {static_cast<std::int32_t>(r) + zp};
             o[i] = static_cast<std::uint8_t>(std::clamp(q32, 0, 0xff));
         }
         for (; i+63 < numel; i += 64) {
-            __m512 xf0 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<float32_t* __restrict__>(x+i+0)))};
-            __m512 xf1 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<float32_t* __restrict__>(x+i+16)))};
-            __m512 xf2 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<float32_t* __restrict__>(x+i+32)))};
-            __m512 xf3 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<float32_t* __restrict__>(x+i+48)))};
+            __m512 xf0 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<fp32_t* __restrict__>(x+i+0)))};
+            __m512 xf1 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<fp32_t* __restrict__>(x+i+16)))};
+            __m512 xf2 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<fp32_t* __restrict__>(x+i+32)))};
+            __m512 xf3 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<fp32_t* __restrict__>(x+i+48)))};
             __m512 prod0 {_mm512_mul_ps(xf0, vinv_scale)};
             __m512 prod1 {_mm512_mul_ps(xf1, vinv_scale)};
             __m512 prod2 {_mm512_mul_ps(xf2, vinv_scale)};
@@ -72,7 +72,7 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
             0,1,2,3, 8,9,10,11, 4,5,6,7, 12,13,14,15
         )};
         for (; i < numel && std::bit_cast<std::uintptr_t>(x+i)&31; ++i) {
-            float32_t rnd {std::round(x[i]*scale)};
+            fp32_t rnd {std::round(x[i]*scale)};
             std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
@@ -110,15 +110,15 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
         __m128i vmin {_mm_setzero_si128()};
         __m128i vmax {_mm_set1_epi32(0xff)};
         for (; i < numel && std::bit_cast<std::uintptr_t>(x+i)&15; ++i) {
-            float32_t rnd {std::round(x[i]*scale)};
+            fp32_t rnd {std::round(x[i]*scale)};
             std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
         for (; i+15 < numel; i += 16) {
-            __m128 xf0 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float32_t*>(x+i+(0<<2)))))};
-            __m128 xf1 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float32_t*>(x+i+(1<<2)))))};
-            __m128 xf2 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float32_t*>(x+i+(2<<2)))))};
-            __m128 xf3 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<float32_t*>(x+i+(3<<2)))))};
+            __m128 xf0 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<fp32_t*>(x+i+(0<<2)))))};
+            __m128 xf1 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<fp32_t*>(x+i+(1<<2)))))};
+            __m128 xf2 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<fp32_t*>(x+i+(2<<2)))))};
+            __m128 xf3 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<fp32_t*>(x+i+(3<<2)))))};
             xf0 = _mm_mul_ps(xf0, vinv_scale);
             xf1 = _mm_mul_ps(xf1, vinv_scale);
             xf2 = _mm_mul_ps(xf2, vinv_scale);
@@ -189,7 +189,7 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
         }
     #endif
     for (; i < numel; ++i) {
-        float32_t rnd {std::round(x[i] * scale)};
+        fp32_t rnd {std::round(x[i] * scale)};
         std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
         o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
     }
@@ -198,9 +198,9 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
 template <const bool SUM>
 static auto PIQUANT_HOT dequant_uint8_to_f32(
     const std::uint8_t* PIQUANT_RESTRICT x,
-    float32_t* PIQUANT_RESTRICT o,
+    fp32_t* PIQUANT_RESTRICT o,
     std::int64_t numel,
-    float32_t scale,
+    fp32_t scale,
     std::int32_t zp
 ) noexcept -> void {
     std::int64_t i {};
@@ -466,16 +466,18 @@ static auto PIQUANT_HOT dequant_uint8_to_f32(
         }
     #endif
     for (; i < numel; ++i) {
-        float32_t dq {static_cast<float32_t>(static_cast<std::int32_t>(x[i]) - zp)*scale};
+        fp32_t dq {static_cast<fp32_t>(static_cast<std::int32_t>(x[i]) - zp)*scale};
         if constexpr (SUM) o[i] += dq;
         else o[i] = dq;
     }
 }
 
-static auto PIQUANT_HOT find_min_max_f32(const float32_t* PIQUANT_RESTRICT x, std::int64_t numel) noexcept -> std::array<float32_t, 2> {
+static auto PIQUANT_HOT find_min_max_f32(std::span<const fp32_t> in) noexcept -> std::array<fp32_t, 2> {
+    const fp32_t* PIQUANT_RESTRICT x {in.data()};
+    auto numel {static_cast<std::int64_t>(in.size())};
     std::int64_t i {};
-    float32_t min {std::numeric_limits<float32_t>::max()};
-    float32_t max {std::numeric_limits<float32_t>::lowest()};
+    fp32_t min {std::numeric_limits<fp32_t>::max()};
+    fp32_t max {std::numeric_limits<fp32_t>::lowest()};
     #if defined(__AVX512F__) && defined(__AVX512BW__)
         __m512 vmin {_mm512_set1_ps(min)};
         __m512 vmax {_mm512_set1_ps(max)};
@@ -505,11 +507,25 @@ static auto PIQUANT_HOT find_min_max_f32(const float32_t* PIQUANT_RESTRICT x, st
     return {min, max};
 }
 
+static auto PIQUANT_HOT find_min_max_bf16(std::span<const bfp16_t> in) noexcept -> std::array<fp32_t, 2> {
+    const bfp16_t* PIQUANT_RESTRICT x {in.data()};
+    auto numel {static_cast<std::int64_t>(in.size())};
+    std::int64_t i {};
+    fp32_t min {dtype_limits<fp32_t>::max};
+    fp32_t max {dtype_limits<fp32_t>::min};
+    for (; i < numel; ++i) {
+        auto xi {static_cast<float32_t>(x[i])};
+        if (xi < min) min = xi;
+        if (xi > max) max = xi;
+    }
+    return {min, max};
+}
+
 static auto PIQUANT_HOT quant_f32_to_uint4_nearest(
-    const float32_t* PIQUANT_RESTRICT x,
+    const fp32_t* PIQUANT_RESTRICT x,
     uint4_t* PIQUANT_RESTRICT o,
     std::int64_t numel,
-    float32_t scale,
+    fp32_t scale,
     std::int32_t zp
 ) noexcept -> void {
     scale = 1.0f / scale;
@@ -548,15 +564,15 @@ static auto PIQUANT_HOT quant_f32_to_uint4_nearest(
         }
     #endif
 
-    const auto quant_step_packed {[=](float32_t a, float32_t b) noexcept -> std::uint8_t {
+    const auto quant_step_packed {[=](fp32_t a, fp32_t b) noexcept -> std::uint8_t {
         auto qa {std::clamp(static_cast<std::int32_t>(std::round(a * scale)) + zp, 0, 15)};
         auto qb {std::clamp(static_cast<std::int32_t>(std::round(b * scale)) + zp, 0, 15)};
         return qa & 15 | (qb & 15)<<4;
     }};
 
     for (; i+1 < numel; i += 2) {
-        float32_t a {x[i]};
-        float32_t b {x[i+1]};
+        fp32_t a {x[i]};
+        fp32_t b {x[i+1]};
         o[i>>1].bits = quant_step_packed(a, b);
     }
     if (numel & 1) {

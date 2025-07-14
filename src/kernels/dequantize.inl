@@ -6,7 +6,7 @@
 using namespace piquant;
 
 template <typename In, typename Out> requires is_quant_type<In> && is_float_type<Out>
-[[nodiscard]] static auto dequant_step(float32_t scale, std::int64_t zp, const In x) noexcept -> Out {
+[[nodiscard]] static auto dequant_step(fp32_t scale, std::int64_t zp, const In x) noexcept -> Out {
     return static_cast<Out>(static_cast<std::int64_t>(x) - zp)*scale;
 }
 
@@ -15,7 +15,7 @@ static auto PIQUANT_HOT dequant_int4(
     const In* x,
     Out* o,
     std::int64_t numel,
-    float32_t scale,
+    fp32_t scale,
     std::int64_t zp
 ) noexcept -> void {
     std::int64_t i{};
@@ -49,7 +49,7 @@ static auto PIQUANT_HOT dequant_int2(
     const In* x,
     Out* o,
     std::int64_t numel,
-    float32_t scale,
+    fp32_t scale,
     std::int64_t zp
 ) noexcept -> void {
     std::int64_t i {};
@@ -87,19 +87,19 @@ static auto PIQUANT_HOT dequant_generic(
     const void* in,
     void* out,
     std::int64_t numel,
-    float32_t scale,
+    fp32_t scale,
     std::int64_t zp
 ) noexcept -> void {
     const auto* PIQUANT_RESTRICT x {static_cast<const In*>(in)};
     auto* PIQUANT_RESTRICT o {static_cast<Out*>(out)};
 
     // Use SIMD optimized kernels for some dtype permutations
-    if constexpr (std::is_same_v<In, std::uint8_t> && std::is_same_v<Out, float32_t>) {
+    if constexpr (std::is_same_v<In, std::uint8_t> && std::is_same_v<Out, fp32_t>) {
         if constexpr (ReduceOp == reduce_op::set) {
-            dequant_uint8_to_f32<false>(static_cast<const std::uint8_t*>(in), static_cast<float32_t*>(out), numel, scale, static_cast<std::int32_t>(zp));
+            dequant_uint8_to_f32<false>(static_cast<const std::uint8_t*>(in), static_cast<fp32_t*>(out), numel, scale, static_cast<std::int32_t>(zp));
             return;
         } else if constexpr (ReduceOp == reduce_op::add) {
-            dequant_uint8_to_f32<true>(static_cast<const std::uint8_t*>(in), static_cast<float32_t*>(out), numel, scale, static_cast<std::int32_t>(zp));
+            dequant_uint8_to_f32<true>(static_cast<const std::uint8_t*>(in), static_cast<fp32_t*>(out), numel, scale, static_cast<std::int32_t>(zp));
             return;
         }
     }

@@ -34,6 +34,7 @@ namespace piquant {
           std::int64_t numel,
           const context::quant_descriptor& desc
         ) noexcept -> void;
-        auto (*find_min_max)(std::span<const float32_t> x) noexcept -> std::array<float32_t, 2>;
+        auto (*find_min_max_float32)(std::span<const fp32_t> x) noexcept -> std::array<fp32_t, 2>;
+        auto (*find_min_max_bfloat16)(std::span<const bfp16_t> x) noexcept -> std::array<fp32_t, 2>;
     };
 }

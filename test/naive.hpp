@@ -50,26 +50,26 @@ static constinit xs128p_state s_sprng {0x123456789abcdef0, 0x0fedcba987654321};
 }
 
 template <typename IN, typename OUT, const piquant::round_mode RND> requires requires {
-    requires std::is_floating_point_v<IN>;
+    requires piquant::is_float_type<IN>;
     requires piquant::is_quant_type<OUT>;
 }
 auto quantize_naive(
-    const std::span<IN> x,
-    const std::span<OUT> o,
-    const double scale,
-    const std::int64_t zero_point
+    std::span<IN> x,
+    std::span<OUT> o,
+    float scale,
+    std::int64_t zero_point
 ) noexcept -> void { /* Original implementation */
-    const double inv_scale {1.0 / scale};
-    const auto Q{[&](const IN x) noexcept -> OUT {
+    float inv_scale {1.0f / scale};
+    auto Q{[&](const IN x) noexcept -> OUT {
         if constexpr (RND == piquant::round_mode::nearest) {
-            const double rnd {std::round(static_cast<double>(x) * inv_scale)};
-            const auto integral {static_cast<std::int64_t>(rnd) + zero_point};
+            float rnd {std::round(static_cast<float>(x) * inv_scale)};
+            auto integral {static_cast<std::int64_t>(rnd) + zero_point};
             return static_cast<OUT>(std::clamp<decltype(integral)>(integral, piquant::dtype_limits<OUT>::min, piquant::dtype_limits<OUT>::max));
         } else {
-            double rnd {x * inv_scale};
-            const double dec {std::abs(rnd - std::trunc(rnd))};
-            const double xi {xs32_canonical()};
-            double adj {xi < dec ? 1.0f : 0.0f};
+            float rnd {x * inv_scale};
+            float dec {std::abs(rnd - std::trunc(rnd))};
+            float xi {xs32_canonical()};
+            float adj {xi < dec ? 1.0f : 0.0f};
             if (rnd < 0.0f) adj = -1.0f * adj;
             rnd = std::trunc(rnd) + adj;
             const auto integral {static_cast<std::int64_t>(rnd) + zero_point};
@@ -108,8 +108,8 @@ template <typename T> requires std::is_floating_point_v<T>
             return delta*delta;
         }
     ))};
-    const auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
-    const auto scale {static_cast<T>(12.0*std/static_cast<T>(tmax))};
-    const std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
+    auto std {static_cast<T>(std::sqrt(sq_delta / static_cast<T>(numel-1)))};
+    auto scale {static_cast<T>(12.0*std/static_cast<T>(tmax))};
+    std::int64_t zp {(tmax>>1) - static_cast<std::int64_t>(std::round(mean/scale))};
     return {scale, zp};
 }

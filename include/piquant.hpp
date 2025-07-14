@@ -74,50 +74,50 @@ namespace piquant {
         constexpr explicit operator std::int64_t() const noexcept { return bits; }
     };
 
-    using float32_t = float; // IEEE 754 binary 32
+    using fp32_t = float; // IEEE 754 binary 32
 
     // Google Brain Float 16
-    struct bfloat16_t final {
+    struct bfp16_t final {
         using packed_storage = std::uint16_t;
         packed_storage bits;
 
-        constexpr bfloat16_t() noexcept : bits {} {}
-        constexpr bfloat16_t(float32_t s) noexcept {
+        constexpr bfp16_t() noexcept : bits {} {}
+        constexpr bfp16_t(fp32_t s) noexcept {
             auto u32 {std::bit_cast<std::uint32_t>(s)};
             if ((u32 & 0x7fffffff) > 0x7f800000) bits = u32>>16|64; // Force quiet NaN
             else bits = (u32 + (0x7fff + ((u32>>16)&1)))>>16;
         }
-        constexpr auto operator == (bfloat16_t rhs) const noexcept -> bool { return bits == rhs.bits; }
-        constexpr auto operator != (bfloat16_t rhs) const noexcept -> bool { return !(*this == rhs); }
+        constexpr auto operator == (bfp16_t rhs) const noexcept -> bool { return bits == rhs.bits; }
+        constexpr auto operator != (bfp16_t rhs) const noexcept -> bool { return !(*this == rhs); }
         constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
         constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
-        constexpr explicit operator float32_t() const noexcept { return std::bit_cast<float32_t>(static_cast<std::uint32_t>(bits)<<16); }
+        constexpr explicit operator fp32_t() const noexcept { return std::bit_cast<fp32_t>(static_cast<std::uint32_t>(bits)<<16); }
 
-        constexpr auto operator + (bfloat16_t rhs) const noexcept -> bfloat16_t {
-            return {static_cast<float32_t>(*this) + static_cast<float32_t>(rhs)};
+        constexpr auto operator + (bfp16_t rhs) const noexcept -> bfp16_t {
+            return {static_cast<fp32_t>(*this) + static_cast<fp32_t>(rhs)};
         }
-        constexpr auto operator += (bfloat16_t rhs) noexcept -> bfloat16_t& {
+        constexpr auto operator += (bfp16_t rhs) noexcept -> bfp16_t& {
             *this = *this + rhs;
             return *this;
         }
-        constexpr auto operator - (bfloat16_t rhs) const noexcept -> bfloat16_t {
-            return {static_cast<float32_t>(*this) - static_cast<float32_t>(rhs)};
+        constexpr auto operator - (bfp16_t rhs) const noexcept -> bfp16_t {
+            return {static_cast<fp32_t>(*this) - static_cast<fp32_t>(rhs)};
         }
-        constexpr auto operator -= (bfloat16_t rhs) noexcept -> bfloat16_t& {
+        constexpr auto operator -= (bfp16_t rhs) noexcept -> bfp16_t& {
             *this = *this - rhs;
             return *this;
         }
-        constexpr auto operator * (bfloat16_t rhs) const noexcept -> bfloat16_t {
-            return {static_cast<float32_t>(*this) * static_cast<float32_t>(rhs)};
+        constexpr auto operator * (bfp16_t rhs) const noexcept -> bfp16_t {
+            return {static_cast<fp32_t>(*this) * static_cast<fp32_t>(rhs)};
         }
-        constexpr auto operator *= (bfloat16_t rhs) noexcept -> bfloat16_t& {
+        constexpr auto operator *= (bfp16_t rhs) noexcept -> bfp16_t& {
             *this = *this * rhs;
             return *this;
         }
-        constexpr auto operator / (bfloat16_t rhs) const noexcept -> bfloat16_t {
-            return {static_cast<float32_t>(*this) / static_cast<float32_t>(rhs)};
+        constexpr auto operator / (bfp16_t rhs) const noexcept -> bfp16_t {
+            return {static_cast<fp32_t>(*this) / static_cast<fp32_t>(rhs)};
         }
-        constexpr auto operator /= (bfloat16_t rhs) noexcept -> bfloat16_t& {
+        constexpr auto operator /= (bfp16_t rhs) noexcept -> bfp16_t& {
             *this = *this / rhs;
             return *this;
         }
@@ -125,13 +125,13 @@ namespace piquant {
 
     static_assert(sizeof(uint2_t) == 1);
     static_assert(sizeof(uint4_t) == 1);
-    static_assert(sizeof(bfloat16_t) == 2);
+    static_assert(sizeof(bfp16_t) == 2);
 
     struct dtype_flags final {
         enum $ {
             none = 0,
             is_quant = 1<<0,
-            is_float32_t = 1<<1,
+            is_fp32_t = 1<<1,
             is_int = 1<<2,
             is_signed = 1<<3,
             is_packed = 1<<4,
@@ -146,8 +146,8 @@ namespace piquant {
     };
 
     constexpr std::array dtype_infos {
-        dtype_info{.name="f32", .stride=4, .bit_size=32, .flags=dtype_flags::is_float32_t+dtype_flags::is_signed},                                                  // f32
-        dtype_info{.name="bf16", .stride=2, .bit_size=16, .flags=dtype_flags::is_float32_t+dtype_flags::is_signed},
+        dtype_info{.name="f32", .stride=4, .bit_size=32, .flags=dtype_flags::is_fp32_t+dtype_flags::is_signed},                                                  // f32
+        dtype_info{.name="bf16", .stride=2, .bit_size=16, .flags=dtype_flags::is_fp32_t+dtype_flags::is_signed},
         dtype_info{.name="uint2", .stride=1, .bit_size=2,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                            // uint2
         dtype_info{.name="uint4", .stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                            // uint4
         dtype_info{.name="uint8", .stride=1, .bit_size=8,  .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                   // uint8
@@ -155,36 +155,45 @@ namespace piquant {
     static_assert([]() -> bool {
         for (auto&& info : dtype_infos) {
             if (!info.bit_size) return false;
-            if (!((info.flags & dtype_flags::is_float32_t) ^ (info.flags & dtype_flags::is_int))) return false;
+            if (!((info.flags & dtype_flags::is_fp32_t) ^ (info.flags & dtype_flags::is_int))) return false;
         }
         return true;
     }());
     [[nodiscard]] constexpr auto dtype_info_of(dtype dtype) noexcept -> const dtype_info& { return dtype_infos[static_cast<std::size_t>(dtype)]; }
 
-    template <typename T> struct dtype_limits final {
-        static constexpr T min{std::numeric_limits<T>::min()};
-        static constexpr T max{std::numeric_limits<T>::max()};
+    template <typename> struct dtype_limits final {};
+
+    template<> struct dtype_limits<fp32_t> final {
+        static constexpr fp32_t min {-std::numeric_limits<fp32_t>::max()}; // Referes to the smallest, normal, finite number, so it's like std::numeric_limits<float>::lowest()
+        static constexpr fp32_t max {std::numeric_limits<fp32_t>::max()};
+    };
+    template<> struct dtype_limits<bfp16_t> final {
+        static constexpr bfp16_t min {0xFF7F}; // Referes to the smallest, normal, finite number, so it's like std::numeric_limits<float>::lowest()
+        static constexpr bfp16_t max {0x7F7F};
     };
     template<> struct dtype_limits<uint2_t> final {
-        static constexpr std::uint8_t min{0};
-        static constexpr std::uint8_t max{3};
+        static constexpr std::uint8_t min {0};
+        static constexpr std::uint8_t max {3};
     };
     template<> struct dtype_limits<uint4_t> final {
-        static constexpr std::uint8_t min{0};
-        static constexpr std::uint8_t max{15};
+        static constexpr std::uint8_t min {0};
+        static constexpr std::uint8_t max {15};
+    };
+    template<> struct dtype_limits<std::uint8_t> final {
+        static constexpr std::uint8_t min {0};
+        static constexpr std::uint8_t max {255};
     };
 
-    template <typename T> concept is_packed_int = std::is_same_v<uint2_t, T> || std::is_same_v<uint4_t, T>;
-    template <typename T> concept is_float_type = std::is_floating_point_v<T> || std::is_same_v<T, bfloat16_t>;
-    template <typename T> concept is_quant_type = std::is_integral_v<T> || is_packed_int<T>;
+    template <typename T> concept is_float_type = std::is_floating_point_v<T> || std::is_same_v<T, bfp16_t>;
+    template <typename T> concept is_quant_type = std::is_integral_v<T> || std::is_same_v<uint2_t, T> || std::is_same_v<uint4_t, T>;;
     template <typename T> concept is_dtype = is_float_type<T> || is_quant_type<T>;
     template <typename T> requires is_dtype<T> struct dtype_traits final {};
 
-    template <> struct dtype_traits<float32_t> { static constexpr dtype type_code = dtype::f32; };
-    template <> struct dtype_traits<bfloat16_t> { static constexpr dtype type_code = dtype::bf16; };
-    template <> struct dtype_traits<uint2_t> { static constexpr dtype type_code = dtype::uint2; };
-    template <> struct dtype_traits<uint4_t> { static constexpr dtype type_code = dtype::uint4; };
-    template <> struct dtype_traits<std::uint8_t> { static constexpr dtype type_code = dtype::uint8; };
+    template <> struct dtype_traits<fp32_t> { static constexpr dtype type_code {dtype::f32}; };
+    template <> struct dtype_traits<bfp16_t> { static constexpr dtype type_code {dtype::bf16}; };
+    template <> struct dtype_traits<uint2_t> { static constexpr dtype type_code {dtype::uint2}; };
+    template <> struct dtype_traits<uint4_t> { static constexpr dtype type_code {dtype::uint4}; };
+    template <> struct dtype_traits<std::uint8_t> { static constexpr dtype type_code {dtype::uint8}; };
 
     class QUANT_EXPORT context final {
     public:
@@ -200,7 +209,7 @@ namespace piquant {
             dtype dtype_in,
             std::span<std::byte> out,
             dtype dtype_out,
-            float32_t scale,
+            fp32_t scale,
             std::int64_t zero_point,
             round_mode mode
         ) const -> void;
@@ -214,7 +223,7 @@ namespace piquant {
         auto quantize_generic(
             std::span<const IN> in,
             std::span<OUT> out,
-            float32_t scale,
+            fp32_t scale,
             std::int64_t zero_point,
             round_mode mode
         ) -> void {
@@ -234,7 +243,7 @@ namespace piquant {
             dtype dtype_in,
             std::span<std::byte> out,
             dtype dtype_out,
-            float32_t scale,
+            fp32_t scale,
             std::int64_t zero_point,
             reduce_op op
         ) const -> void;
@@ -248,7 +257,7 @@ namespace piquant {
         auto dequantize_generic(
             std::span<const IN> in,
             std::span<OUT> out,
-            float32_t scale,
+            fp32_t scale,
             std::int64_t zero_point,
             reduce_op op
         ) -> void {
@@ -268,7 +277,7 @@ namespace piquant {
             dtype dtype_in_out,
             std::span<std::byte> out,
             dtype quant_type,
-            float32_t scale,
+            fp32_t scale,
             std::int64_t zero_point,
             round_mode mode,
             reduce_op op
@@ -282,7 +291,7 @@ namespace piquant {
         auto quantize_dequantize_fused_generic(
             std::span<const INOUT> in,
             std::span<INOUT> out,
-            float32_t scale,
+            fp32_t scale,
             std::int64_t zero_point,
             round_mode mode,
             reduce_op op
@@ -299,7 +308,8 @@ namespace piquant {
             );
         }
 
-        [[nodiscard]] auto compute_quant_config_from_data(std::span<const float32_t> x, dtype quant_dst_dtype) const -> std::pair<float32_t, std::int64_t>;
+        [[nodiscard]] auto compute_quant_config_from_data(std::span<const fp32_t> x, dtype quant_dst_dtype) const -> std::pair<fp32_t, std::int64_t>;
+        [[nodiscard]] auto compute_quant_config_from_data(std::span<const bfp16_t> x, dtype quant_dst_dtype) const -> std::pair<fp32_t, std::int64_t>;
 
         class pimpl;
 
@@ -314,7 +324,7 @@ namespace piquant {
             const std::byte* in {};
             std::byte* out {};
             std::int64_t numel {};
-            float32_t scale{};
+            fp32_t scale{};
             std::int64_t zero_point {};
             dtype dt_in {};
             dtype dt_out {};

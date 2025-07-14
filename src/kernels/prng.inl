@@ -6,7 +6,7 @@
 using namespace piquant;
 
 // Xorshift 128 plus PRNG (scalar) used for stochastic rounding.
-// Generates a canonical float32_t ∈ [0, 1) using a 64-bit state.
+// Generates a canonical fp32_t ∈ [0, 1) using a 64-bit state.
 struct xs128p_state final {
     std::uint64_t p1 {};
     std::uint64_t p2 {};
@@ -22,10 +22,10 @@ struct xs128p_state final {
         return p2 + s0;
     }
 
-    [[nodiscard]] auto PIQUANT_AINLINE canonical() noexcept -> float32_t {
-        static constexpr auto bias_scale {1.0f/static_cast<float32_t>(0x800000)};
+    [[nodiscard]] auto PIQUANT_AINLINE canonical() noexcept -> fp32_t {
+        static constexpr auto bias_scale {1.0f/static_cast<fp32_t>(0x800000)};
         std::uint64_t y {~0u & (*this)()};
-        return (bias_scale*(static_cast<float32_t>(y>>9) + 0.5f));
+        return (bias_scale*(static_cast<fp32_t>(y>>9) + 0.5f));
     }
 
     [[nodiscard]] auto PIQUANT_AINLINE bounded(std::array<std::uint32_t, 2> bounds) noexcept -> std::array<std::uint32_t, 2> {

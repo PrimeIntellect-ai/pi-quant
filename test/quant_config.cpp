@@ -19,7 +19,7 @@ using namespace piquant;
     TEST(quantize_range, quantize_range_##ti##_to_##to##_##rnd) { \
         std::random_device rd {}; \
         std::mt19937 gen {rd()}; \
-        std::uniform_real_distribution<ti> dist {-1.0, 1.0}; \
+        std::uniform_real_distribution<fp32_t> dist {-1.0, 1.0}; \
         \
         for (std::size_t n {}; n < iters; ++n) { \
             std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
@@ -38,9 +38,16 @@ using namespace piquant;
         } \
     }
 
-test_quant_range(float32_t, uint2_t, nearest)
-test_quant_range(float32_t, uint2_t, stochastic)
-test_quant_range(float32_t, uint4_t, nearest)
-test_quant_range(float32_t, uint4_t, stochastic)
-test_quant_range(float32_t, uint8_t, nearest)
-test_quant_range(float32_t, uint8_t, stochastic)
+test_quant_range(fp32_t, uint2_t, nearest)
+test_quant_range(fp32_t, uint2_t, stochastic)
+test_quant_range(fp32_t, uint4_t, nearest)
+test_quant_range(fp32_t, uint4_t, stochastic)
+test_quant_range(fp32_t, uint8_t, nearest)
+test_quant_range(fp32_t, uint8_t, stochastic)
+test_quant_range(bfp16_t, uint2_t, nearest)
+test_quant_range(bfp16_t, uint2_t, stochastic)
+test_quant_range(bfp16_t, uint4_t, nearest)
+test_quant_range(bfp16_t, uint4_t, stochastic)
+test_quant_range(bfp16_t, uint8_t, nearest)
+test_quant_range(bfp16_t, uint8_t, stochastic)
+
