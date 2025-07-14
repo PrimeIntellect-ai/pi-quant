@@ -4,6 +4,7 @@
 #include <span>
 #include <cstdint>
 #include <string_view>
+#include <limits>
 #include <memory>
 
 #ifdef _MSC_VER

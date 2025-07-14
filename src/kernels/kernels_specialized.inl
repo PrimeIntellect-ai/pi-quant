@@ -458,7 +458,7 @@ static auto PIQUANT_HOT find_min_max_bf16(std::span<const bfp16_t> in) noexcept 
 
     #endif
     for (; i < numel; ++i) {
-        auto xi {static_cast<float32_t>(x[i])};
+        auto xi {static_cast<fp32_t>(x[i])};
         if (xi < min) min = xi;
         if (xi > max) max = xi;
     }
