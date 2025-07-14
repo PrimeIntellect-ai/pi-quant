@@ -155,37 +155,19 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
     #elif defined(__aarch64__) && defined(__ARM_NEON__)
         float32x4_t vinv_scale {vdupq_n_f32(scale)};
         int32x4_t vzero_point {vdupq_n_s32(zp)};
-        int32x4_t vmin {vdupq_n_s32(0)};
-        int32x4_t vmax {vdupq_n_s32(0xff)};
         for (; i+15 < numel; i += 16) {
-            float32x4_t xf0 {vld1q_f32(x+i+(0<<2))};
-            float32x4_t xf1 {vld1q_f32(x+i+(1<<2))};
-            float32x4_t xf2 {vld1q_f32(x+i+(2<<2))};
-            float32x4_t xf3 {vld1q_f32(x+i+(3<<2))};
-            xf0 = vmulq_f32(xf0, vinv_scale);
-            xf1 = vmulq_f32(xf1, vinv_scale);
-            xf2 = vmulq_f32(xf2, vinv_scale);
-            xf3 = vmulq_f32(xf3, vinv_scale);
-            int32x4_t xi0 {vcvtaq_s32_f32(xf0)};
-            int32x4_t xi1 {vcvtaq_s32_f32(xf1)};
-            int32x4_t xi2 {vcvtaq_s32_f32(xf2)};
-            int32x4_t xi3 {vcvtaq_s32_f32(xf3)};
-            xi0 = vaddq_s32(xi0, vzero_point);
-            xi1 = vaddq_s32(xi1, vzero_point);
-            xi2 = vaddq_s32(xi2, vzero_point);
-            xi3 = vaddq_s32(xi3, vzero_point);
-            xi0 = vmaxq_s32(xi0, vmin);
-            xi1 = vmaxq_s32(xi1, vmin);
-            xi2 = vmaxq_s32(xi2, vmin);
-            xi3 = vmaxq_s32(xi3, vmin);
-            xi0 = vminq_s32(xi0, vmax);
-            xi1 = vminq_s32(xi1, vmax);
-            xi2 = vminq_s32(xi2, vmax);
-            xi3 = vminq_s32(xi3, vmax);
-            int16x8_t pack16_0 {vcombine_s16(vqmovn_s32(xi0), vqmovn_s32(xi1))};
-            int16x8_t pack16_1 {vcombine_s16(vqmovn_s32(xi2), vqmovn_s32(xi3))};
-            uint8x16_t result {vcombine_u8(vqmovun_s16(pack16_0), vqmovun_s16(pack16_1))};
-            vst1q_u8(o+i, result);
+            int32x4_t xi00 {vcvtaq_s32_f32(vmulq_f32(vld1q_f32(x+i+(0<<2)), vinv_scale))};
+            int32x4_t xi01 {vcvtaq_s32_f32(vmulq_f32(vld1q_f32(x+i+(1<<2)), vinv_scale))};
+            int32x4_t xi02 {vcvtaq_s32_f32(vmulq_f32(vld1q_f32(x+i+(2<<2)), vinv_scale))};
+            int32x4_t xi03 {vcvtaq_s32_f32(vmulq_f32(vld1q_f32(x+i+(3<<2)), vinv_scale))};
+            xi00 = vaddq_s32(xi00, vzero_point);
+            xi01 = vaddq_s32(xi01, vzero_point);
+            xi02 = vaddq_s32(xi02, vzero_point);
+            xi03 = vaddq_s32(xi03, vzero_point);
+            int16x8_t pack16_00 {vcombine_s16(vqmovn_s32(xi00), vqmovn_s32(xi01))};
+            int16x8_t pack16_01 {vcombine_s16(vqmovn_s32(xi02), vqmovn_s32(xi03))};
+            uint8x16_t r0 {vcombine_u8(vqmovun_s16(pack16_00), vqmovun_s16(pack16_01))};
+            vst1q_u8(o+i, r0);
         }
     #endif
     for (; i < numel; ++i) {
@@ -376,93 +358,31 @@ static auto PIQUANT_HOT dequant_uint8_to_f32(
         static constexpr auto expand_u8_to_s32{[](uint8x16_t u8) noexcept-> std::array<int32x4_t, 4> {
             uint16x8_t u16l {vmovl_u8(vget_low_u8(u8))};
             uint16x8_t u16h {vmovl_u8(vget_high_u8(u8))};
-            uint16x4_t a0 {vget_low_u16(u16l)};
-            uint16x4_t a1 {vget_high_u16(u16l)};
-            uint16x4_t a2 {vget_low_u16(u16h)};
-            uint16x4_t a3 {vget_high_u16(u16h)};
-            int32x4_t vs0 {vmovl_s16(vreinterpret_s16_u16(a0))};
-            int32x4_t vs1 {vmovl_s16(vreinterpret_s16_u16(a1))};
-            int32x4_t vs2 {vmovl_s16(vreinterpret_s16_u16(a2))};
-            int32x4_t vs3 {vmovl_s16(vreinterpret_s16_u16(a3))};
+            int32x4_t vs0 {vmovl_s16(vreinterpret_s16_u16(vget_low_u16(u16l)))};
+            int32x4_t vs1 {vmovl_s16(vreinterpret_s16_u16(vget_high_u16(u16l)))};
+            int32x4_t vs2 {vmovl_s16(vreinterpret_s16_u16(vget_low_u16(u16h)))};
+            int32x4_t vs3 {vmovl_s16(vreinterpret_s16_u16(vget_high_u16(u16h)))};
             return {vs0, vs1, vs2, vs3};
         }};
         int32x4_t vzp {vdupq_n_s32(zp)};
         float32x4_t vscale {vdupq_n_f32(scale)};
-        for (; i+63 < numel; i += 64) {
+        for (; i+15 < numel; i += 16) {
             uint8x16_t u80 {vld1q_u8(x+i+(0<<4))};
-            uint8x16_t u81 {vld1q_u8(x+i+(1<<4))};
-            uint8x16_t u82 {vld1q_u8(x+i+(2<<4))};
-            uint8x16_t u83 {vld1q_u8(x+i+(3<<4))};
             auto [vs00, vs10, vs20, vs30] {expand_u8_to_s32(u80)};
-            auto [vs01, vs11, vs21, vs31] {expand_u8_to_s32(u81)};
-            auto [vs02, vs12, vs22, vs32] {expand_u8_to_s32(u82)};
-            auto [vs03, vs13, vs23, vs33] {expand_u8_to_s32(u83)};
-            vs00 = vsubq_s32(vs00, vzp);
-            vs10 = vsubq_s32(vs10, vzp);
-            vs20 = vsubq_s32(vs20, vzp);
-            vs30 = vsubq_s32(vs30, vzp);
-            vs01 = vsubq_s32(vs01, vzp);
-            vs11 = vsubq_s32(vs11, vzp);
-            vs21 = vsubq_s32(vs21, vzp);
-            vs31 = vsubq_s32(vs31, vzp);
-            vs02 = vsubq_s32(vs02, vzp);
-            vs12 = vsubq_s32(vs12, vzp);
-            vs22 = vsubq_s32(vs22, vzp);
-            vs32 = vsubq_s32(vs32, vzp);
-            vs03 = vsubq_s32(vs03, vzp);
-            vs13 = vsubq_s32(vs13, vzp);
-            vs23 = vsubq_s32(vs23, vzp);
-            vs33 = vsubq_s32(vs33, vzp);
-            float32x4_t vf00 {vmulq_f32(vcvtq_f32_s32(vs00), vscale)};
-            float32x4_t vf01 {vmulq_f32(vcvtq_f32_s32(vs10), vscale)};
-            float32x4_t vf02 {vmulq_f32(vcvtq_f32_s32(vs20), vscale)};
-            float32x4_t vf03 {vmulq_f32(vcvtq_f32_s32(vs30), vscale)};
-            float32x4_t vf10 {vmulq_f32(vcvtq_f32_s32(vs01), vscale)};
-            float32x4_t vf11 {vmulq_f32(vcvtq_f32_s32(vs11), vscale)};
-            float32x4_t vf12 {vmulq_f32(vcvtq_f32_s32(vs21), vscale)};
-            float32x4_t vf13 {vmulq_f32(vcvtq_f32_s32(vs31), vscale)};
-            float32x4_t vf20 {vmulq_f32(vcvtq_f32_s32(vs02), vscale)};
-            float32x4_t vf21 {vmulq_f32(vcvtq_f32_s32(vs12), vscale)};
-            float32x4_t vf22 {vmulq_f32(vcvtq_f32_s32(vs22), vscale)};
-            float32x4_t vf23 {vmulq_f32(vcvtq_f32_s32(vs32), vscale)};
-            float32x4_t vf30 {vmulq_f32(vcvtq_f32_s32(vs03), vscale)};
-            float32x4_t vf31 {vmulq_f32(vcvtq_f32_s32(vs13), vscale)};
-            float32x4_t vf32 {vmulq_f32(vcvtq_f32_s32(vs23), vscale)};
-            float32x4_t vf33 {vmulq_f32(vcvtq_f32_s32(vs33), vscale)};
+            float32x4_t vf00 {vmulq_f32(vcvtq_f32_s32(vsubq_s32(vs00, vzp)), vscale)};
+            float32x4_t vf01 {vmulq_f32(vcvtq_f32_s32(vsubq_s32(vs10, vzp)), vscale)};
+            float32x4_t vf02 {vmulq_f32(vcvtq_f32_s32(vsubq_s32(vs20, vzp)), vscale)};
+            float32x4_t vf03 {vmulq_f32(vcvtq_f32_s32(vsubq_s32(vs30, vzp)), vscale)};
             if constexpr (SUM) {
                 vf00 = vaddq_f32(vf00, vld1q_f32(o+i+(0<<2)));
                 vf01 = vaddq_f32(vf01, vld1q_f32(o+i+(1<<2)));
                 vf02 = vaddq_f32(vf02, vld1q_f32(o+i+(2<<2)));
                 vf03 = vaddq_f32(vf03, vld1q_f32(o+i+(3<<2)));
-                vf10 = vaddq_f32(vf10, vld1q_f32(o+i+(4<<2)));
-                vf11 = vaddq_f32(vf11, vld1q_f32(o+i+(5<<2)));
-                vf12 = vaddq_f32(vf12, vld1q_f32(o+i+(6<<2)));
-                vf13 = vaddq_f32(vf13, vld1q_f32(o+i+(7<<2)));
-                vf20 = vaddq_f32(vf20, vld1q_f32(o+i+(8<<2)));
-                vf21 = vaddq_f32(vf21, vld1q_f32(o+i+(9<<2)));
-                vf22 = vaddq_f32(vf22, vld1q_f32(o+i+(10<<2)));
-                vf23 = vaddq_f32(vf23, vld1q_f32(o+i+(11<<2)));
-                vf30 = vaddq_f32(vf30, vld1q_f32(o+i+(12<<2)));
-                vf31 = vaddq_f32(vf31, vld1q_f32(o+i+(13<<2)));
-                vf32 = vaddq_f32(vf32, vld1q_f32(o+i+(14<<2)));
-                vf33 = vaddq_f32(vf33, vld1q_f32(o+i+(15<<2)));
             }
             vst1q_f32((o+i+(0<<2)), vf00);
             vst1q_f32((o+i+(1<<2)), vf01);
             vst1q_f32((o+i+(2<<2)), vf02);
             vst1q_f32((o+i+(3<<2)), vf03);
-            vst1q_f32((o+i+(4<<2)), vf10);
-            vst1q_f32((o+i+(5<<2)), vf11);
-            vst1q_f32((o+i+(6<<2)), vf12);
-            vst1q_f32((o+i+(7<<2)), vf13);
-            vst1q_f32((o+i+(8<<2)), vf20);
-            vst1q_f32((o+i+(9<<2)), vf21);
-            vst1q_f32((o+i+(10<<2)), vf22);
-            vst1q_f32((o+i+(11<<2)), vf23);
-            vst1q_f32((o+i+(12<<2)), vf30);
-            vst1q_f32((o+i+(13<<2)), vf31);
-            vst1q_f32((o+i+(14<<2)), vf32);
-            vst1q_f32((o+i+(15<<2)), vf33);
         }
     #endif
     for (; i < numel; ++i) {
@@ -499,6 +419,24 @@ static auto PIQUANT_HOT find_min_max_f32(std::span<const fp32_t> in) noexcept ->
         max = _mm512_reduce_max_ps(vmax);
     #elif defined(__AVX2__)
     #elif defined(__aarch64__) && defined(__ARM_NEON__)
+        float32x4_t vmin {vdupq_n_f32(min)};
+        float32x4_t vmax {vdupq_n_f32(max)};
+        for (; i+15 < numel; i += 16) {
+            float32x4_t v0 {vld1q_f32(x+i+(0<<2))};
+            float32x4_t v1 {vld1q_f32(x+i+(1<<2))};
+            float32x4_t v2 {vld1q_f32(x+i+(2<<2))};
+            float32x4_t v3 {vld1q_f32(x+i+(3<<2))};
+            vmin = vminq_f32(vmin, v0);
+            vmax = vmaxq_f32(vmax, v0);
+            vmin = vminq_f32(vmin, v1);
+            vmax = vmaxq_f32(vmax, v1);
+            vmin = vminq_f32(vmin, v2);
+            vmax = vmaxq_f32(vmax, v2);
+            vmin = vminq_f32(vmin, v3);
+            vmax = vmaxq_f32(vmax, v3);
+        }
+        min = std::min({vgetq_lane_f32(vmin, 0), vgetq_lane_f32(vmin, 1), vgetq_lane_f32(vmin, 2), vgetq_lane_f32(vmin, 3)});
+        max = std::max({vgetq_lane_f32(vmax, 0), vgetq_lane_f32(vmax, 1), vgetq_lane_f32(vmax, 2), vgetq_lane_f32(vmax, 3)});
     #endif
     for (; i < numel; ++i) {
         if (x[i] < min) min = x[i];
@@ -513,6 +451,12 @@ static auto PIQUANT_HOT find_min_max_bf16(std::span<const bfp16_t> in) noexcept 
     std::int64_t i {};
     fp32_t min {dtype_limits<fp32_t>::max};
     fp32_t max {dtype_limits<fp32_t>::min};
+    #if defined(__AVX512F__) && defined(__AVX512BW__)
+
+    #elif defined(__AVX2__)
+    #elif defined(__aarch64__) && defined(__ARM_NEON__)
+
+    #endif
     for (; i < numel; ++i) {
         auto xi {static_cast<float32_t>(x[i])};
         if (xi < min) min = xi;
