@@ -6,7 +6,7 @@
 using namespace piquant;
 
 template <typename In, typename Out> requires is_quant_type<In> && is_float_type<Out>
-[[nodiscard]] static auto dequant_step(float64_t scale, std::int64_t zp, const In x) noexcept -> Out {
+[[nodiscard]] static auto dequant_step(float32_t scale, std::int64_t zp, const In x) noexcept -> Out {
     return static_cast<Out>(static_cast<std::int64_t>(x) - zp)*scale;
 }
 
@@ -15,7 +15,7 @@ static auto PIQUANT_HOT dequant_int4(
     const In* x,
     Out* o,
     std::int64_t numel,
-    float64_t scale,
+    float32_t scale,
     std::int64_t zp
 ) noexcept -> void {
     static constexpr auto sign_extend_4 {[](std::int8_t x) noexcept -> std::int8_t {
@@ -56,7 +56,7 @@ static auto PIQUANT_HOT dequant_int2(
     const In* x,
     Out* o,
     std::int64_t numel,
-    float64_t scale,
+    float32_t scale,
     std::int64_t zp
 ) noexcept -> void {
     std::int64_t i {};

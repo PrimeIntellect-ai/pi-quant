@@ -113,13 +113,14 @@ namespace piquant {
         constexpr explicit operator std::int64_t() const noexcept { return bits; }
     };
 
-    using float32_t = float;
-    using float64_t = double;
+    using float32_t = float; // IEEE 754 binary 32
+    using float64_t = double; // IEEE 754 binary 64
 
+    // Google Brain Float 16
     struct bfloat16_t final {
         using packed_storage = std::uint16_t;
         packed_storage bits;
-
+*
         constexpr bfloat16_t() noexcept : bits {} {}
         constexpr bfloat16_t(float32_t s) noexcept {
             auto u32 {std::bit_cast<std::uint32_t>(s)};
