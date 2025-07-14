@@ -33,10 +33,10 @@ template <const std::uint8_t IDX, typename T>
         \
         for (std::size_t n {}; n < iters; ++n) { \
             ti scale {std::uniform_real_distribution<ti>{0.1, 1.0}(gen)}; \
-            std::int32_t zero_point {is_int4<to> ? std::uniform_int_distribution<std::int32_t>{-8, 7}(gen) : \
+            std::int32_t zero_point {std::is_same_v<uint4_t, to> ? std::uniform_int_distribution<std::int32_t>{-8, 7}(gen) : \
                     std::uniform_int_distribution<std::int32_t>{-128, 127}(gen)}; \
             std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
-            std::size_t numel_out {is_int4<to> ? (numel+1)>>1 : numel}; \
+            std::size_t numel_out {std::is_same_v<uint4_t, to> ? (numel+1)>>1 : numel}; \
             \
             std::vector<ti> data_in {}; \
             std::vector<to> data_out_naive {}; \
@@ -69,8 +69,8 @@ template <const std::uint8_t IDX, typename T>
             std::cout << "Iteration " << n << std::endl; \
             ti scale {std::uniform_real_distribution<ti>{0.1, 1.0}(gen)}; \
             std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
-            std::size_t numel_out {is_int4<to> ? (numel+1)>>1 : numel}; \
-            std::int32_t zero_point {is_int4<to> ? std::uniform_int_distribution<std::int32_t>{-8, 7}(gen) : \
+            std::size_t numel_out {std::is_same_v<uint4_t, to> ? (numel+1)>>1 : numel}; \
+            std::int32_t zero_point {std::is_same_v<uint4_t, to> ? std::uniform_int_distribution<std::int32_t>{-8, 7}(gen) : \
                     std::uniform_int_distribution<std::int32_t>{-128, 127}(gen)}; \
             \
             std::vector<ti> data_in {}; \
@@ -121,85 +121,28 @@ template <const std::uint8_t IDX, typename T>
         } \
     }
 
-test_quant_int4(float, uint4_t, nearest, false, false)
-test_quant_int4(float, uint4_t, stochastic, true, false)
-test_quant(float, uint8_t, nearest)
-test_quant(float, uint8_t, stochastic)
-test_quant(float, uint16_t, nearest)
-test_quant(float, uint16_t, stochastic)
-test_quant(float, uint32_t, nearest)
-test_quant(float, uint32_t, stochastic)
-test_quant(float, uint64_t, nearest)
-test_quant(float, uint64_t, stochastic)
-test_quant_int4(float, int4_t, nearest, false, true)
-test_quant_int4(float, int4_t, stochastic, true, true)
-test_quant(float, int8_t, nearest)
-test_quant(float, int8_t, stochastic)
-test_quant(float, int16_t, nearest)
-test_quant(float, int16_t, stochastic)
-test_quant(float, int32_t, nearest)
-test_quant(float, int32_t, stochastic)
-test_quant(float, int64_t, nearest)
-test_quant(float, int64_t, stochastic)
-test_quant_int4(double, uint4_t, nearest, false, false)
-test_quant_int4(double, uint4_t, stochastic, true, false)
-test_quant(double, uint8_t, nearest)
-test_quant(double, uint8_t, stochastic)
-test_quant(double, uint16_t, nearest)
-test_quant(double, uint16_t, stochastic)
-test_quant(double, uint32_t, nearest)
-test_quant(double, uint32_t, stochastic)
-test_quant(double, uint64_t, nearest)
-test_quant(double, uint64_t, stochastic)
-test_quant_int4(double, int4_t, nearest, false, true)
-test_quant_int4(double, int4_t, stochastic, true, true)
-test_quant(double, int8_t, nearest)
-test_quant(double, int8_t, stochastic)
-test_quant(double, int16_t, nearest)
-test_quant(double, int16_t, stochastic)
-test_quant(double, int32_t, nearest)
-test_quant(double, int32_t, stochastic)
-test_quant(double, int64_t, nearest)
-test_quant(double, int64_t, stochastic)
+test_quant_int4(float32_t, uint4_t, nearest, false, false)
+test_quant_int4(float32_t, uint4_t, stochastic, true, false)
+test_quant(float32_t, uint8_t, nearest)
+test_quant(float32_t, uint8_t, stochastic)
 
 TEST(quantize, requantize_float_to_uint8_identity_data) {
     std::random_device rd {};
     std::mt19937 gen {rd()};
     std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)};
     std::size_t numel_out {numel};
-    std::vector<float> data_in {};
+    std::vector<float32_t> data_in {};
     std::vector<std::uint8_t> quantized {};
     data_in.resize(numel);
     quantized.resize(numel_out);
     std::ranges::fill(data_in, 42.0f);
     context ctx {std::max(1u, std::thread::hardware_concurrency())};
     auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<std::uint8_t>::type_code)};
-    ctx.quantize_generic<float, std::uint8_t>(data_in, quantized, scale, zero_point, round_mode::nearest);
-    std::vector<float> dequantized {};
+    ctx.quantize_generic<float32_t, std::uint8_t>(data_in, quantized, scale, zero_point, round_mode::nearest);
+    std::vector<float32_t> dequantized {};
     dequantized.resize(numel);
-    ctx.dequantize_generic<std::uint8_t, float>(quantized, dequantized, scale, zero_point, reduce_op::add);
+    ctx.dequantize_generic<std::uint8_t, float32_t>(quantized, dequantized, scale, zero_point, reduce_op::add);
     for (std::size_t i {}; i < numel; ++i) {
         ASSERT_NEAR(data_in[i], dequantized[i], 1e-6f);
-    }
-}
-
-TEST(quantize, requantize_double_to_uint8_identity_data) {
-    std::random_device rd {};
-    std::mt19937 gen {rd()};
-    std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)};
-    std::size_t numel_out {numel};
-    std::vector<double> data_in {};
-    std::vector<std::uint8_t> quantized {};
-    data_in.resize(numel);
-    quantized.resize(numel_out);
-    std::ranges::fill(data_in, 42.0);
-    context ctx {std::max(1u, std::thread::hardware_concurrency())};
-    auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<std::uint8_t>::type_code)};
-    ctx.quantize_generic<double, std::uint8_t>(data_in, quantized, scale, zero_point, round_mode::nearest);
-    std::vector<double> dequantized {};
-    dequantized.resize(numel);
-    ctx.dequantize_generic<std::uint8_t, double>(quantized, dequantized, scale, zero_point, reduce_op::add);
-    for (std::size_t i {}; i < numel; ++i) {
-        ASSERT_NEAR(data_in[i], dequantized[i], 1e-6);
     }
 }

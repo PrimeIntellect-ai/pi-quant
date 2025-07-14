@@ -25,11 +25,11 @@ TEST(dequantize, uint4_packing) {
 
     std::vector<uint4_t> quantized {};
     quantized.resize((input.size()+1)/2);
-    ctx.quantize_generic<float, uint4_t>(input, quantized, scale, zp, round_mode::nearest);
+    ctx.quantize_generic<float32_t, uint4_t>(input, quantized, scale, zp, round_mode::nearest);
 
-    std::vector<float> dequantized {};
+    std::vector<float32_t> dequantized {};
     dequantized.resize(input.size());
-    ctx.dequantize_generic<uint4_t, float>(quantized, dequantized, scale, zp, reduce_op::set);
+    ctx.dequantize_generic<uint4_t, float32_t>(quantized, dequantized, scale, zp, reduce_op::set);
 
     std::cout << "INPUT"  << std::endl;
     for (auto&& x : input)
@@ -55,11 +55,11 @@ TEST(dequantize, uint2_packing) {
 
     std::vector<uint2_t> quantized {};
     quantized.resize((input.size()+3)/4);
-    ctx.quantize_generic<float, uint2_t>(input, quantized, scale, zp, round_mode::nearest);
+    ctx.quantize_generic<float32_t, uint2_t>(input, quantized, scale, zp, round_mode::nearest);
 
-    std::vector<float> dequantized {};
+    std::vector<float32_t> dequantized {};
     dequantized.resize(input.size());
-    ctx.dequantize_generic<uint2_t, float>(quantized, dequantized, scale, zp, reduce_op::set);
+    ctx.dequantize_generic<uint2_t, float32_t>(quantized, dequantized, scale, zp, reduce_op::set);
 
     std::cout << "INPUT"  << std::endl;
     for (auto&& x : input)
@@ -79,10 +79,10 @@ TEST(dequantize, uint2_packing) {
     TEST(dequantize, dequantize_##ti##_to_##to##_##rnd##_##reduce) { \
         std::mt19937 gen {0x9032002}; \
         std::uniform_real_distribution<ti> dist {-1.0, 1.0}; \
-        const auto adjusted_epsilon {is_int2<to> ? 2.0f : is_int4<to> ? 0.2f : 0.05}; \
+        const auto adjusted_epsilon {std::is_same_v<uint2_t, to> ? 2.0f : std::is_same_v<uint4_t, to> ? 0.2f : 0.05}; \
         for (std::size_t n {}; n < iters; ++n) { \
             std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
-            std::size_t numel_out {is_int2<to> ? (numel+3)>>2 : is_int4<to> ? (numel+1)>>1 : numel}; \
+            std::size_t numel_out {std::is_same_v<uint2_t, to> ? (numel+3)>>2 : std::is_same_v<uint4_t, to> ? (numel+1)>>1 : numel}; \
             \
             std::vector<ti> data_in {}; \
             std::vector<to> quantized {}; \
@@ -123,87 +123,15 @@ TEST(dequantize, uint2_packing) {
         } \
     }
 
-test_dequant(float, uint2_t, nearest, set)
-test_dequant(float, uint2_t, stochastic, set)
-test_dequant(float, uint2_t, nearest, add)
-test_dequant(float, uint2_t, stochastic, add)
-test_dequant(float, uint4_t, nearest, set)
-test_dequant(float, uint4_t, stochastic, set)
-test_dequant(float, uint4_t, nearest, add)
-test_dequant(float, uint4_t, stochastic, add)
-test_dequant(float, uint8_t, nearest, set)
-test_dequant(float, uint8_t, stochastic, set)
-test_dequant(float, uint8_t, nearest, add)
-test_dequant(float, uint8_t, stochastic, add)
-test_dequant(float, uint16_t, nearest, set)
-test_dequant(float, uint16_t, stochastic, set)
-test_dequant(float, uint16_t, nearest, add)
-test_dequant(float, uint16_t, stochastic, add)
-test_dequant(float, uint32_t, nearest, set)
-test_dequant(float, uint32_t, stochastic, set)
-test_dequant(float, uint32_t, nearest, add)
-test_dequant(float, uint32_t, stochastic, add)
-test_dequant(float, uint64_t, nearest, set)
-test_dequant(float, uint64_t, stochastic, set)
-test_dequant(float, uint64_t, nearest, add)
-test_dequant(float, uint64_t, stochastic, add)
-test_dequant(float, int4_t, nearest, set)
-test_dequant(float, int4_t, stochastic, set)
-test_dequant(float, int4_t, nearest, add)
-test_dequant(float, int4_t, stochastic, add)
-test_dequant(float, int8_t, nearest, set)
-test_dequant(float, int8_t, stochastic, set)
-test_dequant(float, int8_t, nearest, add)
-test_dequant(float, int8_t, stochastic, add)
-test_dequant(float, int16_t, nearest, set)
-test_dequant(float, int16_t, stochastic, set)
-test_dequant(float, int16_t, nearest, add)
-test_dequant(float, int16_t, stochastic, add)
-test_dequant(float, int32_t, nearest, set)
-test_dequant(float, int32_t, stochastic, set)
-test_dequant(float, int32_t, nearest, add)
-test_dequant(float, int32_t, stochastic, add)
-test_dequant(float, int64_t, nearest, set)
-test_dequant(float, int64_t, stochastic, set)
-test_dequant(float, int64_t, nearest, add)
-test_dequant(float, int64_t, stochastic, add)
-test_dequant(double, uint4_t, nearest, set)
-test_dequant(double, uint4_t, stochastic, set)
-test_dequant(double, uint4_t, nearest, add)
-test_dequant(double, uint4_t, stochastic, add)
-test_dequant(double, uint8_t, nearest, set)
-test_dequant(double, uint8_t, stochastic, set)
-test_dequant(double, uint8_t, nearest, add)
-test_dequant(double, uint8_t, stochastic, add)
-test_dequant(double, uint16_t, nearest, set)
-test_dequant(double, uint16_t, stochastic, set)
-test_dequant(double, uint16_t, nearest, add)
-test_dequant(double, uint16_t, stochastic, add)
-test_dequant(double, uint32_t, nearest, set)
-test_dequant(double, uint32_t, stochastic, set)
-test_dequant(double, uint32_t, nearest, add)
-test_dequant(double, uint32_t, stochastic, add)
-test_dequant(double, uint64_t, nearest, set)
-test_dequant(double, uint64_t, stochastic, set)
-test_dequant(double, uint64_t, nearest, add)
-test_dequant(double, uint64_t, stochastic, add)
-test_dequant(double, int4_t, nearest, set)
-test_dequant(double, int4_t, stochastic, set)
-test_dequant(double, int4_t, nearest, add)
-test_dequant(double, int4_t, stochastic, add)
-test_dequant(double, int8_t, nearest, set)
-test_dequant(double, int8_t, stochastic, set)
-test_dequant(double, int8_t, nearest, add)
-test_dequant(double, int8_t, stochastic, add)
-test_dequant(double, int16_t, nearest, set)
-test_dequant(double, int16_t, stochastic, set)
-test_dequant(double, int16_t, nearest, add)
-test_dequant(double, int16_t, stochastic, add)
-test_dequant(double, int32_t, nearest, set)
-test_dequant(double, int32_t, stochastic, set)
-test_dequant(double, int32_t, nearest, add)
-test_dequant(double, int32_t, stochastic, add)
-test_dequant(double, int64_t, nearest, set)
-test_dequant(double, int64_t, stochastic, set)
-test_dequant(double, int64_t, nearest, add)
-test_dequant(double, int64_t, stochastic, add)
+test_dequant(float32_t, uint2_t, nearest, set)
+test_dequant(float32_t, uint2_t, stochastic, set)
+test_dequant(float32_t, uint2_t, nearest, add)
+test_dequant(float32_t, uint2_t, stochastic, add)
+test_dequant(float32_t, uint4_t, nearest, set)
+test_dequant(float32_t, uint4_t, stochastic, set)
+test_dequant(float32_t, uint4_t, nearest, add)
+test_dequant(float32_t, uint4_t, stochastic, add)
+test_dequant(float32_t, uint8_t, nearest, set)
+test_dequant(float32_t, uint8_t, stochastic, set)
+test_dequant(float32_t, uint8_t, nearest, add)
+test_dequant(float32_t, uint8_t, stochastic, add)

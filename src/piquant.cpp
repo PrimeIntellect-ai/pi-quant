@@ -108,7 +108,6 @@ namespace piquant {
 
         auto operator ()(const quant_descriptor& desc) const -> void;
         auto operator ()(std::span<const float32_t> x, dtype quant_dst_type) -> std::pair<float32_t, std::int64_t>;
-        auto operator ()(std::span<const float64_t> x, dtype quant_dst_type) -> std::pair<float32_t, std::int64_t>;
         auto job_entry(partition& pl, const quant_descriptor& cmd) const -> void;
     };
 
@@ -189,7 +188,6 @@ namespace piquant {
         std::size_t width {dtype_info_of(dt).bit_size};
         piquant_assert(width > 0 && width <= 64, "invalid width %zu for type %s", width, info.name.data());
         if (info.flags & dtype_flags::is_signed) --width;
-        if (width == 64) return std::numeric_limits<std::uint64_t>::max();
         return (1ull<<width) - 1;
     }
 
@@ -208,12 +206,12 @@ namespace piquant {
             return std::invoke(kernel, x);
         });
         jobs_future.join();
-        float64_t r_min {std::numeric_limits<float64_t>::max()};
-        float64_t r_max {std::numeric_limits<float64_t>::lowest()};
+        double r_min {std::numeric_limits<double>::max()};
+        double r_max {std::numeric_limits<double>::lowest()};
         for (std::size_t i {}; i < jobs_future.size(); ++i) {
             auto [min, max] {jobs_future.get(i)};
-            r_min = std::min(r_min, static_cast<float64_t>(min));
-            r_max = std::max(r_max, static_cast<float64_t>(max));
+            r_min = std::min(r_min, static_cast<double>(min));
+            r_max = std::max(r_max, static_cast<double>(max));
         }
         std::uint64_t type_max {compute_type_max(quant_dst_type)};
         std::int64_t type_min {0};
@@ -223,21 +221,16 @@ namespace piquant {
             const std::int64_t mid = (type_max + type_min) >> 1;
             return {1.0f, mid};
         }
-        float64_t q_min {static_cast<float64_t>(type_min)};
-        float64_t q_max {static_cast<float64_t>(type_max)};
-        float64_t scale = (r_max - r_min)/(q_max - q_min);
-        float64_t zero_point = q_min - r_min/scale;
-        zero_point = std::max(std::min(static_cast<float64_t>(static_cast<std::int64_t>(std::round(zero_point))), q_max), q_min);
+        double q_min {static_cast<double>(type_min)};
+        double q_max {static_cast<double>(type_max)};
+        double scale = (r_max - r_min)/(q_max - q_min);
+        double zero_point = q_min - r_min/scale;
+        zero_point = std::max(std::min(static_cast<double>(static_cast<std::int64_t>(std::round(zero_point))), q_max), q_min);
         return {scale, zero_point};
     }
 
     auto context::pimpl::operator()(std::span<const float32_t> x, dtype quant_dst_type) -> std::pair<float32_t, std::int64_t> {
-        auto& kernel {(*registry.find_min_max_f32)};
-        return compute_quant_config(m_pool, kernel, x, quant_dst_type);
-    }
-
-    auto context::pimpl::operator()(std::span<const float64_t> x, dtype quant_dst_type) -> std::pair<float32_t, std::int64_t> {
-        auto& kernel {(*registry.find_min_max_f64)};
+        auto& kernel {(*registry.find_min_max)};
         return compute_quant_config(m_pool, kernel, x, quant_dst_type);
     }
 
@@ -343,12 +336,6 @@ namespace piquant {
     auto context::compute_quant_config_from_data(std::span<const float32_t> x, dtype quant_dst_dtype) const -> std::pair<float32_t, std::int64_t> {
         auto result {(*this->m_pimpl)(x, quant_dst_dtype)};
         piquant_assert(!std::isnan(result.first) && result.first >= 0.0f, "scale must be positive");
-        return result;
-    }
-
-    auto context::compute_quant_config_from_data(std::span<const float64_t> x, dtype quant_dst_dtype) const -> std::pair<float32_t, std::int64_t> {
-        auto result {(*this->m_pimpl)(x, quant_dst_dtype)};
-        piquant_assert(result.first >= 0.0f, "scale must be positive");
         return result;
     }
 }

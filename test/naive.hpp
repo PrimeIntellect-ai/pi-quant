@@ -43,8 +43,7 @@ static constinit xs128p_state s_sprng {0x123456789abcdef0, 0x0fedcba987654321};
     return s_sprng.canonical();
 }
 
-template <typename T> requires piquant::is_int4<T>
-[[nodiscard]] static constexpr auto pack_nibbles(T x, T y) noexcept -> T {
+[[nodiscard]] static constexpr auto pack_nibbles(piquant::uint4_t x, piquant::uint4_t y) noexcept -> piquant::uint4_t {
     auto xi {x.bits};
     auto yi {y.bits};
     return xi&15 | ((yi&15)<<4);
@@ -52,7 +51,7 @@ template <typename T> requires piquant::is_int4<T>
 
 template <typename IN, typename OUT, const piquant::round_mode RND> requires requires {
     requires std::is_floating_point_v<IN>;
-    requires std::is_integral_v<OUT> || piquant::is_int4<OUT>;
+    requires piquant::is_quant_type<OUT>;
 }
 auto quantize_naive(
     const std::span<IN> x,
@@ -77,7 +76,7 @@ auto quantize_naive(
             return static_cast<OUT>(std::clamp<decltype(integral)>(integral, piquant::dtype_limits<OUT>::min, piquant::dtype_limits<OUT>::max));
         }
     }};
-    if constexpr (piquant::is_int4<OUT>) {
+    if constexpr (std::is_same_v<piquant::uint4_t, OUT>) {
         std::size_t numel {x.size()};
         std::size_t i {};
         for (i=0; i+1 < numel; i += 2) {

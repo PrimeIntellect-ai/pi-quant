@@ -34,28 +34,17 @@ namespace piquant {
     // All supported data types for quantization and dequantization. Order matters.
     enum class dtype {
         f32 = 0,
-        f64,
         bf16,
 
-        uint2,
-        int2,
-        uint4,
-        int4,
-        uint8,
-        int8,
-        uint16,
-        int16,
-        uint32,
-        int32,
-        uint64,
-        int64,
+        uint2, // 2-bit unsigned int
+        uint4, // 4-bit unsigned int
+        uint8, // 8-bit unsigned int (uint8_t)
 
         count_
     };
     static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::count_) <= 0xff);
     static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::f32) == 0);
-    static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::f64) == 1);
-    static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::bf16) == 2);
+    static_assert(static_cast<std::underlying_type_t<dtype>>(dtype::bf16) == 1);
 
     struct uint2_t final {
         using packed_storage = std::uint8_t;
@@ -68,20 +57,6 @@ namespace piquant {
         constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
         constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
         constexpr explicit operator std::uint8_t() const noexcept { return bits; }
-        constexpr explicit operator std::int64_t() const noexcept { return bits; }
-    };
-
-    struct int2_t final {
-        using packed_storage = std::int8_t;
-        packed_storage bits;
-
-        constexpr int2_t() noexcept : bits{} {}
-        constexpr int2_t(int u8) noexcept : bits{static_cast<packed_storage>(u8)} {}
-        constexpr auto operator == (int2_t rhs) const noexcept -> bool { return bits == rhs.bits; }
-        constexpr auto operator != (int2_t rhs) const noexcept -> bool { return !(*this == rhs); }
-        constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
-        constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
-        constexpr explicit operator std::int8_t() const noexcept { return bits; }
         constexpr explicit operator std::int64_t() const noexcept { return bits; }
     };
 
@@ -99,22 +74,7 @@ namespace piquant {
         constexpr explicit operator std::int64_t() const noexcept { return bits; }
     };
 
-    struct int4_t final {
-        using packed_storage = std::int8_t;
-        packed_storage bits;
-
-        constexpr int4_t() noexcept : bits {} {}
-        constexpr int4_t(int u8) noexcept : bits {static_cast<packed_storage>(u8)} {}
-        constexpr auto operator == (int4_t rhs) const noexcept -> bool { return bits == rhs.bits; }
-        constexpr auto operator != (int4_t rhs) const noexcept -> bool { return !(*this == rhs); }
-        constexpr auto operator == (packed_storage rhs) const noexcept -> bool { return bits == rhs; }
-        constexpr auto operator != (packed_storage rhs) const noexcept -> bool { return !(*this == rhs); }
-        constexpr explicit operator std::int8_t() const noexcept { return bits; }
-        constexpr explicit operator std::int64_t() const noexcept { return bits; }
-    };
-
     using float32_t = float; // IEEE 754 binary 32
-    using float64_t = double; // IEEE 754 binary 64
 
     // Google Brain Float 16
     struct bfloat16_t final {
@@ -164,9 +124,7 @@ namespace piquant {
     };
 
     static_assert(sizeof(uint2_t) == 1);
-    static_assert(sizeof(int2_t) == 1);
     static_assert(sizeof(uint4_t) == 1);
-    static_assert(sizeof(int4_t) == 1);
     static_assert(sizeof(bfloat16_t) == 2);
 
     struct dtype_flags final {
@@ -189,20 +147,10 @@ namespace piquant {
 
     constexpr std::array dtype_infos {
         dtype_info{.name="f32", .stride=4, .bit_size=32, .flags=dtype_flags::is_float32_t+dtype_flags::is_signed},                                                  // f32
-        dtype_info{.name="f64", .stride=8, .bit_size=64, .flags=dtype_flags::is_float32_t+dtype_flags::is_signed},
         dtype_info{.name="bf16", .stride=2, .bit_size=16, .flags=dtype_flags::is_float32_t+dtype_flags::is_signed},
         dtype_info{.name="uint2", .stride=1, .bit_size=2,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                            // uint2
-        dtype_info{.name="int2", .stride=1, .bit_size=2,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed+dtype_flags::is_signed},      // int2
         dtype_info{.name="uint4", .stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                            // uint4
-        dtype_info{.name="int4", .stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed+dtype_flags::is_signed},      // int4
         dtype_info{.name="uint8", .stride=1, .bit_size=8,  .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                   // uint8
-        dtype_info{.name="int8", .stride=1, .bit_size=8,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                             // int8
-        dtype_info{.name="uint16", .stride=2, .bit_size=16, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint16
-        dtype_info{.name="int16", .stride=2, .bit_size=16, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                            // int16
-        dtype_info{.name="uint32", .stride=4, .bit_size=32, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint32
-        dtype_info{.name="int32", .stride=4, .bit_size=32, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed},                            // int32
-        dtype_info{.name="uint64", .stride=8, .bit_size=64, .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                  // uint64
-        dtype_info{.name="int64", .stride=8, .bit_size=64, .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_signed}                             // int64
     };
     static_assert([]() -> bool {
         for (auto&& info : dtype_infos) {
@@ -221,42 +169,22 @@ namespace piquant {
         static constexpr std::uint8_t min{0};
         static constexpr std::uint8_t max{3};
     };
-    template<> struct dtype_limits<int2_t> final {
-        static constexpr std::int8_t  min{-2};
-        static constexpr std::int8_t  max{1};
-    };
     template<> struct dtype_limits<uint4_t> final {
         static constexpr std::uint8_t min{0};
         static constexpr std::uint8_t max{15};
     };
-    template<> struct dtype_limits<int4_t> final {
-        static constexpr std::int8_t min{-8};
-        static constexpr std::int8_t max{7};
-    };
 
-    template <typename T> concept is_int2 = std::is_same_v<T, uint2_t> || std::is_same_v<T, int2_t>;
-    template <typename T> concept is_int4 = std::is_same_v<T, uint4_t> || std::is_same_v<T, int4_t>;
-    template <typename T> concept is_packed_int = is_int2<T> || is_int4<T>;
+    template <typename T> concept is_packed_int = std::is_same_v<uint2_t, T> || std::is_same_v<uint4_t, T>;
     template <typename T> concept is_float_type = std::is_floating_point_v<T> || std::is_same_v<T, bfloat16_t>;
     template <typename T> concept is_quant_type = std::is_integral_v<T> || is_packed_int<T>;
     template <typename T> concept is_dtype = is_float_type<T> || is_quant_type<T>;
     template <typename T> requires is_dtype<T> struct dtype_traits final {};
 
-    template<> struct dtype_traits<uint2_t> { static constexpr dtype type_code = dtype::uint2; };
-    template<> struct dtype_traits<int2_t> { static constexpr dtype type_code = dtype::int2; };
-    template<> struct dtype_traits<uint4_t> { static constexpr dtype type_code = dtype::uint4; };
-    template<> struct dtype_traits<int4_t> { static constexpr dtype type_code = dtype::int4; };
-    template<> struct dtype_traits<std::int8_t> { static constexpr dtype type_code = dtype::int8; };
-    template<> struct dtype_traits<std::uint8_t> { static constexpr dtype type_code = dtype::uint8; };
-    template<> struct dtype_traits<std::int16_t> { static constexpr dtype type_code = dtype::int16; };
-    template<> struct dtype_traits<std::uint16_t> { static constexpr dtype type_code = dtype::uint16; };
-    template<> struct dtype_traits<std::int32_t> { static constexpr dtype type_code = dtype::int32; };
-    template<> struct dtype_traits<std::uint32_t> { static constexpr dtype type_code = dtype::uint32; };
-    template<> struct dtype_traits<std::int64_t> { static constexpr dtype type_code = dtype::int64; };
-    template<> struct dtype_traits<std::uint64_t> { static constexpr dtype type_code = dtype::uint64; };
-    template<> struct dtype_traits<float32_t> { static constexpr dtype type_code = dtype::f32; };
-    template<> struct dtype_traits<float64_t> { static constexpr dtype type_code = dtype::f64; };
-    template<> struct dtype_traits<bfloat16_t> { static constexpr dtype type_code = dtype::bf16; };
+    template <> struct dtype_traits<float32_t> { static constexpr dtype type_code = dtype::f32; };
+    template <> struct dtype_traits<bfloat16_t> { static constexpr dtype type_code = dtype::bf16; };
+    template <> struct dtype_traits<uint2_t> { static constexpr dtype type_code = dtype::uint2; };
+    template <> struct dtype_traits<uint4_t> { static constexpr dtype type_code = dtype::uint4; };
+    template <> struct dtype_traits<std::uint8_t> { static constexpr dtype type_code = dtype::uint8; };
 
     class QUANT_EXPORT context final {
     public:
@@ -372,7 +300,6 @@ namespace piquant {
         }
 
         [[nodiscard]] auto compute_quant_config_from_data(std::span<const float32_t> x, dtype quant_dst_dtype) const -> std::pair<float32_t, std::int64_t>;
-        [[nodiscard]] auto compute_quant_config_from_data(std::span<const float64_t> x, dtype quant_dst_dtype) const -> std::pair<float32_t, std::int64_t>;
 
         class pimpl;
 

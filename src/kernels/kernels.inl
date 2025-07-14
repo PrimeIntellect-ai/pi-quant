@@ -87,33 +87,29 @@ namespace piquant {
     template <typename TL> struct type_set_size;
     template <typename... Ts> struct type_set_size<type_set<Ts...>>  : std::integral_constant<std::size_t, sizeof...(Ts)> {};
 
-    using quant_types = type_set<
-        uint2_t, int2_t, uint4_t, int4_t,
-        uint8_t, int8_t, uint16_t, int16_t,
-        uint32_t, int32_t, uint64_t, int64_t
-    >;
+    using quant_types = type_set<uint2_t, uint4_t, uint8_t>;
 
-    using fp_types = type_set<float32_t, float64_t, bfloat16_t>;
+    using fp_types = type_set<float32_t, bfloat16_t>;
 
     template <typename Src, round_mode M, typename TL> struct make_quant_row;
     template <typename Src, round_mode M, typename... Dst>
     struct make_quant_row<Src, M, type_set<Dst...>> {
         static constexpr std::array<quant_fn, type_set_size<fp_types>::value + sizeof...(Dst)> value =
-            {nullptr, nullptr, nullptr, quant_entry<Src, Dst, M>()...};
+            {nullptr, nullptr, quant_entry<Src, Dst, M>()...};
     };
 
     template <typename Src, reduce_op R, typename TL> struct make_dequant_row;
     template <typename Src, reduce_op R, typename... Dst>
     struct make_dequant_row<Src, R, type_set<Dst...>> {
         static constexpr std::array<quant_fn, type_set_size<fp_types>::value + sizeof...(Dst)> value =
-            {nullptr, nullptr, nullptr, dequant_entry<Src, Dst, R>()...};
+            {nullptr, nullptr, dequant_entry<Src, Dst, R>()...};
     };
 
     template <typename Src, round_mode M, reduce_op R, typename TL> struct make_requant_row;
     template <typename Src, round_mode M, reduce_op R, typename... Dst>
     struct make_requant_row<Src, M, R, type_set<Dst...>> {
         static constexpr std::array<quant_fn, type_set_size<fp_types>::value + sizeof...(Dst)> value =
-            {nullptr, nullptr, nullptr, requant_entry<Src, Dst, M, R>()...};
+            {nullptr, nullptr, requant_entry<Src, Dst, M, R>()...};
     };
 
     template <round_mode M, reduce_op R, typename FPSrcSet> struct make_requant_block;
@@ -130,14 +126,12 @@ namespace piquant {
         std::array {
             std::array {
                 make_quant_row<float32_t, round_mode::nearest, quant_types>::value,
-                make_quant_row<float64_t, round_mode::nearest, quant_types>::value,
                 make_quant_row<bfloat16_t, round_mode::nearest, quant_types>::value,
             },
         },
         std::array {
             std::array {
                 make_quant_row<float32_t, round_mode::stochastic, quant_types>::value,
-                make_quant_row<float64_t, round_mode::stochastic, quant_types>::value,
                 make_quant_row<bfloat16_t, round_mode::stochastic, quant_types>::value
             },
         }
@@ -148,14 +142,12 @@ namespace piquant {
         std::array {
             std::array {
                 make_dequant_row<float32_t, reduce_op::set, quant_types>::value,
-                make_dequant_row<float64_t, reduce_op::set, quant_types>::value,
                 make_dequant_row<bfloat16_t, reduce_op::set, quant_types>::value
             },
         },
         std::array {
             std::array {
                 make_dequant_row<float32_t, reduce_op::add, quant_types>::value,
-                make_dequant_row<float64_t, reduce_op::add, quant_types>::value,
                 make_dequant_row<bfloat16_t, reduce_op::add, quant_types>::value
             },
         }
@@ -223,8 +215,7 @@ namespace piquant {
     auto QUANT_KERNEL_IMPL() noexcept -> kernel_registry {
         return kernel_registry {
             .quant_kernel = &quantize_dispatch,
-            .find_min_max_f32 = &impl_namespace(QUANT_KERNEL_IMPL, _)::find_min_max<float32_t>,
-            .find_min_max_f64 = &impl_namespace(QUANT_KERNEL_IMPL, _)::find_min_max<float64_t>,
+            .find_min_max = &impl_namespace(QUANT_KERNEL_IMPL, _)::find_min_max<float32_t>,
         };
     }
 }

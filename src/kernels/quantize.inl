@@ -52,8 +52,8 @@ template <typename In, typename Out, const round_mode RoundMode> requires is_flo
     return qa & 3 | (qb & 3)<<2 | (qc & 3)<<4 | (qd & 3)<<6;
 }
 
-template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_int4<Out>
-static auto PIQUANT_HOT quant_int4(
+template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && std::is_same_v<uint4_t, Out>
+static auto PIQUANT_HOT quant_uint4(
     const In* PIQUANT_RESTRICT x,
     Out* PIQUANT_RESTRICT o,
     std::int64_t numel,
@@ -72,8 +72,8 @@ static auto PIQUANT_HOT quant_int4(
     }
 }
 
-template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_int2<Out>
-static auto PIQUANT_HOT quant_int2(
+template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && std::is_same_v<uint2_t, Out>
+static auto PIQUANT_HOT quant_uint2(
     const In* PIQUANT_RESTRICT x,
     Out* PIQUANT_RESTRICT o,
     std::int64_t numel,
@@ -121,13 +121,13 @@ static auto PIQUANT_HOT quant_generic(
     auto* PIQUANT_RESTRICT o {static_cast<Out*>(out)};
     float32_t inv_scale {1.0f / scale}; // We multiply by reciprocal
 
-    if constexpr (is_int4<Out>) { // Special case for int4
-        quant_int4<In, Out, RoundMode>(x, o, numel, inv_scale, zp);
+    if constexpr (std::is_same_v<uint4_t, Out>) { // Special case for int4
+        quant_uint4<In, Out, RoundMode>(x, o, numel, inv_scale, zp);
         return;
     }
 
-    if constexpr (is_int2<Out>) { // Special case for int2
-        quant_int2<In, Out, RoundMode>(x, o, numel, inv_scale, zp);
+    if constexpr (std::is_same_v<uint2_t, Out>) { // Special case for int2
+        quant_uint2<In, Out, RoundMode>(x, o, numel, inv_scale, zp);
         return;
     }
 
