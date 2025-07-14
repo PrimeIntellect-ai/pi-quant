@@ -36,12 +36,14 @@ if (${IS_AMD64})
         src/amd64/kernel_amd64_sse42.cpp
         src/amd64/kernel_amd64_avx2.cpp
         src/amd64/kernel_amd64_avx512f.cpp
+        src/amd64/kernel_amd64_avx512f_bf16.cpp
     )
     set(QUANT_SOURCES ${QUANT_SOURCES} ${QUANT_SOURCES_AMD64})
 
     set_file_opts("amd64/kernel_amd64_sse42.cpp" "-mtune=nehalem -msse4.2"  "/arch:SSE4.2")
     set_file_opts("amd64/kernel_amd64_avx2.cpp" "-mtune=skylake -mavx -mavx2 -mfma -mf16c"  "/arch:AVX2")
     set_file_opts("amd64/kernel_amd64_avx512f.cpp" "-mtune=cannonlake -mavx -mavx2 -mfma -mf16c -mavx512f -mavx512bw" "/arch:AVX512")
+    set_file_opts("amd64/kernel_amd64_avx512f_bf16.cpp" "-mtune=cannonlake -mavx -mavx2 -mfma -mf16c -mavx512f -mavx512bf16" "/arch:AVX512")
 
 endif()
 

@@ -4,12 +4,11 @@
 #ifndef QUANT_KERNEL_IMPL
 #error "Kernel impl is not defined"
 #endif
-
+#include <iostream>
 #include <piquant.hpp>
 #include "../piquant_internal.hpp"
 
 #include <algorithm>
-#include <bitset>
 #include <cmath>
 #include <numeric>
 #include <sstream>

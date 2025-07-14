@@ -41,7 +41,7 @@ namespace piquant {
             if ((info[1] & 0x20) != 0x20) return false;
             std::uint32_t lo, hi;
             asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
-            return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 6) == 6;
+            return ((static_cast<std::uint64_t>(lo)|(static_cast<std::uint64_t>(hi) << 32)) & 6) == 6;
         }
 
         [[nodiscard]] static auto check_avx512f_support() noexcept -> bool {
@@ -54,12 +54,28 @@ namespace piquant {
             if ((info[1] & 0x10000) == 0) return false;
             std::uint32_t lo, hi;
             asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
-            return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 0xe0) == 0xe0;
+            return ((static_cast<std::uint64_t>(lo)|(static_cast<std::uint64_t>(hi)<<32))&0xe0) == 0xe0;
+        }
+
+        [[nodiscard]] static auto check_avx512f_bf16_support() noexcept -> bool {
+            int info[4] = {-1};
+            __cpuid(0, info[0], info[1], info[2], info[3]);
+            if (info[0] < 7) return false;
+            __cpuid(1, info[0], info[1], info[2], info[3]);
+            if ((info[2] & (1<<27|1<<28)) != (1<<27|1<<28)) return false;
+            __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
+            if (!(info[1] & 1<<16)) return false;
+            __cpuid_count(7, 1, info[0], info[1], info[2], info[3]);
+            if (!(info[0] & 1<<5)) return false;
+            std::uint32_t lo, hi;
+            asm volatile("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0));
+            return ((static_cast<std::uint64_t>(hi)<<32|lo)&0xe0) == 0xe0;
         }
 
         decl_quant_kernel_installer_fn(install_quant_amd64_sse42);
         decl_quant_kernel_installer_fn(install_quant_amd64_avx2);
         decl_quant_kernel_installer_fn(install_quant_amd64_avx512f);
+        decl_quant_kernel_installer_fn(install_quant_amd64_avx512f_bf16);
 
     #endif
 
@@ -160,10 +176,10 @@ namespace piquant {
         registry = install_quant_generic();
         m_pool.startup();
         #ifdef __x86_64__
-            if (check_avx512f_support()) registry = install_quant_amd64_avx512f();
+            if (check_avx512f_bf16_support()) registry = install_quant_amd64_avx512f_bf16();
+            else if (check_avx512f_support()) registry = install_quant_amd64_avx512f();
             else if (check_avx2_support()) registry = install_quant_amd64_avx2();
             else if (check_sse42_support())  registry = install_quant_amd64_sse42();
-
         #endif
     }
 
