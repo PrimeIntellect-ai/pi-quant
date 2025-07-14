@@ -34,13 +34,7 @@ namespace piquant {
           std::int64_t numel,
           const context::quant_descriptor& desc
         ) noexcept -> void;
-        auto (*find_min_max_f32)(std::span<const float> x) noexcept -> std::array<float, 2>;
-        auto (*find_min_max_f64)(std::span<const double> x) noexcept -> std::array<double, 2>;
+        auto (*find_min_max_f32)(std::span<const float32_t> x) noexcept -> std::array<float32_t, 2>;
+        auto (*find_min_max_f64)(std::span<const float64_t> x) noexcept -> std::array<float64_t, 2>;
     };
-
-    template <typename T>
-    concept is_float_type = std::is_floating_point_v<T>;
-
-    template <typename T>
-    concept is_quant_type = std::is_integral_v<T> || is_packed_int<T>;
 }

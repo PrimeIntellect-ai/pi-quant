@@ -107,8 +107,8 @@ namespace piquant {
         pi::threadpool::ThreadPool m_pool;
 
         auto operator ()(const quant_descriptor& desc) const -> void;
-        auto operator ()(std::span<const float> x, dtype quant_dst_type) -> std::pair<float, std::int64_t>;
-        auto operator ()(std::span<const double> x, dtype quant_dst_type) -> std::pair<float, std::int64_t>;
+        auto operator ()(std::span<const float32_t> x, dtype quant_dst_type) -> std::pair<float32_t, std::int64_t>;
+        auto operator ()(std::span<const float64_t> x, dtype quant_dst_type) -> std::pair<float32_t, std::int64_t>;
         auto job_entry(partition& pl, const quant_descriptor& cmd) const -> void;
     };
 
@@ -199,7 +199,7 @@ namespace piquant {
         F&& kernel,
         std::span<const T> x,
         dtype quant_dst_type
-    ) -> std::pair<float, std::int64_t> {
+    ) -> std::pair<float32_t, std::int64_t> {
         const auto* base {x.data()};
         pi::threadpool::MultiTaskResult jobs_future = pool.scheduleBlocks<std::array<T, 2>>(0u, x.size(), [base, &kernel](std::size_t start, std::size_t end) -> std::array<T, 2> {
             std::size_t numel {end - start};
@@ -208,12 +208,12 @@ namespace piquant {
             return std::invoke(kernel, x);
         });
         jobs_future.join();
-        double r_min {std::numeric_limits<double>::max()};
-        double r_max {std::numeric_limits<double>::lowest()};
+        float64_t r_min {std::numeric_limits<float64_t>::max()};
+        float64_t r_max {std::numeric_limits<float64_t>::lowest()};
         for (std::size_t i {}; i < jobs_future.size(); ++i) {
             auto [min, max] {jobs_future.get(i)};
-            r_min = std::min(r_min, static_cast<double>(min));
-            r_max = std::max(r_max, static_cast<double>(max));
+            r_min = std::min(r_min, static_cast<float64_t>(min));
+            r_max = std::max(r_max, static_cast<float64_t>(max));
         }
         std::uint64_t type_max {compute_type_max(quant_dst_type)};
         std::int64_t type_min {0};
@@ -223,20 +223,20 @@ namespace piquant {
             const std::int64_t mid = (type_max + type_min) >> 1;
             return {1.0f, mid};
         }
-        double q_min {static_cast<double>(type_min)};
-        double q_max {static_cast<double>(type_max)};
-        double scale = (r_max - r_min)/(q_max - q_min);
-        double zero_point = q_min - r_min/scale;
-        zero_point = std::max(std::min(static_cast<double>(static_cast<std::int64_t>(std::round(zero_point))), q_max), q_min);
+        float64_t q_min {static_cast<float64_t>(type_min)};
+        float64_t q_max {static_cast<float64_t>(type_max)};
+        float64_t scale = (r_max - r_min)/(q_max - q_min);
+        float64_t zero_point = q_min - r_min/scale;
+        zero_point = std::max(std::min(static_cast<float64_t>(static_cast<std::int64_t>(std::round(zero_point))), q_max), q_min);
         return {scale, zero_point};
     }
 
-    auto context::pimpl::operator()(std::span<const float> x, dtype quant_dst_type) -> std::pair<float, std::int64_t> {
+    auto context::pimpl::operator()(std::span<const float32_t> x, dtype quant_dst_type) -> std::pair<float32_t, std::int64_t> {
         auto& kernel {(*registry.find_min_max_f32)};
         return compute_quant_config(m_pool, kernel, x, quant_dst_type);
     }
 
-    auto context::pimpl::operator()(std::span<const double> x, dtype quant_dst_type) -> std::pair<float, std::int64_t> {
+    auto context::pimpl::operator()(std::span<const float64_t> x, dtype quant_dst_type) -> std::pair<float32_t, std::int64_t> {
         auto& kernel {(*registry.find_min_max_f64)};
         return compute_quant_config(m_pool, kernel, x, quant_dst_type);
     }
@@ -252,7 +252,7 @@ namespace piquant {
         const dtype dtype_in,
         const std::span<std::byte> out,
         const dtype dtype_out,
-        const float scale,
+        const float32_t scale,
         const std::int64_t zero_point,
         const round_mode mode
     ) const -> void {
@@ -284,7 +284,7 @@ namespace piquant {
         const dtype dtype_in,
         const std::span<std::byte> out,
         const dtype dtype_out,
-        const float scale,
+        const float32_t scale,
         const std::int64_t zero_point,
         const reduce_op op
     ) const -> void {
@@ -316,7 +316,7 @@ namespace piquant {
         const dtype dtype_in_out,
         const std::span<std::byte> out,
         const dtype quant_type,
-        const float scale,
+        const float32_t scale,
         const std::int64_t zero_point,
         const round_mode mode,
         const reduce_op op
@@ -340,13 +340,13 @@ namespace piquant {
         (*this->m_pimpl)(info);
     }
 
-    auto context::compute_quant_config_from_data(std::span<const float> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
+    auto context::compute_quant_config_from_data(std::span<const float32_t> x, dtype quant_dst_dtype) const -> std::pair<float32_t, std::int64_t> {
         auto result {(*this->m_pimpl)(x, quant_dst_dtype)};
         piquant_assert(!std::isnan(result.first) && result.first >= 0.0f, "scale must be positive");
         return result;
     }
 
-    auto context::compute_quant_config_from_data(std::span<const double> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
+    auto context::compute_quant_config_from_data(std::span<const float64_t> x, dtype quant_dst_dtype) const -> std::pair<float32_t, std::int64_t> {
         auto result {(*this->m_pimpl)(x, quant_dst_dtype)};
         piquant_assert(result.first >= 0.0f, "scale must be positive");
         return result;
