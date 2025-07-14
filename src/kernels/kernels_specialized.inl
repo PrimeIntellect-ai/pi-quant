@@ -26,18 +26,16 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
         __m512 vneg_half {_mm512_set1_ps(-0.5f)};
         __m512 vzero_ps {_mm512_setzero_ps()};
         __m512i vzero_point {_mm512_set1_epi32(zp)};
-        __m512i vmin {_mm512_setzero_si512()};
-        __m512i vmax {_mm512_set1_epi32(0xff)};
-        for (; i < numel && ((std::bit_cast<std::uintptr_t>(x+i)&63) != 0); ++i) {
+        for (; i < numel && ((std::bit_cast<std::uintptr_t>(o+i) & 15) != 0); ++i) {
             fp32_t r {std::round(x[i]*scale)};
             std::int32_t q32 {static_cast<std::int32_t>(r) + zp};
             o[i] = static_cast<std::uint8_t>(std::clamp(q32, 0, 0xff));
         }
         for (; i+63 < numel; i += 64) {
-            __m512 xf0 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<fp32_t* __restrict__>(x+i+0)))};
-            __m512 xf1 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<fp32_t* __restrict__>(x+i+16)))};
-            __m512 xf2 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<fp32_t* __restrict__>(x+i+32)))};
-            __m512 xf3 {_mm512_castsi512_ps(_mm512_stream_load_si512(const_cast<fp32_t* __restrict__>(x+i+48)))};
+            __m512 xf0 {_mm512_loadu_ps(x+i+0)};
+            __m512 xf1 {_mm512_loadu_ps(x+i+16)};
+            __m512 xf2 {_mm512_loadu_ps(x+i+32)};
+            __m512 xf3 {_mm512_loadu_ps(x+i+48)};
             __m512 prod0 {_mm512_mul_ps(xf0, vinv_scale)};
             __m512 prod1 {_mm512_mul_ps(xf1, vinv_scale)};
             __m512 prod2 {_mm512_mul_ps(xf2, vinv_scale)};
@@ -50,14 +48,10 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
             __m512i xi1 {_mm512_add_epi32(_mm512_cvttps_epi32(adj1), vzero_point)};
             __m512i xi2 {_mm512_add_epi32(_mm512_cvttps_epi32(adj2), vzero_point)};
             __m512i xi3 {_mm512_add_epi32(_mm512_cvttps_epi32(adj3), vzero_point)};
-            xi0 = _mm512_min_epi32(_mm512_max_epi32(xi0, vmin), vmax);
-            xi1 = _mm512_min_epi32(_mm512_max_epi32(xi1, vmin), vmax);
-            xi2 = _mm512_min_epi32(_mm512_max_epi32(xi2, vmin), vmax);
-            xi3 = _mm512_min_epi32(_mm512_max_epi32(xi3, vmin), vmax);
-            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i+0), _mm512_cvtusepi32_epi8(xi0));
-            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i+16), _mm512_cvtusepi32_epi8(xi1));
-            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i+32), _mm512_cvtusepi32_epi8(xi2));
-            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i+48), _mm512_cvtusepi32_epi8(xi3));
+            _mm_stream_si128(reinterpret_cast<__m128i*>(o+i+0), _mm512_cvtusepi32_epi8(xi0));
+            _mm_stream_si128(reinterpret_cast<__m128i*>(o+i+16), _mm512_cvtusepi32_epi8(xi1));
+            _mm_stream_si128(reinterpret_cast<__m128i*>(o+i+32), _mm512_cvtusepi32_epi8(xi2));
+            _mm_stream_si128(reinterpret_cast<__m128i*>(o+i+48), _mm512_cvtusepi32_epi8(xi3));
         }
     #elif defined(__AVX2__)
         __m256 vinv_scale {_mm256_set1_ps(scale)};
@@ -71,16 +65,16 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
             0,1,2,3, 8,9,10,11, 4,5,6,7, 12,13,14,15,
             0,1,2,3, 8,9,10,11, 4,5,6,7, 12,13,14,15
         )};
-        for (; i < numel && std::bit_cast<std::uintptr_t>(x+i)&31; ++i) {
+        for (; i < numel && std::bit_cast<std::uintptr_t>(o+i) & 31; ++i) {
             fp32_t rnd {std::round(x[i]*scale)};
             std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
         for (; i+31 < numel; i += 32) {
-          __m256 xf0 {_mm256_castsi256_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(0<<3))))};
-            __m256 xf1 {_mm256_castsi256_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(1<<3))))};
-            __m256 xf2 {_mm256_castsi256_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(2<<3))))};
-            __m256 xf3 {_mm256_castsi256_ps(_mm256_stream_load_si256(reinterpret_cast<const __m256i*>(x+i+(3<<3))))};
+          __m256 xf0   {_mm256_loadu_ps(x+i+(0<<3))};
+            __m256 xf1 {_mm256_loadu_ps(x+i+(1<<3))};
+            __m256 xf2 {_mm256_loadu_ps(x+i+(2<<3))};
+            __m256 xf3 {_mm256_loadu_ps(x+i+(3<<3))};
             __m256 prod0 {_mm256_mul_ps(xf0, vinv_scale)};
             __m256 prod1 {_mm256_mul_ps(xf1, vinv_scale)};
             __m256 prod2 {_mm256_mul_ps(xf2, vinv_scale)};
@@ -99,7 +93,7 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
             xi3 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, xi3));
             __m256i packed {_mm256_permute4x64_epi64(_mm256_packus_epi16(_mm256_packus_epi32(xi0, xi1), _mm256_packus_epi32(xi2, xi3)), 0xd8)};
             __m256i shuffled {_mm256_shuffle_epi8(packed, shuffle_matrix)};
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i), shuffled);
+            _mm256_stream_si256(o+i, shuffled);
         }
     #elif defined(__SSE4_2__)
         __m128 vinv_scale {_mm_set1_ps(scale)};
@@ -109,16 +103,16 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
         __m128i vzero_point {_mm_set1_epi32(zp)};
         __m128i vmin {_mm_setzero_si128()};
         __m128i vmax {_mm_set1_epi32(0xff)};
-        for (; i < numel && std::bit_cast<std::uintptr_t>(x+i)&15; ++i) {
+        for (; i < numel && std::bit_cast<std::uintptr_t>(o+i) & 15; ++i) {
             fp32_t rnd {std::round(x[i]*scale)};
             std::int32_t i32 {static_cast<std::int32_t>(rnd) + zp};
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
         for (; i+15 < numel; i += 16) {
-            __m128 xf0 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<fp32_t*>(x+i+(0<<2)))))};
-            __m128 xf1 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<fp32_t*>(x+i+(1<<2)))))};
-            __m128 xf2 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<fp32_t*>(x+i+(2<<2)))))};
-            __m128 xf3 {_mm_castsi128_ps(_mm_stream_load_si128(reinterpret_cast<__m128i*>(const_cast<fp32_t*>(x+i+(3<<2)))))};
+            __m128 xf0 {_mm_loadu_ps(x+i+(0<<2))};
+            __m128 xf1 {_mm_loadu_ps(x+i+(1<<2))};
+            __m128 xf2 {_mm_loadu_ps(x+i+(2<<2))};
+            __m128 xf3 {_mm_loadu_ps(x+i+(3<<2))};
             xf0 = _mm_mul_ps(xf0, vinv_scale);
             xf1 = _mm_mul_ps(xf1, vinv_scale);
             xf2 = _mm_mul_ps(xf2, vinv_scale);
@@ -150,7 +144,7 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
             __m128i pack16_0 {_mm_packus_epi32(xi0, xi1)};
             __m128i pack16_1 {_mm_packus_epi32(xi2, xi3)};
             __m128i result {_mm_packus_epi16(pack16_0, pack16_1)};
-            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i), result);
+            _mm_stream_si128(reinterpret_cast<__m128i*>(o+i), result);
         }
     #elif defined(__aarch64__) && defined(__ARM_NEON__)
         float32x4_t vinv_scale {vdupq_n_f32(scale)};
