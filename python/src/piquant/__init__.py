@@ -130,8 +130,9 @@ class Context:
         C.piquant_compute_quant_params_float32(self._ctx, ptr, numel, target_quant_dtype.value, scale, zero_point)
         return scale[0], zero_point[0]
 
-    def compute_quant_params_ptr_bfloat16(self, ptr: int, target_quant_dtype: DataType, numel: int) -> Tuple[
-        float, int]:
+    def compute_quant_params_ptr_bfloat16(
+        self, ptr: int, target_quant_dtype: DataType, numel: int
+    ) -> Tuple[float, int]:
         assert target_quant_dtype.is_quantized, f'Target dtype must be a quantized type, but is: {target_quant_dtype}'
         assert ptr != 0, 'Input arr pointer must not be NULL'
         ptr: ffi.CData = ffi.cast('const uint16_t*', ptr)
@@ -140,9 +141,9 @@ class Context:
         C.piquant_compute_quant_params_bfloat16(self._ctx, ptr, numel, target_quant_dtype.value, scale, zero_point)
         return scale[0], zero_point[0]
 
+
 if importlib.util.find_spec('torch') is not None:
     try:
         from . import torch
     except ImportError:
         pass
-
