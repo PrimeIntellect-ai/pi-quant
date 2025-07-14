@@ -120,7 +120,7 @@ namespace piquant {
     struct bfloat16_t final {
         using packed_storage = std::uint16_t;
         packed_storage bits;
-*
+
         constexpr bfloat16_t() noexcept : bits {} {}
         constexpr bfloat16_t(float32_t s) noexcept {
             auto u32 {std::bit_cast<std::uint32_t>(s)};

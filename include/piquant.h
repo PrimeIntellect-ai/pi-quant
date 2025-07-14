@@ -31,6 +31,8 @@ typedef enum piquant_reduce_op_t {
 typedef enum piquant_dtype_t { // Order must match dtype enum class in piquant.hpp
     PIQUANT_DTYPE_F32 = 0,
     PIQUANT_DTYPE_F64,
+    PIQUANT_DTYPE_BF16,
+
     PIQUANT_DTYPE_UINT2,
     PIQUANT_DTYPE_INT2,
     PIQUANT_DTYPE_UINT4,
