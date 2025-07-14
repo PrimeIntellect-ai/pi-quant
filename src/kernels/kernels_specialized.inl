@@ -93,7 +93,7 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
             xi3 = _mm256_max_epi32(vmin, _mm256_min_epi32(vmax, xi3));
             __m256i packed {_mm256_permute4x64_epi64(_mm256_packus_epi16(_mm256_packus_epi32(xi0, xi1), _mm256_packus_epi32(xi2, xi3)), 0xd8)};
             __m256i shuffled {_mm256_shuffle_epi8(packed, shuffle_matrix)};
-            _mm256_stream_si256(reinterpret_cast<__m128i*>(o+i), shuffled);
+            _mm256_stream_si256(reinterpret_cast<__m256i*>(o+i), shuffled);
         }
     #elif defined(__SSE4_2__)
         __m128 vinv_scale {_mm_set1_ps(scale)};
