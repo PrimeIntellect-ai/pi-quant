@@ -258,18 +258,19 @@ namespace piquant {
     ) const -> void {
         const auto& dti {dtype_info_of(dtype_in)};
         const auto& dto {dtype_info_of(dtype_out)};
-        piquant_assert(!(dti.flags & dtype_flags::is_quant), "input dtype must be a dequantized type");
-        piquant_assert(dto.flags & dtype_flags::is_quant, "output dtype must be a quantized type");
-        switch (dto.bit_size) {
-            case 4: piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
-            case 2: piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+3)>>2, "output span requires (in.size() + 1) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
-            default:  piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
-        }
+        piquant_assert(!(dti.flags & dtype_flags::is_quant), "input dtype (%s) must be a dequantized type", dti.name.data());
+        piquant_assert(dto.flags & dtype_flags::is_quant, "output dtype (%s) must be a quantized type", dto.name.data());
+        std::size_t ne_in {in.size() / dti.stride};
+        std::size_t expected_out_bytes {dto.bit_size == 8 ? ne_in*dto.stride : packed_numel(ne_in, dto)*dto.stride};
+        piquant_assert(out.size() == expected_out_bytes,
+            "quantize: expected output buffer to hold %zu byte(s) for %zu element(s) "
+            "of %s (bit_size=%u), but got %zu",
+            expected_out_bytes, ne_in, dto.name.data(), dto.bit_size, out.size());
         quant_descriptor info {
             .type = command_type::quant,
             .in = in.data(),
             .out = out.data(),
-            .numel = static_cast<std::int64_t>(in.size()/dti.stride),
+            .numel = static_cast<std::int64_t>(ne_in),
             .scale = scale,
             .zero_point = zero_point,
             .dt_in = dtype_in,
@@ -290,18 +291,18 @@ namespace piquant {
     ) const -> void {
         const auto& dti {dtype_info_of(dtype_in)};
         const auto& dto {dtype_info_of(dtype_out)};
-        piquant_assert(dti.flags & dtype_flags::is_quant, "input dtype must be a quantized type");
-        piquant_assert(!(dto.flags & dtype_flags::is_quant), "output dtype must be a dequantized type");
-        switch (dti.bit_size) {
-            case 4: piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
-            case 2: piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+3)>>2, "output span requires (out.size() + 3) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
-            default: piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3)); break;
-        }
+        piquant_assert(dti.flags & dtype_flags::is_quant, "input dtype (%s) must be a quantized type", dto.name.data());
+        piquant_assert(!(dto.flags & dtype_flags::is_quant), "output dtype (%s) must be a dequantized type", dti.name.data());
+        std::size_t ne_out {out.size() / dto.stride};
+        std::size_t min_in_bytes {packed_numel(ne_out, dti) * dti.stride};
+        piquant_assert(in.size() == min_in_bytes,
+            "dequantize: need %zu byte(s) of %s for %zu element(s), but got %zu",
+            min_in_bytes, dti.name.data(), ne_out, in.size());
         quant_descriptor info {
             .type = command_type::dequant,
             .in = in.data(),
             .out = out.data(),
-            .numel = static_cast<std::int64_t>(out.size()/(dto.stride)),
+            .numel = static_cast<std::int64_t>(ne_out),
             .scale = scale,
             .zero_point = zero_point,
             .dt_in = dtype_in,

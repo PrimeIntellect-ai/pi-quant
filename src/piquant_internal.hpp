@@ -37,4 +37,9 @@ namespace piquant {
         auto (*find_min_max_float32)(std::span<const fp32_t> x) noexcept -> std::array<fp32_t, 2>;
         auto (*find_min_max_bfloat16)(std::span<const bfp16_t> x) noexcept -> std::array<fp32_t, 2>;
     };
+
+    [[nodiscard]] constexpr auto packed_numel(std::size_t ne, const dtype_info& dto) noexcept -> std::size_t {
+        std::size_t per_byte {8u / dto.bit_size};
+        return (ne + per_byte-1)/per_byte;
+    }
 }

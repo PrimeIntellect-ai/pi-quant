@@ -131,7 +131,7 @@ namespace piquant {
         enum $ {
             none = 0,
             is_quant = 1<<0,
-            is_fp32_t = 1<<1,
+            is_float = 1<<1,
             is_int = 1<<2,
             is_signed = 1<<3,
             is_packed = 1<<4,
@@ -146,16 +146,16 @@ namespace piquant {
     };
 
     constexpr std::array dtype_infos {
-        dtype_info{.name="f32", .stride=4, .bit_size=32, .flags=dtype_flags::is_fp32_t+dtype_flags::is_signed},                                                  // f32
-        dtype_info{.name="bf16", .stride=2, .bit_size=16, .flags=dtype_flags::is_fp32_t+dtype_flags::is_signed},
-        dtype_info{.name="uint2", .stride=1, .bit_size=2,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                            // uint2
-        dtype_info{.name="uint4", .stride=1, .bit_size=4,  .flags=dtype_flags::is_quant+dtype_flags::is_int+dtype_flags::is_packed},                            // uint4
-        dtype_info{.name="uint8", .stride=1, .bit_size=8,  .flags=dtype_flags::is_quant+dtype_flags::is_int},                                                   // uint8
+        dtype_info{.name="f32", .stride=sizeof(fp32_t), .bit_size=8*sizeof(fp32_t), .flags=dtype_flags::is_float|dtype_flags::is_signed},                                                  // f32
+        dtype_info{.name="bf16", .stride=sizeof(bfp16_t), .bit_size=8*sizeof(bfp16_t), .flags=dtype_flags::is_float|dtype_flags::is_signed},
+        dtype_info{.name="uint2", .stride=sizeof(std::uint8_t), .bit_size=2,  .flags=dtype_flags::is_quant|dtype_flags::is_int|dtype_flags::is_packed},                            // uint2
+        dtype_info{.name="uint4", .stride=sizeof(std::uint8_t), .bit_size=4,  .flags=dtype_flags::is_quant|dtype_flags::is_int|dtype_flags::is_packed},                            // uint4
+        dtype_info{.name="uint8", .stride=sizeof(std::uint8_t), .bit_size=8,  .flags=dtype_flags::is_quant|dtype_flags::is_int},                                                   // uint8
     };
     static_assert([]() -> bool {
         for (auto&& info : dtype_infos) {
-            if (!info.bit_size) return false;
-            if (!((info.flags & dtype_flags::is_fp32_t) ^ (info.flags & dtype_flags::is_int))) return false;
+            if (!info.bit_size || info.bit_size & (info.bit_size-1)) return false; // bit_size must be a power of two
+            if (!((info.flags & dtype_flags::is_float) ^ (info.flags & dtype_flags::is_int))) return false; // Either is_fp32_t or is_int must be set, but not both
         }
         return true;
     }());

@@ -62,7 +62,7 @@ setup(
     name='pypiquant',
     author='Mario Sieg',
     author_email='mario@primeintellect.ai',
-    packages=['piquant', 'piquant._compat'],
+    packages=['piquant'],
     package_dir={'': 'src'},  # tell setuptools packages are under src/
     package_data={
         'piquant': ['libquant.so', 'libquant.dylib', 'libquant.dll'],
