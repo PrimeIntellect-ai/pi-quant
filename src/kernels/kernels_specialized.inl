@@ -412,6 +412,34 @@ static auto PIQUANT_HOT find_min_max_f32(std::span<const fp32_t> in) noexcept ->
         min = _mm512_reduce_min_ps(vmin);
         max = _mm512_reduce_max_ps(vmax);
     #elif defined(__AVX2__)
+        __m256 vmin {_mm256_set1_ps(min)};
+        __m256 vmax {_mm256_set1_ps(max)};
+        for (; i+31 < numel; i += 32) {
+            __m256 v0 {_mm256_loadu_ps(x+i)};
+            __m256 v1 {_mm256_loadu_ps(x+i+8)};
+            __m256 v2 {_mm256_loadu_ps(x+i+16)};
+            __m256 v3 {_mm256_loadu_ps(x+i+24)};
+            vmin = _mm256_min_ps(vmin, v0);
+            vmax = _mm256_max_ps(vmax, v0);
+            vmin = _mm256_min_ps(vmin, v1);
+            vmax = _mm256_max_ps(vmax, v1);
+            vmin = _mm256_min_ps(vmin, v2);
+            vmax = _mm256_max_ps(vmax, v2);
+            vmin = _mm256_min_ps(vmin, v3);
+            vmax = _mm256_max_ps(vmax, v3);
+        }
+        __m128 lo {_mm256_castps256_ps128(vmin)};
+        __m128 hi {_mm256_extractf128_ps(vmin, 1)};
+        __m128 minima {_mm_min_ps(lo, hi)};
+        minima = _mm_min_ps(minima, _mm_movehl_ps(minima, minima));
+        minima = _mm_min_ps(minima, _mm_shuffle_ps(minima, minima, 0b01));
+        min = _mm_cvtss_f32(minima);
+        lo = _mm256_castps256_ps128(vmax);
+        hi = _mm256_extractf128_ps(vmax, 1);
+        __m128 maxima {_mm_max_ps(lo, hi)};
+        maxima = _mm_max_ps(maxima, _mm_movehl_ps(maxima, maxima));
+        maxima = _mm_max_ps(maxima, _mm_shuffle_ps(maxima, maxima, 0b01));
+        max = _mm_cvtss_f32(maxima);
     #elif defined(__aarch64__) && defined(__ARM_NEON__)
         float32x4_t vmin {vdupq_n_f32(min)};
         float32x4_t vmax {vdupq_n_f32(max)};
