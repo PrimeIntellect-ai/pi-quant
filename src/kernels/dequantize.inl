@@ -11,7 +11,7 @@ template <typename In, typename Out> requires is_quant_type<In> && is_float_type
 }
 
 template <typename In, typename Out, const reduce_op ReduceOp> requires std::is_same_v<uint4_t, In> && is_float_type<Out>
-static auto PIQUANT_HOT dequant_int4(
+static auto PIQUANT_HOT dequant_uint4(
     const In* x,
     Out* o,
     std::int64_t numel,
@@ -19,7 +19,7 @@ static auto PIQUANT_HOT dequant_int4(
     std::int64_t zp
 ) noexcept -> void {
     std::int64_t i{};
-    for (std::int64_t j{}; i+1 < numel; i += 2, ++j) {
+    for (std::int64_t j {}; i+1 < numel; i += 2, ++j) {
         auto p {x[j].bits};
         auto qa {p & 15};
         auto qb {p >> 4};
@@ -29,23 +29,18 @@ static auto PIQUANT_HOT dequant_int4(
         } else if constexpr (ReduceOp == reduce_op::add) {
             o[i] += dequant_step<In, Out>(scale, zp, qa);
             o[i+1] += dequant_step<In, Out>(scale, zp, qb);
-        } else
-            static_assert(ReduceOp == reduce_op::set || ReduceOp == reduce_op::add, "Invalid reduce operation");
+        }
     }
     if (numel & 1) {
         auto qa {x[i>>1].bits & 15};
         Out r = dequant_step<In, Out>(scale, zp, qa);
-        if constexpr (ReduceOp == reduce_op::set)
-            o[numel-1] = r;
-        else if constexpr (ReduceOp == reduce_op::add)
-            o[numel-1] += r;
-        else
-            static_assert(ReduceOp == reduce_op::set || ReduceOp == reduce_op::add, "Invalid reduce operation");
+        if constexpr (ReduceOp == reduce_op::set) o[numel-1] = r;
+        else if constexpr (ReduceOp == reduce_op::add) o[numel-1] += r;
     }
 }
 
 template <typename In, typename Out, const reduce_op ReduceOp> requires std::is_same_v<uint2_t, In> && is_float_type<Out>
-static auto PIQUANT_HOT dequant_int2(
+static auto PIQUANT_HOT dequant_uint2(
     const In* x,
     Out* o,
     std::int64_t numel,
@@ -95,21 +90,22 @@ static auto PIQUANT_HOT dequant_generic(
 
     // Use SIMD optimized kernels for some dtype permutations
     if constexpr (std::is_same_v<In, std::uint8_t> && std::is_same_v<Out, fp32_t>) {
-        if constexpr (ReduceOp == reduce_op::set) {
-            dequant_uint8_to_f32<false>(static_cast<const std::uint8_t*>(in), static_cast<fp32_t*>(out), numel, scale, static_cast<std::int32_t>(zp));
-            return;
-        } else if constexpr (ReduceOp == reduce_op::add) {
-            dequant_uint8_to_f32<true>(static_cast<const std::uint8_t*>(in), static_cast<fp32_t*>(out), numel, scale, static_cast<std::int32_t>(zp));
-            return;
-        }
+        dequant_uint8_to_f32<ReduceOp>(static_cast<const std::uint8_t*>(in), static_cast<fp32_t*>(out), numel, scale, static_cast<std::int32_t>(zp));
+        return;
     }
+    if constexpr (std::is_same_v<In, uint4_t> && std::is_same_v<Out, fp32_t>) {
+        dequant_uint4_to_f32<ReduceOp>(static_cast<const uint4_t*>(in), static_cast<fp32_t*>(out), numel, scale, static_cast<std::int32_t>(zp));
+        return;
+    }
+
+
     if constexpr (std::is_same_v<uint4_t, In>) { // Special case for int4
-        dequant_int4<In, Out, ReduceOp>(x, o, numel, scale, zp);
+        dequant_uint4<In, Out, ReduceOp>(x, o, numel, scale, zp);
         return;
     }
 
     if constexpr (std::is_same_v<uint2_t, In>) { // Special case for int2
-        dequant_int2<In, Out, ReduceOp>(x, o, numel, scale, zp);
+        dequant_uint2<In, Out, ReduceOp>(x, o, numel, scale, zp);
         return;
     }
 
