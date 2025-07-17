@@ -11,8 +11,10 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
+torch.set_num_threads(multiprocessing.cpu_count())
+
 NUM_RUNS: int = 1_000
-NUMEL: int = 100000
+NUMEL: int = 10000
 
 QUANT_DTYPES_TO_BENCH: list[torch.dtype] = [
     torch.quint8,

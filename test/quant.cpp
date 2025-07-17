@@ -35,7 +35,7 @@ template <const std::uint8_t IDX, typename T>
             fp32_t scale {std::uniform_real_distribution<fp32_t>{0.1, 1.0}(gen)}; \
             std::int32_t zero_point {std::is_same_v<uint4_t, to> ? std::uniform_int_distribution<std::int32_t>{-8, 7}(gen) : \
                     std::uniform_int_distribution<std::int32_t>{-128, 127}(gen)}; \
-            std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
+            std::size_t numel {std::uniform_int_distribution<std::size_t>{5000, 1'5000}(gen)}; \
             std::size_t numel_out {std::is_same_v<uint4_t, to> ? (numel+1)>>1 : numel}; \
             \
             std::vector<ti> data_in {}; \
@@ -46,7 +46,7 @@ template <const std::uint8_t IDX, typename T>
             data_out_naive.resize(numel_out); \
             std::ranges::generate(data_in, [&] { return dist(gen); }); \
             quantize_naive<ti, to, piquant::round_mode::rnd>(data_in, data_out_naive, scale, zero_point); \
-            piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())}; \
+            piquant::context ctx {std::max(1u, 4u)}; \
             ctx.quantize_generic<ti, to>(data_in, data_out, scale, zero_point, piquant::round_mode::rnd); \
             for (std::size_t i {}; i < numel_out; ++i) { \
                 bool eq {eq = data_out[i] == data_out_naive[i]}; \
@@ -68,7 +68,7 @@ template <const std::uint8_t IDX, typename T>
         for (std::size_t n {}; n < iters; ++n) { \
             std::cout << "Iteration " << n << std::endl; \
             fp32_t scale {std::uniform_real_distribution<fp32_t>{0.1, 1.0}(gen)}; \
-            std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
+            std::size_t numel {std::uniform_int_distribution<std::size_t>{5000, 1'5000}(gen)}; \
             std::size_t numel_out {std::is_same_v<uint4_t, to> ? (numel+1)>>1 : numel}; \
             std::int32_t zero_point {std::is_same_v<uint4_t, to> ? std::uniform_int_distribution<std::int32_t>{-8, 7}(gen) : \
                     std::uniform_int_distribution<std::int32_t>{-128, 127}(gen)}; \
@@ -133,7 +133,7 @@ test_quant(bfp16_t, uint8_t, stochastic)
 TEST(quantize, requantize_float_to_uint8_identity_data) {
     std::random_device rd {};
     std::mt19937 gen {rd()};
-    std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)};
+    std::size_t numel {std::uniform_int_distribution<std::size_t>{5000, 1'5000}(gen)};
     std::size_t numel_out {numel};
     std::vector<fp32_t> data_in {};
     std::vector<std::uint8_t> quantized {};

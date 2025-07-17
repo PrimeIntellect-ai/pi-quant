@@ -22,7 +22,7 @@ using namespace piquant;
         std::uniform_real_distribution<fp32_t> dist {-1.0, 1.0}; \
         \
         for (std::size_t n {}; n < iters; ++n) { \
-            std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
+            std::size_t numel {std::uniform_int_distribution<std::size_t>{5000, 1'5000}(gen)}; \
             std::size_t numel_out {std::is_same_v<uint2_t, to> ? (numel+3)>>2 : std::is_same_v<uint4_t, to> ? (numel+1)>>1 : numel}; \
             \
             std::vector<to> data_out {}; \
@@ -30,7 +30,7 @@ using namespace piquant;
             std::vector<ti> data_in {}; \
             data_in.resize(numel); \
             std::ranges::generate(data_in, [&] { return dist(gen); }); \
-            piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())}; \
+            piquant::context ctx {std::max(1u, 4u)}; \
             auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<to>::type_code)}; \
             ASSERT_GT(scale, 0.0f); \
             ASSERT_TRUE(std::isfinite(scale)); \
