@@ -14,37 +14,38 @@ import matplotlib.pyplot as plt
 torch.set_num_threads(multiprocessing.cpu_count())
 
 NUM_RUNS: int = 1_000
-NUMEL: int = 10000
+NUMEL: int = 1000000
 
 QUANT_DTYPES_TO_BENCH: list[torch.dtype] = [
     torch.quint8,
     torch.quint4x2,
 ]
 
+def quantize_torch(t: torch.Tensor, scale: float, zp: int, dtype: torch.dtype) -> torch.tensor:
+    return torch.quantize_per_tensor(t, scale=scale, zero_point=zp, dtype=dtype)
 
-def quantize_torch(t: torch.Tensor, scale: float, zp: int, dtype: torch.dtype) -> None:
-    torch.quantize_per_tensor(t, scale=scale, zero_point=zp, dtype=dtype).int_repr()
 
-
-def quantize_piquant(t: torch.Tensor, scale: float, zp: int, dtype: torch.dtype) -> None:
-    piquant.torch.quantize(t,  scale=scale, zero_point=zp, dtype=dtype)
+def quantize_piquant(t: torch.Tensor, scale: float, zp: int, dtype: torch.dtype) -> torch.tensor:
+    return piquant.torch.quantize(t,  scale=scale, zero_point=zp, dtype=dtype)
 
 
 dtype_labels: list[str] = []
 torch_times: list[float] = []
 piquant_times: list[float] = []
 
-tensor = torch.rand(NUMEL, dtype=torch.float32, device='cpu')
-
 for torch_d in QUANT_DTYPES_TO_BENCH:
+    tensor = torch.rand(NUMEL, dtype=torch.float32, device='cpu')
+    torch_results = []
+    results_piquant = []
+
     scale, zp = piquant.torch.compute_quant_params(tensor, dtype=torch_d)
     zp = int(zp)
 
     def _bench_torch() -> None:
-        quantize_torch(tensor, scale, zp, torch_d)
+        torch_results.append(quantize_torch(tensor, scale, zp, torch_d))
 
     def _bench_piquant() -> None:
-        quantize_piquant(tensor, scale, zp, torch_d)
+        results_piquant.append(quantize_piquant(tensor, scale, zp, torch_d))
 
     # Warmup runs
     _bench_torch()
@@ -55,7 +56,16 @@ for torch_d in QUANT_DTYPES_TO_BENCH:
     dtype_labels.append(str(torch_d).replace('torch.', ''))
     torch_times.append(torch_time)
     piquant_times.append(piquant_time)
+
+    # Verify that the results are the same
+    for i in range(NUM_RUNS): # We compare dequantized results, because .int_repr() is implemented for packed types in torch
+        dq_torch = torch_results[i].dequantize()
+        dq_piquant = piquant.torch.dequantize(results_piquant[i], scale=scale, zero_point=zp, dtype=torch.float32)
+        assert dq_torch.numel() == dq_piquant.numel()
+        assert dq_torch.dtype == dq_piquant.dtype
+        assert torch.allclose(dq_torch, dq_piquant, atol=1e-1)
     print(f'{dtype_labels[-1]:<10} | torch: {torch_time:.6f}s | piquant: {piquant_time:.6f}s')
+
 
 x = np.arange(len(dtype_labels))
 width = 0.35
