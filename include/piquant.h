@@ -1,4 +1,6 @@
-/* Minimal C99 API */
+/* Minimal C99 API used from the Python CFFI bindings but also useable from normal C.
+ * For docs / a more complete C++ API, see piquant.hpp.
+ */
 
 #ifndef PIQUANT_H
 #define PIQUANT_H
@@ -16,7 +18,7 @@ extern "C" {
 #define PIQUANT_EXPORT __attribute__((visibility("default")))
 #endif
 
-typedef struct piquant_context_t piquant_context_t; /* Opaque context ptr */
+typedef struct piquant_context_t piquant_context_t;
 
 typedef enum piquant_round_mode_t {
     PIQUANT_NEAREST,
@@ -24,25 +26,17 @@ typedef enum piquant_round_mode_t {
 } piquant_round_mode_t;
 
 typedef enum piquant_reduce_op_t {
-    PIQUANT_REDUCE_OP_SET, /* output[i] = quantize(input[i]) */
-    PIQUANT_REDUCE_OP_ADD, /* output[i] += quantize(input[i]) */
+    PIQUANT_REDUCE_OP_SET,
+    PIQUANT_REDUCE_OP_ADD,
 } piquant_reduce_op_t;
 
-typedef enum piquant_dtype_t { // Order must match dtype enum class in piquant.hpp
+typedef enum piquant_dtype_t {
     PIQUANT_DTYPE_F32 = 0,
-    PIQUANT_DTYPE_F64,
+    PIQUANT_DTYPE_BF16,
+
     PIQUANT_DTYPE_UINT2,
-    PIQUANT_DTYPE_INT2,
     PIQUANT_DTYPE_UINT4,
-    PIQUANT_DTYPE_INT4,
-    PIQUANT_DTYPE_UINT8,
-    PIQUANT_DTYPE_INT8,
-    PIQUANT_DTYPE_UINT16,
-    PIQUANT_DTYPE_INT16,
-    PIQUANT_DTYPE_UINT32,
-    PIQUANT_DTYPE_INT32,
-    PIQUANT_DTYPE_UINT64,
-    PIQUANT_DTYPE_INT64,
+    PIQUANT_DTYPE_UINT8
 } piquant_dtype_t;
 
 extern PIQUANT_EXPORT piquant_context_t* piquant_context_create(size_t num_threads);
@@ -72,10 +66,18 @@ extern PIQUANT_EXPORT void piquant_dequantize(
     piquant_reduce_op_t op
 );
 
-/* computes and returns {scale, zero_point} derived from the data's mean and stddev. */
-extern PIQUANT_EXPORT void piquant_compute_quant_config_from_data(
+extern PIQUANT_EXPORT void piquant_compute_quant_params_float32(
     piquant_context_t* ctx,
     const float* x,
+    size_t n,
+    piquant_dtype_t target_quant_dtype,
+    float* out_scale,
+    int64_t* out_zero_point
+);
+
+extern PIQUANT_EXPORT void piquant_compute_quant_params_bfloat16(
+    piquant_context_t* ctx,
+    const uint16_t* x,
     size_t n,
     piquant_dtype_t target_quant_dtype,
     float* out_scale,

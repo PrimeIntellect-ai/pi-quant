@@ -19,18 +19,18 @@ using namespace piquant;
     TEST(quantize_range, quantize_range_##ti##_to_##to##_##rnd) { \
         std::random_device rd {}; \
         std::mt19937 gen {rd()}; \
-        std::uniform_real_distribution<ti> dist {-1.0, 1.0}; \
+        std::uniform_real_distribution<fp32_t> dist {-1.0, 1.0}; \
         \
         for (std::size_t n {}; n < iters; ++n) { \
-            std::size_t numel {std::uniform_int_distribution<std::size_t>{500, 1'500}(gen)}; \
-            std::size_t numel_out {is_int2<to> ? (numel+3)>>2 : is_int4<to> ? (numel+1)>>1 : numel}; \
+            std::size_t numel {std::uniform_int_distribution<std::size_t>{5000, 1'5000}(gen)}; \
+            std::size_t numel_out {std::is_same_v<uint2_t, to> ? (numel+3)>>2 : std::is_same_v<uint4_t, to> ? (numel+1)>>1 : numel}; \
             \
             std::vector<to> data_out {}; \
             data_out.resize(numel_out); \
             std::vector<ti> data_in {}; \
             data_in.resize(numel); \
             std::ranges::generate(data_in, [&] { return dist(gen); }); \
-            piquant::context ctx {std::max(1u, std::thread::hardware_concurrency())}; \
+            piquant::context ctx {std::max(1u, 4u)}; \
             auto [scale, zero_point] {ctx.compute_quant_config_from_data(data_in, dtype_traits<to>::type_code)}; \
             ASSERT_GT(scale, 0.0f); \
             ASSERT_TRUE(std::isfinite(scale)); \
@@ -38,51 +38,16 @@ using namespace piquant;
         } \
     }
 
-test_quant_range(float, int2_t, nearest)
-test_quant_range(float, int2_t, stochastic)
-test_quant_range(float, uint2_t, nearest)
-test_quant_range(float, uint2_t, stochastic)
-test_quant_range(float, int4_t, nearest)
-test_quant_range(float, int4_t, stochastic)
-test_quant_range(float, uint4_t, nearest)
-test_quant_range(float, uint4_t, stochastic)
-test_quant_range(float, uint8_t, nearest)
-test_quant_range(float, uint8_t, stochastic)
-test_quant_range(float, uint16_t, nearest)
-test_quant_range(float, uint16_t, stochastic)
-test_quant_range(float, uint32_t, nearest)
-test_quant_range(float, uint32_t, stochastic)
-test_quant_range(float, uint64_t, nearest)
-test_quant_range(float, uint64_t, stochastic)
-test_quant_range(float, int8_t, nearest)
-test_quant_range(float, int8_t, stochastic)
-test_quant_range(float, int16_t, nearest)
-test_quant_range(float, int16_t, stochastic)
-test_quant_range(float, int32_t, nearest)
-test_quant_range(float, int32_t, stochastic)
-test_quant_range(float, int64_t, nearest)
-test_quant_range(float, int64_t, stochastic)
-test_quant_range(double, uint4_t, nearest)
-test_quant_range(double, uint4_t, stochastic)
-test_quant_range(double, uint8_t, nearest)
-test_quant_range(double, uint8_t, stochastic)
-test_quant_range(double, uint16_t, nearest)
-test_quant_range(double, uint16_t, stochastic)
-test_quant_range(double, uint32_t, nearest)
-test_quant_range(double, uint32_t, stochastic)
-test_quant_range(double, uint64_t, nearest)
-test_quant_range(double, uint64_t, stochastic)
-test_quant_range(double, uint2_t, nearest)
-test_quant_range(double, uint2_t, stochastic)
-test_quant_range(double, int2_t, nearest)
-test_quant_range(double, int2_t, stochastic)
-test_quant_range(double, int4_t, nearest)
-test_quant_range(double, int4_t, stochastic)
-test_quant_range(double, int8_t, nearest)
-test_quant_range(double, int8_t, stochastic)
-test_quant_range(double, int16_t, nearest)
-test_quant_range(double, int16_t, stochastic)
-test_quant_range(double, int32_t, nearest)
-test_quant_range(double, int32_t, stochastic)
-test_quant_range(double, int64_t, nearest)
-test_quant_range(double, int64_t, stochastic)
+test_quant_range(fp32_t, uint2_t, nearest)
+test_quant_range(fp32_t, uint2_t, stochastic)
+test_quant_range(fp32_t, uint4_t, nearest)
+test_quant_range(fp32_t, uint4_t, stochastic)
+test_quant_range(fp32_t, uint8_t, nearest)
+test_quant_range(fp32_t, uint8_t, stochastic)
+test_quant_range(bfp16_t, uint2_t, nearest)
+test_quant_range(bfp16_t, uint2_t, stochastic)
+test_quant_range(bfp16_t, uint4_t, nearest)
+test_quant_range(bfp16_t, uint4_t, stochastic)
+test_quant_range(bfp16_t, uint8_t, nearest)
+test_quant_range(bfp16_t, uint8_t, stochastic)
+

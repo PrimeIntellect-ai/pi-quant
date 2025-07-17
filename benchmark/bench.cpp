@@ -27,7 +27,6 @@ auto main() -> int {
     piquant::context ctx {nt};
     bench.run("requantize", [&] {
         ctx.quantize_generic<float, piquant::uint4_t>(data_in, data_out, 0.2f, 127, piquant::round_mode::nearest);
-        ctx.dequantize_generic<piquant::uint4_t, float>(data_out, data_in, 0.2f, 127, piquant::reduce_op::add);
     });
     return 0;
 }

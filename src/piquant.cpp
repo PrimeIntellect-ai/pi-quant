@@ -41,7 +41,7 @@ namespace piquant {
             if ((info[1] & 0x20) != 0x20) return false;
             std::uint32_t lo, hi;
             asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
-            return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 6) == 6;
+            return ((static_cast<std::uint64_t>(lo)|(static_cast<std::uint64_t>(hi) << 32)) & 6) == 6;
         }
 
         [[nodiscard]] static auto check_avx512f_support() noexcept -> bool {
@@ -54,12 +54,28 @@ namespace piquant {
             if ((info[1] & 0x10000) == 0) return false;
             std::uint32_t lo, hi;
             asm volatile("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
-            return ((static_cast<uint64_t>(lo)|(static_cast<uint64_t>(hi) << 32)) & 0xe0) == 0xe0;
+            return ((static_cast<std::uint64_t>(lo)|(static_cast<std::uint64_t>(hi)<<32))&0xe0) == 0xe0;
+        }
+
+        [[nodiscard]] static auto check_avx512f_bf16_support() noexcept -> bool {
+            int info[4] = {-1};
+            __cpuid(0, info[0], info[1], info[2], info[3]);
+            if (info[0] < 7) return false;
+            __cpuid(1, info[0], info[1], info[2], info[3]);
+            if ((info[2] & (1<<27|1<<28)) != (1<<27|1<<28)) return false;
+            __cpuid_count(7, 0, info[0], info[1], info[2], info[3]);
+            if (!(info[1] & 1<<16)) return false;
+            __cpuid_count(7, 1, info[0], info[1], info[2], info[3]);
+            if (!(info[0] & 1<<5)) return false;
+            std::uint32_t lo, hi;
+            asm volatile("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0));
+            return ((static_cast<std::uint64_t>(hi)<<32|lo)&0xe0) == 0xe0;
         }
 
         decl_quant_kernel_installer_fn(install_quant_amd64_sse42);
         decl_quant_kernel_installer_fn(install_quant_amd64_avx2);
         decl_quant_kernel_installer_fn(install_quant_amd64_avx512f);
+        decl_quant_kernel_installer_fn(install_quant_amd64_avx512f_bf16);
 
     #endif
 
@@ -106,9 +122,9 @@ namespace piquant {
         std::size_t num_threads;
         pi::threadpool::ThreadPool m_pool;
 
-        auto operator ()(const quant_descriptor& desc) const -> void;
-        auto operator ()(std::span<const float> x, dtype quant_dst_type) -> std::pair<float, std::int64_t>;
-        auto operator ()(std::span<const double> x, dtype quant_dst_type) -> std::pair<float, std::int64_t>;
+        auto operator ()(const quant_descriptor& desc) const -> void; // Quant/Dequant dispatcher
+        auto operator ()(std::span<const fp32_t> x, dtype quant_dst_type) -> std::pair<fp32_t, std::int64_t>; // Quant config dispatcher
+        auto operator ()(std::span<const bfp16_t> x, dtype quant_dst_type) -> std::pair<fp32_t, std::int64_t>; // Quant config dispatcher
         auto job_entry(partition& pl, const quant_descriptor& cmd) const -> void;
     };
 
@@ -160,10 +176,10 @@ namespace piquant {
         registry = install_quant_generic();
         m_pool.startup();
         #ifdef __x86_64__
-            if (check_avx512f_support()) registry = install_quant_amd64_avx512f();
+            if (check_avx512f_bf16_support()) registry = install_quant_amd64_avx512f_bf16();
+            else if (check_avx512f_support()) registry = install_quant_amd64_avx512f();
             else if (check_avx2_support()) registry = install_quant_amd64_avx2();
             else if (check_sse42_support())  registry = install_quant_amd64_sse42();
-
         #endif
     }
 
@@ -189,24 +205,24 @@ namespace piquant {
         std::size_t width {dtype_info_of(dt).bit_size};
         piquant_assert(width > 0 && width <= 64, "invalid width %zu for type %s", width, info.name.data());
         if (info.flags & dtype_flags::is_signed) --width;
-        if (width == 64) return std::numeric_limits<std::uint64_t>::max();
         return (1ull<<width) - 1;
     }
 
-    template <typename T, typename F> requires std::is_floating_point_v<T>
+    template <typename T, typename F> requires is_float_type<T>
     static auto compute_quant_config(
         pi::threadpool::ThreadPool& pool,
         F&& kernel,
         std::span<const T> x,
         dtype quant_dst_type
-    ) -> std::pair<float, std::int64_t> {
+    ) -> std::pair<fp32_t, std::int64_t> {
         const auto* base {x.data()};
-        pi::threadpool::MultiTaskResult jobs_future = pool.scheduleBlocks<std::array<T, 2>>(0u, x.size(), [base, &kernel](std::size_t start, std::size_t end) -> std::array<T, 2> {
+        auto callback {[base, &kernel](std::size_t start, std::size_t end) -> std::array<fp32_t, 2> {
             std::size_t numel {end - start};
             if (numel <= 0) return {0.0, 0.0};
             std::span<const T> x {base + start, numel};
             return std::invoke(kernel, x);
-        });
+        }};
+        pi::threadpool::MultiTaskResult jobs_future = pool.scheduleBlocks<decltype(callback(0, 0))>(0u, x.size(), callback);
         jobs_future.join();
         double r_min {std::numeric_limits<double>::max()};
         double r_max {std::numeric_limits<double>::lowest()};
@@ -231,13 +247,13 @@ namespace piquant {
         return {scale, zero_point};
     }
 
-    auto context::pimpl::operator()(std::span<const float> x, dtype quant_dst_type) -> std::pair<float, std::int64_t> {
-        auto& kernel {(*registry.find_min_max_f32)};
+    auto context::pimpl::operator()(std::span<const fp32_t> x, dtype quant_dst_type) -> std::pair<fp32_t, std::int64_t> {
+        auto& kernel {(*registry.find_min_max_float32)};
         return compute_quant_config(m_pool, kernel, x, quant_dst_type);
     }
 
-    auto context::pimpl::operator()(std::span<const double> x, dtype quant_dst_type) -> std::pair<float, std::int64_t> {
-        auto& kernel {(*registry.find_min_max_f64)};
+    auto context::pimpl::operator()(std::span<const bfp16_t> x, dtype quant_dst_type) -> std::pair<fp32_t, std::int64_t> {
+        auto& kernel {(*registry.find_min_max_bfloat16)};
         return compute_quant_config(m_pool, kernel, x, quant_dst_type);
     }
 
@@ -252,24 +268,25 @@ namespace piquant {
         const dtype dtype_in,
         const std::span<std::byte> out,
         const dtype dtype_out,
-        const float scale,
+        const fp32_t scale,
         const std::int64_t zero_point,
         const round_mode mode
     ) const -> void {
         const auto& dti {dtype_info_of(dtype_in)};
         const auto& dto {dtype_info_of(dtype_out)};
-        piquant_assert(!(dti.flags & dtype_flags::is_quant), "input dtype must be a dequantized type");
-        piquant_assert(dto.flags & dtype_flags::is_quant, "output dtype must be a quantized type");
-        switch (dto.bit_size) {
-            case 4: piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+1)>>1, "output span requires (in.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
-            case 2: piquant_assert(out.size()/(dto.stride) == (in.size()/(dti.stride)+3)>>2, "output span requires (in.size() + 1) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
-            default:  piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3));
-        }
+        piquant_assert(!(dti.flags & dtype_flags::is_quant), "input dtype (%s) must be a dequantized type", dti.name.data());
+        piquant_assert(dto.flags & dtype_flags::is_quant, "output dtype (%s) must be a quantized type", dto.name.data());
+        std::size_t ne_in {in.size() / dti.stride};
+        std::size_t expected_out_bytes {dto.bit_size == 8 ? ne_in*dto.stride : packed_numel(ne_in, dto)*dto.stride};
+        piquant_assert(out.size() == expected_out_bytes,
+            "quantize: expected output buffer to hold %zu byte(s) for %zu element(s) "
+            "of %s (bit_size=%u), but got %zu",
+            expected_out_bytes, ne_in, dto.name.data(), dto.bit_size, out.size());
         quant_descriptor info {
             .type = command_type::quant,
             .in = in.data(),
             .out = out.data(),
-            .numel = static_cast<std::int64_t>(in.size()/dti.stride),
+            .numel = static_cast<std::int64_t>(ne_in),
             .scale = scale,
             .zero_point = zero_point,
             .dt_in = dtype_in,
@@ -284,24 +301,24 @@ namespace piquant {
         const dtype dtype_in,
         const std::span<std::byte> out,
         const dtype dtype_out,
-        const float scale,
+        const fp32_t scale,
         const std::int64_t zero_point,
         const reduce_op op
     ) const -> void {
         const auto& dti {dtype_info_of(dtype_in)};
         const auto& dto {dtype_info_of(dtype_out)};
-        piquant_assert(dti.flags & dtype_flags::is_quant, "input dtype must be a quantized type");
-        piquant_assert(!(dto.flags & dtype_flags::is_quant), "output dtype must be a dequantized type");
-        switch (dti.bit_size) {
-            case 4: piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+1)>>1, "output span requires (out.size() + 1) / 2 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
-            case 2: piquant_assert(in.size()/dti.stride == (out.size()/(dto.stride)+3)>>2, "output span requires (out.size() + 3) / 4 elements, as it is a packed datatype with sub-byte granularity, numel in: %zu, numel out: %zu", in.size(), out.size()); break;
-            default: piquant_assert(in.size()/dti.stride == out.size()/dto.stride, "input and output spans must have the same length, but %zu != %zu", in.size()/(dti.bit_size>>3), out.size()/(dto.bit_size>>3)); break;
-        }
+        piquant_assert(dti.flags & dtype_flags::is_quant, "input dtype (%s) must be a quantized type", dto.name.data());
+        piquant_assert(!(dto.flags & dtype_flags::is_quant), "output dtype (%s) must be a dequantized type", dti.name.data());
+        std::size_t ne_out {out.size() / dto.stride};
+        std::size_t min_in_bytes {packed_numel(ne_out, dti) * dti.stride};
+        piquant_assert(in.size() == min_in_bytes,
+            "dequantize: need %zu byte(s) of %s for %zu element(s), but got %zu",
+            min_in_bytes, dti.name.data(), ne_out, in.size());
         quant_descriptor info {
             .type = command_type::dequant,
             .in = in.data(),
             .out = out.data(),
-            .numel = static_cast<std::int64_t>(out.size()/(dto.stride)),
+            .numel = static_cast<std::int64_t>(ne_out),
             .scale = scale,
             .zero_point = zero_point,
             .dt_in = dtype_in,
@@ -316,7 +333,7 @@ namespace piquant {
         const dtype dtype_in_out,
         const std::span<std::byte> out,
         const dtype quant_type,
-        const float scale,
+        const fp32_t scale,
         const std::int64_t zero_point,
         const round_mode mode,
         const reduce_op op
@@ -340,15 +357,15 @@ namespace piquant {
         (*this->m_pimpl)(info);
     }
 
-    auto context::compute_quant_config_from_data(std::span<const float> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
+    auto context::compute_quant_config_from_data(std::span<const fp32_t> x, dtype quant_dst_dtype) const -> std::pair<fp32_t, std::int64_t> {
         auto result {(*this->m_pimpl)(x, quant_dst_dtype)};
         piquant_assert(!std::isnan(result.first) && result.first >= 0.0f, "scale must be positive");
         return result;
     }
 
-    auto context::compute_quant_config_from_data(std::span<const double> x, dtype quant_dst_dtype) const -> std::pair<float, std::int64_t> {
+    auto context::compute_quant_config_from_data(std::span<const bfp16_t> x, dtype quant_dst_dtype) const -> std::pair<fp32_t, std::int64_t> {
         auto result {(*this->m_pimpl)(x, quant_dst_dtype)};
-        piquant_assert(result.first >= 0.0f, "scale must be positive");
+        piquant_assert(!std::isnan(result.first) && result.first >= 0.0f, "scale must be positive");
         return result;
     }
 }

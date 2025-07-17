@@ -8,11 +8,11 @@ using namespace piquant;
 static constinit thread_local xs128p_state s_sprng {0x123456789abcdef0, 0x0fedcba987654321};
 
 template <typename In, typename Out> requires is_float_type<In> && is_quant_type<Out>
-[[nodiscard]] static auto PIQUANT_AINLINE quant_step_scalar_stochastic(In x, double inv_scale, std::int64_t zp) noexcept -> Out {
-    double rnd {x * inv_scale};
-    double dec {std::abs(rnd - std::trunc(rnd))};
-    double xi {(s_sprng.canonical())};
-    double adj {xi < dec ? 1.0f : 0.0f};
+[[nodiscard]] static auto PIQUANT_AINLINE quant_step_scalar_stochastic(In x, fp32_t inv_scale, std::int64_t zp) noexcept -> Out {
+    fp32_t rnd {static_cast<fp32_t>(x) * inv_scale};
+    fp32_t dec {std::abs(rnd - std::trunc(rnd))};
+    fp32_t xi {(s_sprng.canonical())};
+    fp32_t adj {xi < dec ? 1.0f : 0.0f};
     if (rnd < 0.0f) adj = -1.0f * adj;
     rnd = std::trunc(rnd) + adj;
     auto integral {static_cast<std::int64_t>(rnd) + zp};
@@ -22,14 +22,14 @@ template <typename In, typename Out> requires is_float_type<In> && is_quant_type
 }
 
 template <typename In, typename Out> requires is_float_type<In> && is_quant_type<Out>
-[[nodiscard]] static auto PIQUANT_AINLINE quant_step_scalar_nearest(In x, double inv_scale, std::int64_t zp) noexcept -> Out {
-    double rnd {std::round(static_cast<double>(x) * inv_scale)};
+[[nodiscard]] static auto PIQUANT_AINLINE quant_step_scalar_nearest(In x, fp32_t inv_scale, std::int64_t zp) noexcept -> Out {
+    fp32_t rnd {std::round(static_cast<fp32_t>(x) * inv_scale)};
     auto integral {static_cast<std::int64_t>(rnd) + zp};
     return static_cast<Out>(std::clamp<decltype(integral)>(integral, dtype_limits<Out>::min, dtype_limits<Out>::max));
 }
 
 template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_quant_type<Out>
-[[nodiscard]] static auto PIQUANT_AINLINE quant_step_scalar(In x, double inv_scale, std::int64_t zp) noexcept -> Out {
+[[nodiscard]] static auto PIQUANT_AINLINE quant_step_scalar(In x, fp32_t inv_scale, std::int64_t zp) noexcept -> Out {
     if constexpr (RoundMode == round_mode::stochastic)
         return quant_step_scalar_stochastic<In, Out>(x, inv_scale, zp);
     else
@@ -37,31 +37,31 @@ template <typename In, typename Out, const round_mode RoundMode> requires is_flo
 }
 
 template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_quant_type<Out>
-[[nodiscard]] static auto PIQUANT_AINLINE quant_step_packed(In a, In b, double inv_scale, std::int64_t zp) noexcept -> Out {
+[[nodiscard]] static auto PIQUANT_AINLINE quant_step_packed(In a, In b, fp32_t inv_scale, std::int64_t zp) noexcept -> Out {
     auto qa {quant_step_scalar<In, Out, RoundMode>(a, inv_scale, zp).bits};
     auto qb {quant_step_scalar<In, Out, RoundMode>(b, inv_scale, zp).bits};
-    return qa&15 | (qb&15)<<4;
+    return qa & 15 | (qb & 15)<<4;
 }
 
 template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_quant_type<Out>
-[[nodiscard]] static auto PIQUANT_AINLINE quant_step_packed(In a, In b, In c, In d, double inv_scale, std::int64_t zp) noexcept -> Out {
+[[nodiscard]] static auto PIQUANT_AINLINE quant_step_packed(In a, In b, In c, In d, fp32_t inv_scale, std::int64_t zp) noexcept -> Out {
     auto qa {quant_step_scalar<In, Out, RoundMode>(a, inv_scale, zp).bits};
     auto qb {quant_step_scalar<In, Out, RoundMode>(b, inv_scale, zp).bits};
     auto qc {quant_step_scalar<In, Out, RoundMode>(c, inv_scale, zp).bits};
     auto qd {quant_step_scalar<In, Out, RoundMode>(d, inv_scale, zp).bits};
-    return qa&3 | (qb&3)<<2 | (qc&3)<<4 | (qd&3)<<6;
+    return qa & 3 | (qb & 3)<<2 | (qc & 3)<<4 | (qd & 3)<<6;
 }
 
-template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_int4<Out>
-static auto PIQUANT_HOT quant_int4(
+template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && std::is_same_v<uint4_t, Out>
+static auto PIQUANT_HOT quant_uint4(
     const In* PIQUANT_RESTRICT x,
     Out* PIQUANT_RESTRICT o,
     std::int64_t numel,
-    double inv_scale,
+    fp32_t inv_scale,
     std::int64_t zp
 ) noexcept -> void {
-    std::int64_t i{};
-    for (i=0; i+1 < numel; i += 2) {
+    std::int64_t i {};
+    for (; i+1 < numel; i += 2) {
         In a {x[i]};
         In b {x[i+1]};
         o[i>>1] = quant_step_packed<In, Out, RoundMode>(a, b, inv_scale, zp);
@@ -72,16 +72,16 @@ static auto PIQUANT_HOT quant_int4(
     }
 }
 
-template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && is_int2<Out>
-static auto PIQUANT_HOT quant_int2(
+template <typename In, typename Out, const round_mode RoundMode> requires is_float_type<In> && std::is_same_v<uint2_t, Out>
+static auto PIQUANT_HOT quant_uint2(
     const In* PIQUANT_RESTRICT x,
     Out* PIQUANT_RESTRICT o,
     std::int64_t numel,
-    double inv_scale,
+    fp32_t inv_scale,
     std::int64_t zp
 ) noexcept -> void {
     std::int64_t i {};
-    for (i=0 ; i+3 < numel; i += 4) {
+    for (; i+3 < numel; i += 4) {
         In a {x[i]};
         In b {x[i+1]};
         In c {x[i+2]};
@@ -104,26 +104,30 @@ static auto PIQUANT_HOT quant_generic(
     const void* in,
     void* out,
     std::int64_t numel,
-    float scale,
+    fp32_t scale,
     std::int64_t zp
 ) noexcept -> void {
     // Use SIMD optimized kernels for some dtype permutations
-    if constexpr (std::is_same_v<In, float> && std::is_same_v<Out, std::uint8_t> && RoundMode == round_mode::nearest) {
-        quant_f32_to_uint8_nearest(static_cast<const float*>(in), static_cast<std::uint8_t*>(out), numel, scale, zp);
+    if constexpr (std::is_same_v<In, fp32_t> && std::is_same_v<Out, std::uint8_t> && RoundMode == round_mode::nearest) {
+        quant_f32_to_uint8_nearest(static_cast<const fp32_t*>(in), static_cast<std::uint8_t*>(out), numel, scale, zp);
+        return;
+    }
+    if constexpr (std::is_same_v<In, fp32_t> && std::is_same_v<Out, uint4_t> && RoundMode == round_mode::nearest) {
+        quant_f32_to_uint4_nearest(static_cast<const fp32_t*>(in), static_cast<uint4_t*>(out), numel, scale, zp);
         return;
     }
 
     const auto* PIQUANT_RESTRICT x {static_cast<const In*>(in)};
     auto* PIQUANT_RESTRICT o {static_cast<Out*>(out)};
-    double inv_scale {1.0 / static_cast<double>(scale)}; // We multiply by reciprocal
+    fp32_t inv_scale {1.0f / scale}; // We multiply by reciprocal
 
-    if constexpr (is_int4<Out>) { // Special case for int4
-        quant_int4<In, Out, RoundMode>(x, o, numel, inv_scale, zp);
+    if constexpr (std::is_same_v<uint4_t, Out>) { // Special case for int4
+        quant_uint4<In, Out, RoundMode>(x, o, numel, inv_scale, zp);
         return;
     }
 
-    if constexpr (is_int2<Out>) { // Special case for int2
-        quant_int2<In, Out, RoundMode>(x, o, numel, inv_scale, zp);
+    if constexpr (std::is_same_v<uint2_t, Out>) { // Special case for int2
+        quant_uint2<In, Out, RoundMode>(x, o, numel, inv_scale, zp);
         return;
     }
 
