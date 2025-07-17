@@ -12,7 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 NUM_RUNS: int = 1_000
-NUMEL: int = 100_000_000
+NUMEL: int = 10_000_000
 
 QUANT_DTYPES_TO_BENCH: list[torch.dtype] = [
     torch.quint8,
