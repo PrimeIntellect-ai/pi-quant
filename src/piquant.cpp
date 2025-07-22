@@ -222,7 +222,7 @@ namespace piquant {
             std::span<const T> x {base + start, numel};
             return std::invoke(kernel, x);
         }};
-        pi::threadpool::MultiTaskResult jobs_future = pool.scheduleBlocks<decltype(callback(0, 0))>(0u, x.size(), callback);
+        pi::threadpool::MultiTaskResult jobs_future {pool.scheduleBlocks<decltype(callback(0, 0))>(0u, x.size(), callback)};
         jobs_future.join();
         double r_min {std::numeric_limits<double>::max()};
         double r_max {std::numeric_limits<double>::lowest()};

@@ -71,7 +71,7 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
         for (; i+31 < numel; i += 32) {
-          __m256 xf0   {_mm256_loadu_ps(x+i+(0<<3))};
+            __m256 xf0 {_mm256_loadu_ps(x+i+(0<<3))};
             __m256 xf1 {_mm256_loadu_ps(x+i+(1<<3))};
             __m256 xf2 {_mm256_loadu_ps(x+i+(2<<3))};
             __m256 xf3 {_mm256_loadu_ps(x+i+(3<<3))};
