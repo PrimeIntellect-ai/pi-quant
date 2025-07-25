@@ -236,7 +236,7 @@ namespace piquant {
         if (dtype_info_of(quant_dst_type).flags & dtype_flags::is_signed)
             type_min = -static_cast<std::int64_t>(type_max) - 1;
         if (r_max == r_min) [[unlikely]] {
-            const std::int64_t mid = (type_max + type_min) >> 1;
+            auto mid {static_cast<std::int64_t>((type_max + type_min) >> 1)};
             return {1.0f, mid};
         }
         double q_min {static_cast<double>(type_min)};
