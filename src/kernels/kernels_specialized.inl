@@ -689,7 +689,44 @@ static auto PIQUANT_HOT dequant_uint4_to_f32(
             _mm256_storeu_ps(o+i+56, vf31);
         }
     #elif defined(__SSE4_2__)
-
+        __m128i vzp32 {_mm_set1_epi32(zp)};
+        __m128  vscale {_mm_set1_ps(scale)};
+        __m128i vmaskLo {_mm_set1_epi8(0x0f)};
+        const auto process16 {[&](__m128i b, std::int64_t v) noexcept -> void {
+            __m128i w0 {_mm_cvtepu8_epi16(b)};
+            __m128i d00 {_mm_cvtepi16_epi32(w0)};
+            __m128i d01 {_mm_cvtepi16_epi32(_mm_srli_si128(w0, 8))};
+            d00 = _mm_sub_epi32(d00, vzp32);
+            d01 = _mm_sub_epi32(d01, vzp32);
+            __m128 f00 {_mm_mul_ps(_mm_cvtepi32_ps(d00), vscale)};
+            __m128 f01 {_mm_mul_ps(_mm_cvtepi32_ps(d01), vscale)};
+            __m128i w1 {_mm_cvtepu8_epi16(_mm_srli_si128(b, 8))};
+            __m128i d10 {_mm_cvtepi16_epi32(w1)};
+            __m128i d11 {_mm_cvtepi16_epi32(_mm_srli_si128(w1, 8))};
+            d10 = _mm_sub_epi32(d10, vzp32);
+            d11 = _mm_sub_epi32(d11, vzp32);
+            __m128 f10 {_mm_mul_ps(_mm_cvtepi32_ps(d10), vscale)};
+            __m128 f11 {_mm_mul_ps(_mm_cvtepi32_ps(d11), vscale)};
+            if constexpr (ReduceOp == reduce_op::add) {
+                f00 = _mm_add_ps(f00, _mm_loadu_ps(o+v+0));
+                f01 = _mm_add_ps(f01, _mm_loadu_ps(o+v+4));
+                f10 = _mm_add_ps(f10, _mm_loadu_ps(o+v+8));
+                f11 = _mm_add_ps(f11, _mm_loadu_ps(o+v+12));
+            }
+            _mm_storeu_ps(o+v+0, f00);
+            _mm_storeu_ps(o+v+4, f01);
+            _mm_storeu_ps(o+v+8, f10);
+            _mm_storeu_ps(o+v+12, f11);
+        }};
+        for (; i+31 < numel; i += 32) {
+            __m128i packed {_mm_loadu_si128(reinterpret_cast<const __m128i*>(reinterpret_cast<const std::uint8_t*>(x) + (i>>1)))};
+            __m128i lo {_mm_and_si128(packed, vmaskLo)};
+            __m128i hi {_mm_and_si128(_mm_srli_epi16(packed, 4), vmaskLo)};
+            __m128i t0 {_mm_unpacklo_epi8(lo, hi)};
+            __m128i t1 {_mm_unpackhi_epi8(lo, hi)};
+            process16(t0, i+0);
+            process16(t1, i+16);
+        }
     #elif defined(__aarch64__) && defined(__ARM_NEON__)
 
     #endif
