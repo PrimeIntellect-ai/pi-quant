@@ -698,8 +698,8 @@ static auto PIQUANT_HOT dequant_uint4_to_f32(
         return static_cast<fp32_t>(x - zp)*scale;
     }};
 
-    for (std::int64_t j {}; i+1 < numel; i += 2, ++j) {
-        auto p {x[j].bits};
+    for (; i+1 < numel; i += 2) {
+        auto p {x[i>>1].bits};
         auto qa {p & 15};
         auto qb {p >> 4};
         if constexpr (ReduceOp == reduce_op::set) {
