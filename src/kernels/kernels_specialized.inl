@@ -21,6 +21,8 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
     scale = 1.0f / scale;
     std::int64_t i {};
     #if defined(__AVX512F__) && defined(__AVX512BW__)
+        __m512i vmin {_mm512_setzero_si512()};
+        __m512i vmax {_mm512_set1_epi32(0xff)};
         __m512 vinv_scale {_mm512_set1_ps(scale)};
         __m512 vhalf {_mm512_set1_ps(0.5f)};
         __m512 vneg_half {_mm512_set1_ps(-0.5f)};
@@ -48,6 +50,10 @@ static auto PIQUANT_HOT quant_f32_to_uint8_nearest(
             __m512i xi1 {_mm512_add_epi32(_mm512_cvttps_epi32(adj1), vzero_point)};
             __m512i xi2 {_mm512_add_epi32(_mm512_cvttps_epi32(adj2), vzero_point)};
             __m512i xi3 {_mm512_add_epi32(_mm512_cvttps_epi32(adj3), vzero_point)};
+            xi0 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, xi0));
+            xi1 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, xi1));
+            xi2 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, xi2));
+            xi3 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, xi3));
             _mm_stream_si128(reinterpret_cast<__m128i*>(o+i+0), _mm512_cvtusepi32_epi8(xi0));
             _mm_stream_si128(reinterpret_cast<__m128i*>(o+i+16), _mm512_cvtusepi32_epi8(xi1));
             _mm_stream_si128(reinterpret_cast<__m128i*>(o+i+32), _mm512_cvtusepi32_epi8(xi2));
