@@ -222,7 +222,7 @@ namespace piquant {
             std::span<const T> x {base + start, numel};
             return std::invoke(kernel, x);
         }};
-        pi::threadpool::MultiTaskResult jobs_future = pool.scheduleBlocks<decltype(callback(0, 0))>(0u, x.size(), callback);
+        pi::threadpool::MultiTaskResult jobs_future {pool.scheduleBlocks<decltype(callback(0, 0))>(0u, x.size(), callback)};
         jobs_future.join();
         double r_min {std::numeric_limits<double>::max()};
         double r_max {std::numeric_limits<double>::lowest()};
@@ -236,7 +236,7 @@ namespace piquant {
         if (dtype_info_of(quant_dst_type).flags & dtype_flags::is_signed)
             type_min = -static_cast<std::int64_t>(type_max) - 1;
         if (r_max == r_min) [[unlikely]] {
-            const std::int64_t mid = (type_max + type_min) >> 1;
+            auto mid {static_cast<std::int64_t>((type_max + type_min) >> 1)};
             return {1.0f, mid};
         }
         double q_min {static_cast<double>(type_min)};
