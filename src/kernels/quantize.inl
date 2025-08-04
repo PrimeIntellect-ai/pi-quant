@@ -116,6 +116,14 @@ static auto PIQUANT_HOT quant_generic(
         quant_f32_to_uint4_nearest(static_cast<const fp32_t*>(in), static_cast<uint4_t*>(out), numel, scale, zp);
         return;
     }
+    if constexpr (std::is_same_v<In, bfp16_t> && std::is_same_v<Out, std::uint8_t> && RoundMode == round_mode::nearest) {
+        quant_bf16_to_uint8_nearest(static_cast<const bfp16_t*>(in), static_cast<std::uint8_t*>(out), numel, scale, zp);
+        return;
+    }
+    if constexpr (std::is_same_v<In, bfp16_t> && std::is_same_v<Out, uint4_t> && RoundMode == round_mode::nearest) {
+        quant_bf16_to_uint4_nearest(static_cast<const bfp16_t*>(in), static_cast<uint4_t*>(out), numel, scale, zp);
+        return;
+    }
 
     const auto* PIQUANT_RESTRICT x {static_cast<const In*>(in)};
     auto* PIQUANT_RESTRICT o {static_cast<Out*>(out)};

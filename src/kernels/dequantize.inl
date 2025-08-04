@@ -97,6 +97,14 @@ static auto PIQUANT_HOT dequant_generic(
         dequant_uint4_to_f32<ReduceOp>(static_cast<const uint4_t*>(in), static_cast<fp32_t*>(out), numel, scale, static_cast<std::int32_t>(zp));
         return;
     }
+    if constexpr (std::is_same_v<In, std::uint8_t> && std::is_same_v<Out, bfp16_t>) {
+        dequant_uint8_to_bf16<ReduceOp>(static_cast<const std::uint8_t*>(in), static_cast<bfp16_t*>(out), numel, scale, static_cast<std::int32_t>(zp));
+        return;
+    }
+    if constexpr (std::is_same_v<In, uint4_t> && std::is_same_v<Out, bfp16_t>) {
+        dequant_uint4_to_bf16<ReduceOp>(static_cast<const uint4_t*>(in), static_cast<bfp16_t*>(out), numel, scale, static_cast<std::int32_t>(zp));
+        return;
+    }
 
 
     if constexpr (std::is_same_v<uint4_t, In>) { // Special case for int4
