@@ -429,6 +429,8 @@ static auto PIQUANT_HOT quant_bf16_to_uint4_nearest(
     fp32_t scale,
     std::int32_t zp
 ) noexcept -> void {
+    scale = 1.0f / scale;
+
     std::int64_t i {};
 
     #if defined(__AVX512F__) && defined(__AVX512BW__)
@@ -437,19 +439,19 @@ static auto PIQUANT_HOT quant_bf16_to_uint4_nearest(
     #elif defined(__aarch64__) && defined(__ARM_NEON__)
     #endif
 
-    const auto quant_step_packed {[=](fp32_t a, fp32_t b) noexcept -> std::uint8_t {
-        auto qa {std::clamp(static_cast<std::int32_t>(std::round(a * scale)) + zp, 0, 15)};
-        auto qb {std::clamp(static_cast<std::int32_t>(std::round(b * scale)) + zp, 0, 15)};
+    const auto quant_step_packed {[=](bfp16_t a, bfp16_t b) noexcept -> std::uint8_t {
+        auto qa {std::clamp(static_cast<std::int32_t>(std::round(static_cast<fp32_t>(a) * scale)) + zp, 0, 15)};
+        auto qb {std::clamp(static_cast<std::int32_t>(std::round(static_cast<fp32_t>(b) * scale)) + zp, 0, 15)};
         return qa & 15 | (qb & 15)<<4;
     }};
 
     for (; i+1 < numel; i += 2) {
-        fp32_t a {x[i]};
-        fp32_t b {x[i+1]};
+        auto a {x[i]};
+        auto b {x[i+1]};
         o[i>>1].bits = quant_step_packed(a, b);
     }
     if (numel & 1) {
-        o[i>>1].bits = quant_step_packed(static_cast<fp32_t>(x[numel-1]), 0);
+        o[i>>1].bits = quant_step_packed(x[numel-1], 0);
         o[i>>1].bits &= 15;
     }
 }
