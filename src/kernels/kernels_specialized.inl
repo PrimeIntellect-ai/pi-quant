@@ -228,26 +228,33 @@ static auto PIQUANT_HOT quant_bf16_to_uint8_nearest(
             o[i] = static_cast<std::uint8_t>(std::clamp(i32, 0, 0xff));
         }
         for (; i+31 < numel; i += 32) {
-            __m128 xf0 {_mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(_mm_loadu_si128((const __m128i*)(x+i))), 16))};
-            __m128 xf1 {_mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(_mm_loadu_si128((const __m128i*)(x+i+8))), 16))};
-            __m128 xf2 {_mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(_mm_loadu_si128((const __m128i*)(x+i+16))), 16))};
-            __m128 xf3 {_mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(_mm_loadu_si128((const __m128i*)(x+i+24))), 16))};
-            xf0 = _mm_mul_ps(xf0, vinv_scale);
-            xf1 = _mm_mul_ps(xf1, vinv_scale);
-            xf2 = _mm_mul_ps(xf2, vinv_scale);
-            xf3 = _mm_mul_ps(xf3, vinv_scale);
-            __m128i xi0 {_mm_cvttps_epi32(_mm_add_ps(xf0, _mm_blendv_ps(vneg_half, vhalf, _mm_cmpge_ps(xf0, vzero))))};
-            __m128i xi1 {_mm_cvttps_epi32(_mm_add_ps(xf1, _mm_blendv_ps(vneg_half, vhalf, _mm_cmpge_ps(xf1, vzero))))};
-            __m128i xi2 {_mm_cvttps_epi32(_mm_add_ps(xf2, _mm_blendv_ps(vneg_half, vhalf, _mm_cmpge_ps(xf2, vzero))))};
-            __m128i xi3 {_mm_cvttps_epi32(_mm_add_ps(xf3, _mm_blendv_ps(vneg_half, vhalf, _mm_cmpge_ps(xf3, vzero))))};
-            xi0 = _mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(xi0, vzero_point)));
-            xi1 = _mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(xi1, vzero_point)));
-            xi2 = _mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(xi2, vzero_point)));
-            xi3 = _mm_max_epi32(vmin, _mm_min_epi32(vmax, _mm_add_epi32(xi3, vzero_point)));
-            __m128i pack16_0 {_mm_packus_epi32(xi0, xi1)};
-            __m128i pack16_1 {_mm_packus_epi32(xi2, xi3)};
-            __m128i result {_mm_packus_epi16(pack16_0, pack16_1)};
-            _mm_stream_si128(reinterpret_cast<__m128i*>(o+i), result);
+            __m128i v0 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i))};
+            __m128i v1 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+8))};
+            __m128i v2 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+16))};
+            __m128i v3 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+24))};
+            auto bf16lo_to_f32 {[&](__m128i v){ return _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(v), 16)); }};
+            auto bf16hi_to_f32 {[&](__m128i v){ return bf16lo_to_f32(_mm_srli_si128(v, 8)); }};
+            __m128 xf0 {bf16lo_to_f32(v0)}, xf1 {bf16hi_to_f32(v0)};
+            __m128 xf2 {bf16lo_to_f32(v1)}, xf3 {bf16hi_to_f32(v1)};
+            __m128 xf4 {bf16lo_to_f32(v2)}, xf5 {bf16hi_to_f32(v2)};
+            __m128 xf6 {bf16lo_to_f32(v3)}, xf7 {bf16hi_to_f32(v3)};
+            auto quant {[&](__m128 x) noexcept -> __m128i {
+                __m128 y = _mm_mul_ps(x, vinv_scale);
+                __m128 rnd = _mm_blendv_ps(vneg_half, vhalf, _mm_cmpge_ps(y, vzero));
+                __m128i q = _mm_cvttps_epi32(_mm_add_ps(y, rnd));
+                q = _mm_add_epi32(q, vzero_point);
+                return _mm_max_epi32(vmin, _mm_min_epi32(vmax, q));
+            }};
+            __m128i q0 {quant(xf0)}, q1 {quant(xf1)}, q2 {quant(xf2)}, q3 {quant(xf3)};
+            __m128i q4 {quant(xf4)}, q5 {quant(xf5)}, q6 {quant(xf6)}, q7 {quant(xf7)};
+            __m128i p16a {_mm_packus_epi32(q0, q1)};
+            __m128i p16b {_mm_packus_epi32(q2, q3)};
+            __m128i p16c {_mm_packus_epi32(q4, q5)};
+            __m128i p16d {_mm_packus_epi32(q6, q7)};
+            __m128i out0 {_mm_packus_epi16(p16a, p16b)};
+            __m128i out1 {_mm_packus_epi16(p16c, p16d)};
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i), out0);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i+16), out1);
         }
     #elif defined(__aarch64__) && defined(__ARM_NEON__)
     // TODO
@@ -482,6 +489,63 @@ static auto PIQUANT_HOT quant_bf16_to_uint4_nearest(
             _mm_storel_epi64(reinterpret_cast<__m128i*>(o+(i>>1)), packed);
         }
     #elif defined(__SSE4_2__)
+        __m128 vinv_scale {_mm_set1_ps(scale)};
+        __m128 vhalf {_mm_set1_ps(0.5f)};
+        __m128 vneg_half {_mm_set1_ps(-0.5f)};
+        __m128 vzero_ps {_mm_setzero_ps()};
+        __m128i vzp {_mm_set1_epi32(zp)};
+        __m128i vmin {_mm_setzero_si128()};
+        __m128i vmax {_mm_set1_epi32(15)};
+        __m128i shuf_even {_mm_setr_epi8(
+            0,2,4,6,8,10,12,14,
+            0x80,0x80,0x80,0x80,
+            0x80,0x80,0x80,0x80
+        )};
+        __m128i shuf_odd  {_mm_setr_epi8(
+            1,3,5,7,9,11,13,15,
+            0x80,0x80,0x80,0x80,
+            0x80,0x80,0x80,0x80
+        )};
+        for (; i+31 < numel; i += 32) {
+            __m128i vx0 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i))};
+            __m128i vx1 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+8))};
+            __m128i vx2 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+16))};
+            __m128i vx3 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+24))};
+            static constexpr auto bf16_to_f32 {[](__m128i v) noexcept -> __m128 {
+                return _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(v), 16));
+            }};
+            __m128 xf0 {bf16_to_f32(vx0)};
+            __m128 xf1 {bf16_to_f32(_mm_srli_si128(vx0, 8))};
+            __m128 xf2 {bf16_to_f32(vx1)};
+            __m128 xf3 {bf16_to_f32(_mm_srli_si128(vx1, 8))};
+            __m128 xf4 {bf16_to_f32(vx2)};
+            __m128 xf5 {bf16_to_f32(_mm_srli_si128(vx2, 8))};
+            __m128 xf6 {bf16_to_f32(vx3)};
+            __m128 xf7 {bf16_to_f32(_mm_srli_si128(vx3, 8))};
+            auto q4 {[&](__m128 xf) noexcept -> __m128i {
+                __m128 scaled {_mm_mul_ps(xf, vinv_scale)};
+                __m128 rnd {_mm_blendv_ps(vneg_half, vhalf, _mm_cmpge_ps(scaled, vzero_ps))};
+                __m128i qi {_mm_cvttps_epi32(_mm_add_ps(scaled, rnd))};
+                qi = _mm_add_epi32(qi, vzp);
+                return _mm_max_epi32(_mm_min_epi32(qi, vmax), vmin);
+            }};
+            __m128i qi0 {q4(xf0)}, qi1 {q4(xf1)}, qi2 {q4(xf2)}, qi3 {q4(xf3)};
+            __m128i qi4 {q4(xf4)}, qi5 {q4(xf5)}, qi6 {q4(xf6)}, qi7 {q4(xf7)};
+            __m128i q16a {_mm_packs_epi32(qi0, qi1)};
+            __m128i q16b {_mm_packs_epi32(qi2, qi3)};
+            __m128i q16c {_mm_packs_epi32(qi4, qi5)};
+            __m128i q16d {_mm_packs_epi32(qi6, qi7)};
+            __m128i q8_0 {_mm_packus_epi16(q16a, q16b)};
+            __m128i q8_1 {_mm_packus_epi16(q16c, q16d)};
+            __m128i lo0 {_mm_shuffle_epi8(q8_0, shuf_even)};
+            __m128i hi0 {_mm_shuffle_epi8(q8_0, shuf_odd)};
+            __m128i pk0 {_mm_or_si128(lo0, _mm_slli_epi16(hi0, 4))};
+            __m128i lo1 {_mm_shuffle_epi8(q8_1, shuf_even)};
+            __m128i hi1 {_mm_shuffle_epi8(q8_1, shuf_odd)};
+            __m128i pk1 {_mm_or_si128(lo1, _mm_slli_epi16(hi1, 4))};
+            _mm_storel_epi64(reinterpret_cast<__m128i*>(o+(i>>1)), pk0);
+            _mm_storel_epi64(reinterpret_cast<__m128i*>(o+(i>>1)+8), pk1);
+        }
     #elif defined(__aarch64__) && defined(__ARM_NEON__)
     #endif
 
@@ -737,12 +801,6 @@ static auto PIQUANT_HOT dequant_uint4_to_f32(
         __m512i vzp {_mm512_set1_epi32(zp)};
         __m512 vscale {_mm512_set1_ps(scale)};
         __m512i vmaskLo {_mm512_set1_epi8(0x0f)};
-        __m512i idx {_mm512_set_epi8(
-            63,62,61,60,59,58,57,56, 47,46,45,44,43,42,41,40,
-            31,30,29,28,27,26,25,24, 15,14,13,12,11,10, 9, 8,
-            55,54,53,52,51,50,49,48, 39,38,37,36,35,34,33,32,
-            23,22,21,20,19,18,17,16,  7, 6, 5, 4, 3, 2, 1, 0
-        )};
         static constexpr auto expand_u8_to_s32 {[](__m512i v) noexcept -> std::array<__m512i, 4> {
             __m128i l0 {_mm512_extracti32x4_epi32(v, 0)};
             __m128i l1 {_mm512_extracti32x4_epi32(v, 1)};
