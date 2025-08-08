@@ -435,6 +435,52 @@ static auto PIQUANT_HOT quant_bf16_to_uint4_nearest(
 
     #if defined(__AVX512F__) && defined(__AVX512BW__)
     #elif defined(__AVX2__)
+        __m256 vinv_scale {_mm256_set1_ps(scale)};
+        __m256 vhalf {_mm256_set1_ps(0.5f)};
+        __m256 vneg_half {_mm256_set1_ps(-0.5f)};
+        __m256 vzero_ps {_mm256_setzero_ps()};
+        __m256i vzp {_mm256_set1_epi32(zp)};
+        __m256i vmin {_mm256_setzero_si256()};
+        __m256i vmax {_mm256_set1_epi32(15)};
+        __m128i shuf_even {_mm_setr_epi8(
+            0,2,4,6,8,10,12,14,
+            0x80,0x80,0x80,0x80,
+            0x80,0x80,0x80,0x80
+        )};
+        __m128i shuf_odd {_mm_setr_epi8(
+            1,3,5,7,9,11,13,15,
+            0x80,0x80,0x80,0x80,
+            0x80,0x80,0x80,0x80
+        )};
+        for (; i+15 < numel; i += 16) {
+            __m256 xf0 {_mm256_castsi256_ps(_mm256_slli_epi32(_mm256_cvtepu16_epi32(_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i))), 16))};
+            __m256 xf1 {_mm256_castsi256_ps(_mm256_slli_epi32(_mm256_cvtepu16_epi32(_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+8))), 16))};
+            __m256 scaled0 {_mm256_mul_ps(xf0, vinv_scale)};
+            __m256 scaled1 {_mm256_mul_ps(xf1, vinv_scale)};
+            __m256 mask0 {_mm256_cmp_ps(scaled0, vzero_ps, _CMP_GE_OQ)};
+            __m256 mask1 {_mm256_cmp_ps(scaled1, vzero_ps, _CMP_GE_OQ)};
+            __m256 rnd0 {_mm256_blendv_ps(vneg_half, vhalf, mask0)};
+            __m256 rnd1 {_mm256_blendv_ps(vneg_half, vhalf, mask1)};
+            __m256i qi0 {_mm256_cvttps_epi32(_mm256_add_ps(scaled0, rnd0))};
+            __m256i qi1 {_mm256_cvttps_epi32(_mm256_add_ps(scaled1, rnd1))};
+            qi0 = _mm256_add_epi32(qi0, vzp);
+            qi1 = _mm256_add_epi32(qi1, vzp);
+            qi0 = _mm256_max_epi32(qi0, vmin);
+            qi1 = _mm256_max_epi32(qi1, vmin);
+            qi0 = _mm256_min_epi32(qi0, vmax);
+            qi1 = _mm256_min_epi32(qi1, vmax);
+            __m128i qi0_lo {_mm256_castsi256_si128(qi0)};
+            __m128i qi0_hi {_mm256_extracti128_si256(qi0, 1)};
+            __m128i q16_0 {_mm_packs_epi32(qi0_lo, qi0_hi)};
+            __m128i qi1_lo {_mm256_castsi256_si128(qi1)};
+            __m128i qi1_hi {_mm256_extracti128_si256(qi1, 1)};
+            __m128i q16_1 {_mm_packs_epi32(qi1_lo, qi1_hi)};
+            __m128i q8 {_mm_packus_epi16(q16_0, q16_1)};
+            __m128i lo_nib {_mm_shuffle_epi8(q8, shuf_even)};
+            __m128i hi_nib {_mm_shuffle_epi8(q8, shuf_odd)};
+            __m128i packed {_mm_or_si128(lo_nib, _mm_slli_epi16(hi_nib, 4))};
+            _mm_storel_epi64(reinterpret_cast<__m128i*>(o+(i>>1)), packed);
+        }
     #elif defined(__SSE4_2__)
     #elif defined(__aarch64__) && defined(__ARM_NEON__)
     #endif
