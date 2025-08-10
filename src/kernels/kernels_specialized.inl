@@ -1202,7 +1202,24 @@ static auto PIQUANT_HOT find_min_max_bf16(std::span<const bfp16_t> in) noexcept 
     fp32_t min {dtype_limits<fp32_t>::max};
     fp32_t max {dtype_limits<fp32_t>::min};
     #if defined(__AVX512F__) && defined(__AVX512BW__)
-
+        __m512 vmin {_mm512_set1_ps(min)};
+        __m512 vmax {_mm512_set1_ps(max)};
+        for (; i+63 < numel; i += 63) {
+            __m512 v0 {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i))), 16))};
+            __m512 v1 {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+16))), 16))};
+            __m512 v2 {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+32))), 16))};
+            __m512 v3 {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+48))), 16))};
+            vmin = _mm512_min_ps(vmin, v0);
+            vmax = _mm512_max_ps(vmax, v0);
+            vmin = _mm512_min_ps(vmin, v1);
+            vmax = _mm512_max_ps(vmax, v1);
+            vmin = _mm512_min_ps(vmin, v2);
+            vmax = _mm512_max_ps(vmax, v2);
+            vmin = _mm512_min_ps(vmin, v3);
+            vmax = _mm512_max_ps(vmax, v3);
+        }
+        min = _mm512_reduce_min_ps(vmin);
+        max = _mm512_reduce_max_ps(vmax);
     #elif defined(__AVX2__)
         __m256 vmin {_mm256_set1_ps(min)};
         __m256 vmax {_mm256_set1_ps(max)};
