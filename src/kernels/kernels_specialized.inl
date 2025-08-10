@@ -441,6 +441,36 @@ static auto PIQUANT_HOT quant_bf16_to_uint4_nearest(
     std::int64_t i {};
 
     #if defined(__AVX512F__) && defined(__AVX512BW__)
+        __m512 vinv_scale {_mm512_set1_ps(scale)};
+        __m512 vhalf {_mm512_set1_ps(0.5f)};
+        __m512 vneg_half {_mm512_set1_ps(-0.5f)};
+        __m512 vzero_ps {_mm512_setzero_ps()};
+        __m512i vzp {_mm512_set1_epi32(zp)};
+        __m512i vmin {_mm512_setzero_si512()};
+        __m512i vmax {_mm512_set1_epi32(15)};
+        __m128i shuf_even {_mm_setr_epi8(0,2,4,6,8,10,12,14,-1,-1,-1,-1,-1,-1,-1,-1)};
+        __m128i shuf_odd {_mm_setr_epi8(1,3,5,7,9,11,13,15,-1,-1,-1,-1,-1,-1,-1,-1)};
+        for (; i+15 < numel; i += 16) {
+            __m512 xf {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i))), 16))};
+            __m512 scaled {_mm512_mul_ps(xf, vinv_scale)};
+            __m512 rnd {_mm512_mask_blend_ps(
+                _mm512_cmp_ps_mask(scaled, vzero_ps, _CMP_GE_OQ),
+                vneg_half,
+                vhalf
+            )};
+            __m512i qi { _mm512_min_epi32(
+                _mm512_max_epi32(
+                    _mm512_add_epi32(
+                        _mm512_cvttps_epi32(
+                            _mm512_add_ps(scaled, rnd)),
+                            vzp
+                        ),
+                    vmin
+                ), vmax
+            )};
+            __m128i u8 {_mm512_cvtusepi32_epi8(qi)};
+            _mm_storel_epi64(reinterpret_cast<__m128i*>(o+(i>>1)), _mm_or_si128(_mm_shuffle_epi8(u8, shuf_even), _mm_slli_epi16(_mm_shuffle_epi8(u8, shuf_odd), 4)));
+        }
     #elif defined(__AVX2__)
         __m256 vinv_scale {_mm256_set1_ps(scale)};
         __m256 vhalf {_mm256_set1_ps(0.5f)};
