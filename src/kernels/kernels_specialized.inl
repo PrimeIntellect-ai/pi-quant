@@ -171,7 +171,39 @@ static auto PIQUANT_HOT quant_bf16_to_uint8_nearest(
     scale = 1.0f / scale;
     std::int64_t i {};
     #if defined(__AVX512F__) && defined(__AVX512BW__)
-        // TODO
+        __m512i vmin {_mm512_setzero_si512()};
+        __m512i vmax {_mm512_set1_epi32(0xff)};
+        __m512 vinv_scale {_mm512_set1_ps(scale)};
+        __m512 vhalf {_mm512_set1_ps(0.5f)};
+        __m512 vneg_half {_mm512_set1_ps(-0.5f)};
+        __m512 vzero_ps {_mm512_setzero_ps()};
+        __m512i vzero_point {_mm512_set1_epi32(zp)};
+        for (; i+63 < numel; i += 64) {
+            __m512 xf0 {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i))), 16))};
+            __m512 xf1 {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+16))), 16))};
+            __m512 xf2 {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+32))), 16))};
+            __m512 xf3 {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+48))), 16))};
+            __m512 prod0 {_mm512_mul_ps(xf0, vinv_scale)};
+            __m512 prod1 {_mm512_mul_ps(xf1, vinv_scale)};
+            __m512 prod2 {_mm512_mul_ps(xf2, vinv_scale)};
+            __m512 prod3 {_mm512_mul_ps(xf3, vinv_scale)};
+            __m512 adj0 {_mm512_add_ps(prod0, _mm512_mask_blend_ps(_mm512_cmp_ps_mask(prod0, vzero_ps, _CMP_GE_OQ), vneg_half, vhalf))};
+            __m512 adj1 {_mm512_add_ps(prod1, _mm512_mask_blend_ps(_mm512_cmp_ps_mask(prod1, vzero_ps, _CMP_GE_OQ), vneg_half, vhalf))};
+            __m512 adj2 {_mm512_add_ps(prod2, _mm512_mask_blend_ps(_mm512_cmp_ps_mask(prod2, vzero_ps, _CMP_GE_OQ), vneg_half, vhalf))};
+            __m512 adj3 {_mm512_add_ps(prod3, _mm512_mask_blend_ps(_mm512_cmp_ps_mask(prod3, vzero_ps, _CMP_GE_OQ), vneg_half, vhalf))};
+            __m512i xi0 {_mm512_add_epi32(_mm512_cvttps_epi32(adj0), vzero_point)};
+            __m512i xi1 {_mm512_add_epi32(_mm512_cvttps_epi32(adj1), vzero_point)};
+            __m512i xi2 {_mm512_add_epi32(_mm512_cvttps_epi32(adj2), vzero_point)};
+            __m512i xi3 {_mm512_add_epi32(_mm512_cvttps_epi32(adj3), vzero_point)};
+            xi0 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, xi0));
+            xi1 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, xi1));
+            xi2 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, xi2));
+            xi3 = _mm512_max_epi32(vmin, _mm512_min_epi32(vmax, xi3));
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i+0), _mm512_cvtusepi32_epi8(xi0));
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i+16), _mm512_cvtusepi32_epi8(xi1));
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i+32), _mm512_cvtusepi32_epi8(xi2));
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(o+i+48), _mm512_cvtusepi32_epi8(xi3));
+        }
     #elif defined(__AVX2__)
         __m256 vinv_scale {_mm256_set1_ps(scale)};
         __m256 vhalf {_mm256_set1_ps(0.5f)};
@@ -437,7 +469,6 @@ static auto PIQUANT_HOT quant_bf16_to_uint4_nearest(
     std::int32_t zp
 ) noexcept -> void {
     scale = 1.0f / scale;
-
     std::int64_t i {};
 
     #if defined(__AVX512F__) && defined(__AVX512BW__)
