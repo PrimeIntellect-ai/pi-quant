@@ -325,12 +325,13 @@ namespace piquant {
             const std::byte* in {};
             std::byte* out {};
             std::int64_t numel {};
-            fp32_t scale{};
+            fp32_t scale {};
             std::int64_t zero_point {};
             dtype dt_in {};
             dtype dt_out {};
             round_mode rounding {};
             reduce_op reducing {};
+            fp32_t rnd_threshold {};
         };
 
     private:

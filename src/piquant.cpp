@@ -11,6 +11,7 @@
 #include <numeric>
 #include <numbers>
 #include <condition_variable>
+#include <random>
 
 #include <pithreadpool/threadpool.hpp>
 
@@ -122,7 +123,7 @@ namespace piquant {
         std::size_t num_threads;
         pi::threadpool::ThreadPool m_pool;
 
-        auto operator ()(const quant_descriptor& desc) const -> void; // Quant/Dequant dispatcher
+        auto operator ()(const quant_descriptor& base_desc) const -> void; // Quant/Dequant dispatcher
         auto operator ()(std::span<const fp32_t> x, dtype quant_dst_type) -> std::pair<fp32_t, std::int64_t>; // Quant config dispatcher
         auto operator ()(std::span<const bfp16_t> x, dtype quant_dst_type) -> std::pair<fp32_t, std::int64_t>; // Quant config dispatcher
         auto job_entry(partition& pl, const quant_descriptor& cmd) const -> void;
@@ -187,7 +188,14 @@ namespace piquant {
         m_pool.shutdown();
     }
 
-    auto context::pimpl::operator()(const quant_descriptor& desc) const -> void {
+    static thread_local std::random_device rd;
+    static thread_local std::mt19937_64 rng {rd()};
+
+    auto context::pimpl::operator()(const quant_descriptor& base_desc) const -> void {
+        quant_descriptor desc {base_desc};
+        if (desc.rounding == round_mode::stochastic) { // Set random threshold for stochastic rounding on every invocation
+            desc.rnd_threshold = std::uniform_real_distribution<fp32_t>{0.f, 1.f}(rng);
+        }
         const size_t num_threads {this->num_threads};
         const pi::threadpool::MultiTaskResult jobs_future = m_pool.scheduleSequence<void>(0u, num_threads, [this, &desc, num_threads](const std::size_t ti) {
             partition pl {

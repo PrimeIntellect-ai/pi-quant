@@ -23,7 +23,6 @@ namespace piquant {
 namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
 
     // Include order matters, implementations are cloned per specialized compilation unit
-    #include "prng.inl"
     #include "kernels_specialized.inl"
     #include "quantize.inl"
     #include "dequantize.inl"
@@ -34,6 +33,7 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
       void* out,
       std::int64_t numel,
       fp32_t scale,
+      fp32_t rnd_threshold,
       std::int64_t zp
     ) noexcept -> void {
         const auto* PIQUANT_RESTRICT x {static_cast<const In*>(in)};
@@ -41,25 +41,26 @@ namespace impl_namespace(QUANT_KERNEL_IMPL, _) {
         fp32_t inv_scale {1.0f / scale};
         if constexpr (ReduceOp == reduce_op::set) {
             for (std::int64_t i {}; i < numel; ++i)
-                o[i] = dequant_step<Out, In>(scale, zp, quant_step_scalar<In, Out, RoundMode>(x[i], inv_scale, zp));
+                o[i] = dequant_step<Out, In>(scale, zp, quant_step_scalar<In, Out, RoundMode>(x[i], rnd_threshold, inv_scale, zp));
             return;
         }
         if constexpr (ReduceOp == reduce_op::add) {
             for (std::int64_t i {}; i < numel; ++i)
-                o[i] += dequant_step<Out, In>(scale, zp, quant_step_scalar<In, Out, RoundMode>(x[i], inv_scale, zp));
+                o[i] += dequant_step<Out, In>(scale, zp, quant_step_scalar<In, Out, RoundMode>(x[i], rnd_threshold, inv_scale, zp));
             return;
         }
     }
 };
 
 namespace piquant {
-    using quant_fn = auto (*)(const void*, void*, std::int64_t, fp32_t, std::int64_t) noexcept -> void;
+    using quant_fn = auto (*)(const void*, void*, std::int64_t, fp32_t, fp32_t, std::int64_t) noexcept -> void;
+    using dequant_fn = auto (*)(const void*, void*, std::int64_t, fp32_t, std::int64_t) noexcept -> void;
 
     template <typename Src, typename Dst, round_mode M>
     [[nodiscard]] consteval auto quant_entry() noexcept -> quant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::quant_generic<Src, Dst, M>; }
 
     template <typename Src, typename Dst, reduce_op R>
-    [[nodiscard]] consteval auto dequant_entry() noexcept -> quant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<Dst, Src, R>; }
+    [[nodiscard]] consteval auto dequant_entry() noexcept -> dequant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::dequant_generic<Dst, Src, R>; }
 
     template <typename Src, typename Dst, round_mode M, reduce_op R>
     [[nodiscard]] consteval auto requant_entry() noexcept -> quant_fn { return &impl_namespace(QUANT_KERNEL_IMPL, _)::requant_generic<Src, Dst, M, R>; }
@@ -83,7 +84,7 @@ namespace piquant {
     template <typename Src, reduce_op R, typename TL> struct make_dequant_row;
     template <typename Src, reduce_op R, typename... Dst>
     struct make_dequant_row<Src, R, type_set<Dst...>> {
-        static constexpr std::array<quant_fn, type_set_size<fp_types>::value + sizeof...(Dst)> value =
+        static constexpr std::array<dequant_fn, type_set_size<fp_types>::value + sizeof...(Dst)> value =
             {nullptr, nullptr, dequant_entry<Src, Dst, R>()...};
     };
 
@@ -156,7 +157,7 @@ namespace piquant {
         const auto& stubs_dtype_fp {stubs_round_mode[static_cast<std::size_t>(desc.dt_in)]};
         auto* kernel {stubs_dtype_fp[static_cast<std::size_t>(desc.dt_out)]};
         piquant_assert(kernel != nullptr, "invalid quantization types: %s -> %s", dtype_info_of(desc.dt_in).name, dtype_info_of(desc.dt_out).name);
-        (*kernel)(in, out, range, desc.scale, desc.zero_point);
+        (*kernel)(in, out, range, desc.scale, desc.rnd_threshold, desc.zero_point);
     }
 
     static void dispatch_dequantize(const void* in, void* out, std::int64_t range, const context::quant_descriptor& desc) {
@@ -182,7 +183,7 @@ namespace piquant {
         const auto& stubs_fp {stubs_reduce_op[static_cast<std::size_t>(desc.dt_in)]};
         auto* kernel {stubs_fp[static_cast<std::size_t>(desc.dt_out)]};
         piquant_assert(kernel != nullptr, "invalid requantization types: %s -> %s", dtype_info_of(desc.dt_in).name, dtype_info_of(desc.dt_out).name);
-        (*kernel)(in, out, range, desc.scale, desc.zero_point);
+        (*kernel)(in, out, range, desc.scale, desc.rnd_threshold, desc.zero_point);
     }
 
     static auto PIQUANT_HOT quantize_dispatch(const void* in, void* out, std::int64_t range, const context::quant_descriptor& desc) noexcept -> void {
