@@ -1189,14 +1189,25 @@ static auto PIQUANT_HOT dequant_uint4_to_bf16(
                     vf31 = _mm512_add_ps(vf31, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+112))), 16)));
                 #endif
             }
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+0), cvt_ps_to_bf16(vf00));
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+16), cvt_ps_to_bf16(vf10));
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+32), cvt_ps_to_bf16(vf20));
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+48), cvt_ps_to_bf16(vf30));
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+64), cvt_ps_to_bf16(vf01));
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+80), cvt_ps_to_bf16(vf11));
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+96), cvt_ps_to_bf16(vf21));
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+112), cvt_ps_to_bf16(vf31));
+            #ifdef __AVX512BF16__
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+0),   std::bit_cast<__m256i>(_mm512_cvtneps_pbh(vf00)));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+16),  std::bit_cast<__m256i>(_mm512_cvtneps_pbh(vf10)));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+32),  std::bit_cast<__m256i>(_mm512_cvtneps_pbh(vf20)));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+48),  std::bit_cast<__m256i>(_mm512_cvtneps_pbh(vf30)));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+64),  std::bit_cast<__m256i>(_mm512_cvtneps_pbh(vf01)));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+80),  std::bit_cast<__m256i>(_mm512_cvtneps_pbh(vf11)));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+96),  std::bit_cast<__m256i>(_mm512_cvtneps_pbh(vf21)));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+112), std::bit_cast<__m256i>(_mm512_cvtneps_pbh(vf31)));
+            #else
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+0), cvt_ps_to_bf16(vf00));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+16), cvt_ps_to_bf16(vf10));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+32), cvt_ps_to_bf16(vf20));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+48), cvt_ps_to_bf16(vf30));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+64), cvt_ps_to_bf16(vf01));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+80), cvt_ps_to_bf16(vf11));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+96), cvt_ps_to_bf16(vf21));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+112), cvt_ps_to_bf16(vf31));
+            #endif
         }
     #elif defined(__AVX2__)
     #elif defined(__SSE4_2__)
