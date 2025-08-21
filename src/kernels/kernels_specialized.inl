@@ -1128,6 +1128,7 @@ static auto PIQUANT_HOT dequant_uint4_to_bf16(
         __m512i vzp {_mm512_set1_epi32(zp)};
         __m512 vscale {_mm512_set1_ps(scale)};
         __m512i vmaskLo {_mm512_set1_epi8(0x0f)};
+        __m512 vbias {_mm512_set1_ps(-static_cast<fp32_t>(zp)*scale)};
         static constexpr auto expand_u8_to_s32 {[](__m512i v) noexcept -> std::array<__m512i, 4> {
             __m128i l0 {_mm512_extracti32x4_epi32(v, 0)};
             __m128i l1 {_mm512_extracti32x4_epi32(v, 1)};
@@ -1154,32 +1155,19 @@ static auto PIQUANT_HOT dequant_uint4_to_bf16(
             v1 = _mm512_inserti32x4(v1, _mm512_extracti32x4_epi32(t1, 3), 3);
             return {v0, v1};
         }};
-        static constexpr auto load_bf16_as_ps {[](const bfp16_t* p) noexcept -> __m512 {
-            __m256i v16  = _mm256_loadu_si256((const __m256i*)p);
-            __m512i v32  = _mm512_cvtepu16_epi32(v16);
-            return _mm512_castsi512_ps(_mm512_slli_epi32(v32, 16));
-        }};
         for (; i+127 < numel; i += 128) {
             __m512i packed {_mm512_loadu_si512(reinterpret_cast<const std::uint8_t*>(x) + (i>>1))};
-            auto [nib0, nib1] = unpack_nibbles(packed);
-            auto [vs00, vs10, vs20, vs30] = expand_u8_to_s32(nib0);
-            auto [vs01, vs11, vs21, vs31] = expand_u8_to_s32(nib1);
-            vs00 = _mm512_sub_epi32(vs00, vzp);
-            vs10 = _mm512_sub_epi32(vs10, vzp);
-            vs20 = _mm512_sub_epi32(vs20, vzp);
-            vs30 = _mm512_sub_epi32(vs30, vzp);
-            vs01 = _mm512_sub_epi32(vs01, vzp);
-            vs11 = _mm512_sub_epi32(vs11, vzp);
-            vs21 = _mm512_sub_epi32(vs21, vzp);
-            vs31 = _mm512_sub_epi32(vs31, vzp);
-            __m512 vf00 {_mm512_mul_ps(_mm512_cvtepi32_ps(vs00), vscale)};
-            __m512 vf10 {_mm512_mul_ps(_mm512_cvtepi32_ps(vs10), vscale)};
-            __m512 vf20 {_mm512_mul_ps(_mm512_cvtepi32_ps(vs20), vscale)};
-            __m512 vf30 {_mm512_mul_ps(_mm512_cvtepi32_ps(vs30), vscale)};
-            __m512 vf01 {_mm512_mul_ps(_mm512_cvtepi32_ps(vs01), vscale)};
-            __m512 vf11 {_mm512_mul_ps(_mm512_cvtepi32_ps(vs11), vscale)};
-            __m512 vf21 {_mm512_mul_ps(_mm512_cvtepi32_ps(vs21), vscale)};
-            __m512 vf31 {_mm512_mul_ps(_mm512_cvtepi32_ps(vs31), vscale)};
+            auto [nib0, nib1] {unpack_nibbles(packed)};
+            auto [vs00, vs10, vs20, vs30] {expand_u8_to_s32(nib0)};
+            auto [vs01, vs11, vs21, vs31] {expand_u8_to_s32(nib1)};
+            __m512 vf00 = _mm512_fmadd_ps(_mm512_cvtepi32_ps(vs00), vscale, vbias);
+            __m512 vf10 = _mm512_fmadd_ps(_mm512_cvtepi32_ps(vs10), vscale, vbias);
+            __m512 vf20 = _mm512_fmadd_ps(_mm512_cvtepi32_ps(vs20), vscale, vbias);
+            __m512 vf30 = _mm512_fmadd_ps(_mm512_cvtepi32_ps(vs30), vscale, vbias);
+            __m512 vf01 = _mm512_fmadd_ps(_mm512_cvtepi32_ps(vs01), vscale, vbias);
+            __m512 vf11 = _mm512_fmadd_ps(_mm512_cvtepi32_ps(vs11), vscale, vbias);
+            __m512 vf21 = _mm512_fmadd_ps(_mm512_cvtepi32_ps(vs21), vscale, vbias);
+            __m512 vf31 = _mm512_fmadd_ps(_mm512_cvtepi32_ps(vs31), vscale, vbias);
             if constexpr (ReduceOp == reduce_op::add) {
                 #ifdef __AVX512BF16__
                     vf00 = _mm512_add_ps(vf00, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i)))));
