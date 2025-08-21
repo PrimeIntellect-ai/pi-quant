@@ -858,6 +858,32 @@ static auto PIQUANT_HOT dequant_uint8_to_bf16(
     std::int64_t i {};
 
     #if defined(__AVX512F__) && defined(__AVX512BW__)
+        __m512i vzp {_mm512_set1_epi32(zp)};
+        __m512  vscale {_mm512_set1_ps(scale)};
+        for (; i+63 < numel; i += 64) {
+            __m128i in0 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+ 0))};
+            __m128i in1 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+16))};
+            __m128i in2 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+32))};
+            __m128i in3 {_mm_loadu_si128(reinterpret_cast<const __m128i*>(x+i+48))};
+            __m512i s0 {_mm512_sub_epi32(_mm512_cvtepu8_epi32(in0), vzp)};
+            __m512i s1 {_mm512_sub_epi32(_mm512_cvtepu8_epi32(in1), vzp)};
+            __m512i s2 {_mm512_sub_epi32(_mm512_cvtepu8_epi32(in2), vzp)};
+            __m512i s3 {_mm512_sub_epi32(_mm512_cvtepu8_epi32(in3), vzp)};
+            __m512 f0 {_mm512_mul_ps(_mm512_cvtepi32_ps(s0), vscale)};
+            __m512 f1 {_mm512_mul_ps(_mm512_cvtepi32_ps(s1), vscale)};
+            __m512 f2 {_mm512_mul_ps(_mm512_cvtepi32_ps(s2), vscale)};
+            __m512 f3 {_mm512_mul_ps(_mm512_cvtepi32_ps(s3), vscale)};
+            if constexpr (ReduceOp == reduce_op::add) {
+                f0 = _mm512_add_ps(f0, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i))), 16)));
+                f1 = _mm512_add_ps(f1, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+16))), 16)));
+                f2 = _mm512_add_ps(f2, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+32))), 16)));
+                f3 = _mm512_add_ps(f3, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+48))), 16)));
+            }
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+0), cvt_ps_to_bf16(f0));
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+16), cvt_ps_to_bf16(f1));
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+32), cvt_ps_to_bf16(f2));
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+48), cvt_ps_to_bf16(f3));
+        }
     #elif defined(__AVX2__)
     #elif defined(__SSE4_2__)
     #elif defined(__aarch64__) && defined(__ARM_NEON__)
