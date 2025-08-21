@@ -12,7 +12,7 @@ using namespace piquant;
 #endif
 
 #if defined(__AVX512F__) && defined(__AVX512BW__)
-    [[nodiscard]] static inline auto cvt_ps_to_bf16(__m512 a) noexcept -> __m256i {
+    [[nodiscard]] static PIQUANT_AINLINE auto cvt_ps_to_bf16(__m512 a) noexcept -> __m256i {
         #ifdef __AVX512BF16__
             return std::bit_cast<__m256i>(_mm512_cvtneps_pbh(a));
         #else
@@ -503,7 +503,11 @@ static auto PIQUANT_HOT quant_bf16_to_uint4_nearest(
         __m128i shuf_even {_mm_setr_epi8(0,2,4,6,8,10,12,14,-1,-1,-1,-1,-1,-1,-1,-1)};
         __m128i shuf_odd {_mm_setr_epi8(1,3,5,7,9,11,13,15,-1,-1,-1,-1,-1,-1,-1,-1)};
         for (; i+15 < numel; i += 16) {
-            __m512 xf {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i))), 16))};
+            #ifdef __AVX512BF16__
+                __m512 xf {_mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i))))};
+            #else
+                __m512 xf {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i))), 16))};
+            #endif
             __m512 scaled {_mm512_mul_ps(xf, vinv_scale)};
             __m512 rnd {_mm512_mask_blend_ps(
                 _mm512_cmp_ps_mask(scaled, vzero_ps, _CMP_GE_OQ),
@@ -874,10 +878,17 @@ static auto PIQUANT_HOT dequant_uint8_to_bf16(
             __m512 f2 {_mm512_mul_ps(_mm512_cvtepi32_ps(s2), vscale)};
             __m512 f3 {_mm512_mul_ps(_mm512_cvtepi32_ps(s3), vscale)};
             if constexpr (ReduceOp == reduce_op::add) {
-                f0 = _mm512_add_ps(f0, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i))), 16)));
-                f1 = _mm512_add_ps(f1, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+16))), 16)));
-                f2 = _mm512_add_ps(f2, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+32))), 16)));
-                f3 = _mm512_add_ps(f3, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+48))), 16)));
+                #ifdef __AVX512BF16__
+                    f0 = _mm512_add_ps(f0, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i)))));
+                    f1 = _mm512_add_ps(f1, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+16)))));
+                    f2 = _mm512_add_ps(f2, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+32)))));
+                    f3 = _mm512_add_ps(f3, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+48)))));
+                #else
+                    f0 = _mm512_add_ps(f0, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i))), 16)));
+                    f1 = _mm512_add_ps(f1, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+16))), 16)));
+                    f2 = _mm512_add_ps(f2, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+32))), 16)));
+                    f3 = _mm512_add_ps(f3, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+48))), 16)));
+                #endif
             }
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+0), cvt_ps_to_bf16(f0));
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+16), cvt_ps_to_bf16(f1));
@@ -1170,14 +1181,25 @@ static auto PIQUANT_HOT dequant_uint4_to_bf16(
             __m512 vf21 {_mm512_mul_ps(_mm512_cvtepi32_ps(vs21), vscale)};
             __m512 vf31 {_mm512_mul_ps(_mm512_cvtepi32_ps(vs31), vscale)};
             if constexpr (ReduceOp == reduce_op::add) {
-                vf00 = _mm512_add_ps(vf00, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i))), 16)));
-                vf10 = _mm512_add_ps(vf10, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+16))), 16)));
-                vf20 = _mm512_add_ps(vf20, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+32))), 16)));
-                vf30 = _mm512_add_ps(vf30, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+48))), 16)));
-                vf01 = _mm512_add_ps(vf01, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+64))), 16)));
-                vf11 = _mm512_add_ps(vf11, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+80))), 16)));
-                vf21 = _mm512_add_ps(vf21, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+96))), 16)));
-                vf31 = _mm512_add_ps(vf31, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+112))), 16)));
+                #ifdef __AVX512BF16__
+                    vf00 = _mm512_add_ps(vf00, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i)))));
+                    vf10 = _mm512_add_ps(vf10, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+16)))));
+                    vf20 = _mm512_add_ps(vf20, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+32)))));
+                    vf30 = _mm512_add_ps(vf30, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+48)))));
+                    vf01 = _mm512_add_ps(vf01, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+64)))));
+                    vf11 = _mm512_add_ps(vf11, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+80)))));
+                    vf21 = _mm512_add_ps(vf21, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+96)))));
+                    vf31 = _mm512_add_ps(vf31, _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+112)))));
+                #else
+                    vf00 = _mm512_add_ps(vf00, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i))), 16)));
+                    vf10 = _mm512_add_ps(vf10, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+16))), 16)));
+                    vf20 = _mm512_add_ps(vf20, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+32))), 16)));
+                    vf30 = _mm512_add_ps(vf30, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+48))), 16)));
+                    vf01 = _mm512_add_ps(vf01, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+64))), 16)));
+                    vf11 = _mm512_add_ps(vf11, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+80))), 16)));
+                    vf21 = _mm512_add_ps(vf21, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+96))), 16)));
+                    vf31 = _mm512_add_ps(vf31, _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(o+i+112))), 16)));
+                #endif
             }
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+0), cvt_ps_to_bf16(vf00));
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(o+i+16), cvt_ps_to_bf16(vf10));
@@ -1327,10 +1349,10 @@ static auto PIQUANT_HOT find_min_max_bf16(std::span<const bfp16_t> in) noexcept 
         __m512 vmax {_mm512_set1_ps(max)};
         for (; i+63 < numel; i += 63) {
         #ifdef __AVX512BF16__
-            __m512 v0 {_mm512_cvtpbh_ps(*reinterpret_cast<const __m256bh*>(x+i))};
-            __m512 v1 {_mm512_cvtpbh_ps(*reinterpret_cast<const __m256bh*>(x+i+16))};
-            __m512 v2 {_mm512_cvtpbh_ps(*reinterpret_cast<const __m256bh*>(x+i+32))};
-            __m512 v3 {_mm512_cvtpbh_ps(*reinterpret_cast<const __m256bh*>(x+i+48))};
+            __m512 v0 {_mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i))))};
+            __m512 v1 {_mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+16))))};
+            __m512 v2 {_mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+32))))};
+            __m512 v3 {_mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+48))))};
         #else
             __m512 v0 {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i))), 16))};
             __m512 v1 {_mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i+16))), 16))};
