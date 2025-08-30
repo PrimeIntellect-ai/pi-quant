@@ -182,6 +182,10 @@ template <const std::uint8_t IDX, typename T>
         } \
     }
 
+//test_quant_int2(fp32_t, uint2_t, nearest, false, false)
+//test_quant_int2(fp32_t, uint2_t, stochastic, true, false)
+//test_quant_int2(bfp16_t, uint2_t, nearest, false, false)
+//test_quant_int2(bfp16_t, uint2_t, stochastic, true, false)
 test_quant_int4(fp32_t, uint4_t, nearest, false, false)
 test_quant_int4(fp32_t, uint4_t, stochastic, true, false)
 test_quant_int4(bfp16_t, uint4_t, nearest, false, false)

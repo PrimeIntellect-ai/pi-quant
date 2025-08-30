@@ -13,7 +13,6 @@
 #include "naive.hpp"
 
 constexpr std::size_t iters {10};
-constexpr double epsilon {1e-1};
 
 using namespace piquant;
 
@@ -22,7 +21,7 @@ using namespace piquant;
     std::random_device rd {}; \
     std::mt19937 gen {rd()}; \
     std::uniform_real_distribution<fp32_t> dist {-1.0, 1.0}; \
-    const auto adjusted_epsilon {std::is_same_v<uint4_t, to> ? epsilon * 4: epsilon}; \
+    const auto adjusted_epsilon {std::is_same_v<uint2_t, to> ? 0.7f : std::is_same_v<uint4_t, to> ? 0.2f : 1e-1f}; \
     for (std::size_t n {}; n < iters; ++n) { \
         std::size_t numel {std::uniform_int_distribution<std::size_t>{5000, 1'5000}(gen)}; \
         \
@@ -42,6 +41,10 @@ using namespace piquant;
         } \
     }
 
+test_requant(fp32_t, uint2_t, nearest, set)
+test_requant(fp32_t, uint2_t, stochastic, set)
+test_requant(fp32_t, uint2_t, nearest, add)
+test_requant(fp32_t, uint2_t, stochastic, add)
 test_requant(fp32_t, uint4_t, nearest, set)
 test_requant(fp32_t, uint4_t, stochastic, set)
 test_requant(fp32_t, uint4_t, nearest, add)

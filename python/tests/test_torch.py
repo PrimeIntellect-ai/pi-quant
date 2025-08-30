@@ -13,9 +13,8 @@ TORCH_FLOAT_TYPES: set[torch.dtype] = {torch.bfloat16, torch.float32}
 TORCH_QUANT_TYPES: set[torch.dtype] = {
     torch.quint8,
     torch.quint4x2,
-    # torch.quint2x4,
+    torch.quint2x4,
 }
-
 
 def numel() -> int:
     return random.randint(1, 128)
@@ -50,5 +49,5 @@ def test_quantize_roundtrip(dtype_in: torch.dtype, dtype_quantized: torch.dtype)
     assert dequantized_torch.dtype == dequantized_pi.dtype
     assert dequantized_pi.dtype == input.dtype
     assert torch.allclose(dequantized_torch, dequantized_pi, atol=1e-3)
-    assert torch.allclose(dequantized_torch, input, atol=scale / 2 + 1e-3)
-    assert torch.allclose(dequantized_pi, input, atol=scale / 2 + 1e-3)
+    assert torch.allclose(dequantized_torch, input, atol=scale*0.5 + 1e-3)
+    assert torch.allclose(dequantized_pi, input, atol=scale*0.5 + 1e-3)

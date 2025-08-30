@@ -133,25 +133,28 @@ namespace piquant {
         const std::int64_t tc {std::max(std::int64_t{1}, pl.tc)};
         const std::int64_t ti {pl.ti};
         const auto partition_row {[&] () noexcept -> std::optional<std::array<std::int64_t, 3>> {
-            std::int64_t chunk_size {(cmd.numel + tc - 1)/tc};
-            // If we have nibble input or output, we really don't want the chunk size to be and odd number of elements
-            // because it would trigger trailing element handling in every thread. We want to avoid that to eliminate
-            // the need for synchronization, as now two threads want to modify the same output byte to place their respective nibble-parts.
-            // Hence, we round up to the next even number if we have a packed type.
-            {
-                bool packed_input {dtype_info_of(cmd.dt_in ).bit_size < 8};
-                bool packed_output {dtype_info_of(cmd.dt_out).bit_size < 8};
-                bool split_by_pairs {
-                    (cmd.type == command_type::quant && packed_output) ||
-                    (cmd.type == command_type::dequant && packed_input ) ||
-                    (cmd.type == command_type::quant_dequant && packed_output)
-                };
-                if (split_by_pairs && chunk_size & 1) ++chunk_size;
+            std::int64_t bs_in {static_cast<std::int64_t>(dtype_info_of(cmd.dt_in).bit_size)};
+            std::int64_t bs_out {static_cast<std::int64_t>(dtype_info_of(cmd.dt_out).bit_size)};
+            std::int64_t packed_bits {8};
+            switch (cmd.type) {
+                case command_type::quant: packed_bits = bs_out; break;
+                case command_type::dequant: packed_bits = bs_in; break;
+                case command_type::quant_dequant: packed_bits = std::max(bs_in, bs_out); break;
+                default: break;
             }
-            std::int64_t ra {chunk_size*ti};
-            std::int64_t rb {std::min(ra + chunk_size, cmd.numel)};
-            if (ra >= rb) [[unlikely]] return {};
-            return {{ra, ra, rb-ra}};
+            std::int64_t pack_elems {packed_bits < 8 ? 8/packed_bits : 1};
+            std::int64_t n {cmd.numel};
+            std::int64_t tcm {std::max<std::int64_t>(1, pl.tc)};
+            std::int64_t t {pl.ti};
+            std::int64_t raw_begin {n*t / tcm};
+            std::int64_t raw_end {n*(t+1) / tcm};
+            const auto align_down {[&](std::int64_t v) noexcept -> std::int64_t {
+                return pack_elems == 1 ? v : v - (v % pack_elems);
+            }};
+            std::int64_t begin {pack_elems == 1 ? raw_begin : align_down(raw_begin)};
+            std::int64_t end {t+1 == tcm || pack_elems == 1 ? raw_end : align_down(raw_end)};
+            if (begin >= end) [[unlikely]] return {};
+            return {{begin, begin, end - begin}};
         }};
         const auto dispatch_quant {[&](const std::int64_t oa, const std::int64_t ob, const std::int64_t range, const quant_descriptor& cmd) noexcept -> void {
             auto* const kernel {&registry.quant_kernel};
