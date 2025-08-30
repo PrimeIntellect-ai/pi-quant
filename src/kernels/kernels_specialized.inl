@@ -1199,7 +1199,6 @@ static auto PIQUANT_HOT dequant_uint4_to_bf16(
     std::int64_t i {};
 
     #if defined(__AVX512F__) && defined(__AVX512BW__)
-        __m512i vzp {_mm512_set1_epi32(zp)};
         __m512 vscale {_mm512_set1_ps(scale)};
         __m512i vmaskLo {_mm512_set1_epi8(0x0f)};
         __m512 vbias {_mm512_set1_ps(-static_cast<fp32_t>(zp)*scale)};
@@ -1308,6 +1307,111 @@ static auto PIQUANT_HOT dequant_uint4_to_bf16(
         auto r {dequant_step(x[i>>1].bits & 15)};
         if constexpr (ReduceOp == reduce_op::set) o[numel-1] = r;
         else if constexpr (ReduceOp == reduce_op::add) o[numel-1] += r;
+    }
+}
+
+template <const reduce_op ReduceOp>
+static auto PIQUANT_HOT dequant_uint2_to_bf16(
+    const uint2_t* PIQUANT_RESTRICT x,
+    bfp16_t* PIQUANT_RESTRICT o,
+    std::int64_t numel,
+    fp32_t scale,
+    std::int32_t zp
+) noexcept -> void {
+    std::int64_t i {};
+    #if defined(__AVX512F__) && defined(__AVX512BW__)
+        __m512 vscale {_mm512_set1_ps(scale)};
+        __m512 vbias  {_mm512_set1_ps(-static_cast<fp32_t>(zp) * scale)};
+        __m128i LUT0 {_mm_setr_epi8(0,1,2,3, 0,1,2,3, 0,1,2,3, 0,1,2,3)};
+        __m128i LUT1 {_mm_setr_epi8(0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3)};
+        __m128i LO_NIB {_mm_set1_epi8(15)};
+        auto load_o16_as_ps {[&](const bfp16_t* ptr) noexcept -> __m512 {
+            #ifdef __AVX512BF16__
+                return _mm512_cvtpbh_ps(std::bit_cast<__m256bh>(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr))));
+            #else
+                __m256i raw {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr))};
+                __m512i u32 {_mm512_cvtepu16_epi32(raw)};
+                return _mm512_castsi512_ps(_mm512_slli_epi32(u32, 16));
+            #endif
+        }};
+        auto store_ps_to_o16 {[&](bfp16_t* ptr, __m512 f) noexcept {
+            #ifdef __AVX512BF16__
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(ptr), std::bit_cast<__m256i>(_mm512_cvtneps_pbh(f)));
+            #else
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(ptr), cvt_ps_to_bf16(f));
+            #endif
+        }};
+        auto do_16bytes {[&](const uint8_t* src, std::int64_t base_out) {
+            __m128i b {_mm_loadu_si128(reinterpret_cast<const __m128i*>(src))};
+            __m128i lo {_mm_and_si128(b, LO_NIB)};
+            __m128i hi {_mm_and_si128(_mm_srli_epi16(b, 4), LO_NIB)};
+            __m128i q0 {_mm_shuffle_epi8(LUT0, lo)};
+            __m128i q1 {_mm_shuffle_epi8(LUT1, lo)};
+            __m128i q2 {_mm_shuffle_epi8(LUT0, hi)};
+            __m128i q3 {_mm_shuffle_epi8(LUT1, hi)};
+            __m128i ab_lo {_mm_unpacklo_epi8(q0, q1)};
+            __m128i ab_hi {_mm_unpackhi_epi8(q0, q1)};
+            __m128i cd_lo {_mm_unpacklo_epi8(q2, q3)};
+            __m128i cd_hi {_mm_unpackhi_epi8(q2, q3)};
+            __m128i z0 {_mm_unpacklo_epi16(ab_lo, cd_lo)};
+            __m128i z1 {_mm_unpackhi_epi16(ab_lo, cd_lo)};
+            __m128i z2 {_mm_unpacklo_epi16(ab_hi, cd_hi)};
+            __m128i z3 {_mm_unpackhi_epi16(ab_hi, cd_hi)};
+            auto to_f {[&](__m128i z) noexcept -> __m512 {
+                return _mm512_fmadd_ps(_mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(z)), vscale, vbias);
+            }};
+            __m512 f0 {to_f(z0)};
+            __m512 f1 {to_f(z1)};
+            __m512 f2 {to_f(z2)};
+            __m512 f3 {to_f(z3)};
+            if constexpr (ReduceOp == reduce_op::add) {
+                f0 = _mm512_add_ps(f0, load_o16_as_ps(o+base_out +  0));
+                f1 = _mm512_add_ps(f1, load_o16_as_ps(o+base_out + 16));
+                f2 = _mm512_add_ps(f2, load_o16_as_ps(o+base_out + 32));
+                f3 = _mm512_add_ps(f3, load_o16_as_ps(o+base_out + 48));
+            }
+            store_ps_to_o16(o+base_out +  0, f0);
+            store_ps_to_o16(o+base_out + 16, f1);
+            store_ps_to_o16(o+base_out + 32, f2);
+            store_ps_to_o16(o+base_out + 48, f3);
+        }};
+        for (; i+255 < numel; i += 256) {
+            const uint8_t* src {reinterpret_cast<const uint8_t*>(x) + (i>>2)};
+            do_16bytes(src, i);
+            do_16bytes(src+16, i+64);
+            do_16bytes(src+32, i+128);
+            do_16bytes(src+48, i+192);
+        }
+    #endif
+
+    const auto dequant_step = [=](std::int32_t q) noexcept -> fp32_t {
+        return (static_cast<fp32_t>(q) - zp) * scale;
+    };
+    std::int64_t j {i>>2};
+    for (; i+3 < numel; i += 4, ++j) {
+        auto p  = x[j].bits;
+        int qa  =  p        & 3;
+        int qb  = (p >> 2)  & 3;
+        int qc  = (p >> 4)  & 3;
+        int qd  = (p >> 6)  & 3;
+        if constexpr (ReduceOp == reduce_op::set) {
+            o[i+0] = dequant_step(qa);
+            o[i+1] = dequant_step(qb);
+            o[i+2] = dequant_step(qc);
+            o[i+3] = dequant_step(qd);
+        } else {
+            o[i+0] += dequant_step(qa);
+            o[i+1] += dequant_step(qb);
+            o[i+2] += dequant_step(qc);
+            o[i+3] += dequant_step(qd);
+        }
+    }
+    if (i < numel) {
+        auto p   = x[i >> 2].bits;
+        int rem  = int(numel - i);
+        if (rem >= 1) { if constexpr (ReduceOp==reduce_op::set) o[i+0] = dequant_step( p        & 3); else o[i+0] += dequant_step( p        & 3); }
+        if (rem >= 2) { if constexpr (ReduceOp==reduce_op::set) o[i+1] = dequant_step((p >> 2) & 3); else o[i+1] += dequant_step((p >> 2) & 3); }
+        if (rem >= 3) { if constexpr (ReduceOp==reduce_op::set) o[i+2] = dequant_step((p >> 4) & 3); else o[i+2] += dequant_step((p >> 4) & 3); }
     }
 }
 
