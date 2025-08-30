@@ -640,7 +640,6 @@ static auto PIQUANT_HOT quant_bf16_to_uint4_nearest(
         auto qb {std::clamp(static_cast<std::int32_t>(std::round(static_cast<fp32_t>(b) * scale)) + zp, 0, 15)};
         return qa & 15 | (qb & 15)<<4;
     }};
-
     for (; i+1 < numel; i += 2) {
         auto a {x[i]};
         auto b {x[i+1]};
@@ -649,6 +648,81 @@ static auto PIQUANT_HOT quant_bf16_to_uint4_nearest(
     if (numel & 1) {
         o[i>>1].bits = quant_step_packed(x[numel-1], 0);
         o[i>>1].bits &= 15;
+    }
+}
+
+static auto PIQUANT_HOT quant_bf16_to_uint2_nearest(
+    const bfp16_t* PIQUANT_RESTRICT x,
+    uint2_t* PIQUANT_RESTRICT o,
+    std::int64_t numel,
+    fp32_t scale,
+    std::int32_t zp
+) noexcept -> void {
+    scale = 1.0f / scale;
+    std::int64_t i {};
+    #if defined(__AVX512F__) && defined(__AVX512BW__)
+        __m512 vinv_scale {_mm512_set1_ps(scale)};
+        __m512 vhalf {_mm512_set1_ps(0.5f)};
+        __m512 vneg_half {_mm512_set1_ps(-0.5f)};
+        __m512 vzero_ps {_mm512_setzero_ps()};
+        __m512i vzp {_mm512_set1_epi32(zp)};
+        __m512i vmin {_mm512_setzero_si512()};
+        __m512i vmax {_mm512_set1_epi32(3)};
+        __m128i mask03 {_mm_set1_epi8(0x03)};
+        __m128i w0146 {_mm_setr_epi8(
+            1,4, 16,64, 1,4, 16,64,
+            1,4, 16,64, 1,4, 16,64
+        )};
+        for (; i+15 < numel; i += 16) {
+            #if defined(__AVX512BF16__)
+                __m256i raw {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x+i))};
+                __m512 xf {_mm512_cvtpbh_ps(std::bit_cast<__m256bh>(raw))};
+            #else
+                __m256i raw {_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x + i))};
+                __m512i u32s {_mm512_cvtepu16_epi32(raw)};
+                __m512i shl {_mm512_slli_epi32(u32s, 16)};
+                __m512 xf {_mm512_castsi512_ps(shl)};
+            #endif
+            __m512 scaled {_mm512_mul_ps(xf, vinv_scale)};
+            __m512 rnd {_mm512_mask_blend_ps(_mm512_cmp_ps_mask(scaled, vzero_ps, _CMP_GE_OQ), vneg_half, vhalf)};
+            __m512i qi32 {_mm512_min_epi32(
+                           _mm512_max_epi32(
+                               _mm512_add_epi32(
+                                   _mm512_cvttps_epi32(_mm512_add_ps(scaled, rnd)),
+                                   vzp),
+                               vmin),
+                           vmax)};
+            __m128i u8 {_mm512_cvtusepi32_epi8(qi32)};
+            u8 = _mm_and_si128(u8, mask03);
+            __m128i pair_sums {_mm_maddubs_epi16(u8, w0146)};
+            __m128i bytes16 {_mm_hadd_epi16(pair_sums, _mm_setzero_si128())};
+            __m128i packed4 {_mm_packus_epi16(bytes16, _mm_setzero_si128())};
+            _mm_storeu_si32(o + (i>>2), packed4);
+        }
+    #endif
+
+    const auto quant_step_packed {[=](bfp16_t a, bfp16_t b, bfp16_t c, bfp16_t d) noexcept -> std::uint8_t {
+        auto qa {std::clamp(static_cast<std::int32_t>(std::round(static_cast<fp32_t>(a) * scale)) + zp, 0, 3)};
+        auto qb {std::clamp(static_cast<std::int32_t>(std::round(static_cast<fp32_t>(b) * scale)) + zp, 0, 3)};
+        auto qc {std::clamp(static_cast<std::int32_t>(std::round(static_cast<fp32_t>(c) * scale)) + zp, 0, 3)};
+        auto qd {std::clamp(static_cast<std::int32_t>(std::round(static_cast<fp32_t>(d) * scale)) + zp, 0, 3)};
+        return (qa & 3) | ((qb & 3)<<2) | ((qc & 3)<<4) | ((qd & 3)<<6);
+    }};
+    for (; i+3 < numel; i += 4) {
+        auto a {x[i]};
+        auto b {x[i+1]};
+        auto c {x[i+2]};
+        auto d {x[i+3]};
+        o[i>>2] = quant_step_packed(a, b, c, d);
+    }
+    if (numel & 3) { /* Handle 1-, 2- or 3-value tail */
+        std::uint8_t p {};
+        switch (numel & 3) {
+            case 3: p |= (quant_step_packed(x[i+2], 0, 0, 0)&3) << 4;
+            case 2: p |= (quant_step_packed(x[i+1], 0, 0, 0)&3) << 2;
+            case 1: p |= (quant_step_packed(x[i], 0, 0, 0)&3);
+        }
+        o[i>>2] = p;
     }
 }
 

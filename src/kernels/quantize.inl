@@ -124,6 +124,10 @@ static auto PIQUANT_HOT quant_generic(
         quant_bf16_to_uint4_nearest(static_cast<const bfp16_t*>(in), static_cast<uint4_t*>(out), numel, scale, zp);
         return;
     }
+    if constexpr (std::is_same_v<In, bfp16_t> && std::is_same_v<Out, uint2_t> && RoundMode == round_mode::nearest) {
+        quant_bf16_to_uint2_nearest(static_cast<const bfp16_t*>(in), static_cast<uint2_t*>(out), numel, scale, zp);
+        return;
+    }
 
     const auto* PIQUANT_RESTRICT x {static_cast<const In*>(in)};
     auto* PIQUANT_RESTRICT o {static_cast<Out*>(out)};
