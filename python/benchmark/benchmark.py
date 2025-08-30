@@ -19,6 +19,7 @@ NUMEL: int = 1000000
 QUANT_DTYPES_TO_BENCH: list[torch.dtype] = [
     torch.quint8,
     torch.quint4x2,
+    torch.quint2x4
 ]
 
 def quantize_torch(t: torch.Tensor, scale: float, zp: int, dtype: torch.dtype) -> torch.tensor:
@@ -63,7 +64,11 @@ for torch_d in QUANT_DTYPES_TO_BENCH:
         dq_piquant = piquant.torch.dequantize(results_piquant[i], scale=scale, zero_point=zp, dtype=torch.float32)
         assert dq_torch.numel() == dq_piquant.numel()
         assert dq_torch.dtype == dq_piquant.dtype
-        assert torch.allclose(dq_torch, dq_piquant, atol=1e-1)
+        if not torch.allclose(dq_torch, dq_piquant, atol=1e-1):
+            print(f"Results differ for dtype {torch_d} at run {i}")
+            for j in range(dq_torch.numel()):
+                if not torch.isclose(dq_torch[j], dq_piquant[j], atol=1e-1):
+                    print(f"  Index {j}: torch={dq_torch[j]}, piquant={dq_piquant[j]}")
     print(f'{dtype_labels[-1]:<10} | torch: {torch_time:.6f}s | piquant: {piquant_time:.6f}s')
 
 

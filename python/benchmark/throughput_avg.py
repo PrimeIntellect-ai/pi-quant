@@ -9,7 +9,7 @@ torch.set_num_threads(mp.cpu_count())
 TOTAL_GIB = 4
 ITERATIONS = 10
 SRC_DTYPE = torch.bfloat16
-Q_DTYPE = torch.quint4x2
+Q_DTYPE = torch.quint2x4
 OUT_DTYPE = torch.bfloat16
 
 B_PER_ELEM = torch.tensor([], dtype=SRC_DTYPE).element_size()

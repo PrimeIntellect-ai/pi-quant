@@ -69,11 +69,20 @@ static auto PIQUANT_HOT dequant_uint2(
             static_assert(ReduceOp == reduce_op::set || ReduceOp == reduce_op::add, "Invalid reduce operation");
         }
     }
-    if (numel & 3) { /* Handle 1-, 2- or 3-value tail */
-        auto p {x[i>>2].bits};
-        if (numel & 1) o[i] = dequant_step<In, Out>(scale, zp, In{p & 3});
-        if (numel & 2) o[i+1] = dequant_step<In, Out>(scale, zp, In{p>>2 & 3});
-        if (numel & 3) o[i+((numel & 3) == 3 ? 2 : 0)] = dequant_step<In, Out>(scale, zp, In{p>>4 & 3});
+    auto p {x[i>>2].bits};
+    switch (numel&3) {
+        case 1:
+            o[i] = dequant_step<In, Out>(scale, zp, p&3);
+            break;
+        case 2:
+            o[i] = dequant_step<In, Out>(scale, zp, p&3);
+            o[i+1] = dequant_step<In, Out>(scale, zp, (p>>2)&3);
+            break;
+        case 3:
+            o[i] = dequant_step<In, Out>(scale, zp, p&3);
+            o[i+1] = dequant_step<In, Out>(scale, zp, (p>>2)&3);
+            o[i+2] = dequant_step<In, Out>(scale, zp, (p>>4)&3);
+            break;
     }
 }
 
