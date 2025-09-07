@@ -78,7 +78,7 @@ Linux: 6.8.0-57-generic<br>
 
 ![bench1.png](https://raw.githubusercontent.com/PrimeIntellect-ai/pi-quant/main/media/bench1.png)
 **Torch FX Quant** refers to  **[torch.ao.quantization.fx._decomposed.quantize_per_tensor](https://github.com/pytorch/pytorch/blob/main/torch/ao/quantization/fx/_decomposed.py),**
-**Torch Builtin Quant**  to [**torch.quantize_per_tensor](https://pytorch.org/docs/stable/generated/torch.quantize_per_tensor.html)** and **Fast Quant** to **pi-quant’s [piquant.quantize_torch](https://github.com/PrimeIntellect-ai/piquant/blob/4bcf6ebc69bf9b44f89b13965f010a1d025a59f6/python/src/piquant/_torch.py#L52).**
+**Torch Builtin Quant**  to **[torch.quantize_per_tensor](https://pytorch.org/docs/stable/generated/torch.quantize_per_tensor.html)** and **Fast Quant** to **pi-quant’s [piquant.quantize_torch](https://github.com/PrimeIntellect-ai/piquant/blob/4bcf6ebc69bf9b44f89b13965f010a1d025a59f6/python/src/piquant/_torch.py#L52).**
 
 ### Benchmark 2 (AMD EPYC 7742, 128 vCPUs)
 
