@@ -20,6 +20,19 @@ Issues = "https://github.com/PrimeIntellect-ai/pi-quant/issues"
 [project.optional-dependencies]
 dev = ["pytest","torch","numpy","pre-commit","ruff", "matplotlib", "twine"]
 
+[tool.uv]
+# Enforce a uv version that supports the friendly-duration form
+# (`"7 days"`) in the static pyproject parser. Older uvs silently parse
+# the value as an RFC 3339 date, emit a TOML parse warning, and proceed
+# *without* the cooldown — bypassing this security policy.
+required-version = ">=0.11.1"
+# Supply-chain cooldown: new PyPI uploads must age 7 days before resolution
+# picks them up. Applies whenever this project is locked or installed via uv.
+# pypiquant has no first-party PrimeIntellect dependencies in its closure, so
+# no exclude-newer-package exemptions are needed yet — add a
+# [tool.uv.exclude-newer-package] entry when that changes.
+exclude-newer = "7 days"
+
 [tool.ruff]
 line-length = 120
 target-version = "py38"
